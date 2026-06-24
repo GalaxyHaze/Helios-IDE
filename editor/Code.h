@@ -45,7 +45,7 @@ signals:
     void zoomChanged(double scaleFactor);
 
 public slots:
-    void onCompletionSelected(const QString &insertText);
+    void onCompletionSelected(const QString &insertText, int insertTextFormat = 1);
     void zoomIn();
     void zoomOut();
     void zoomReset();

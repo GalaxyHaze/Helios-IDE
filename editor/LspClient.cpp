@@ -54,7 +54,7 @@ bool LspClient::start(const QString &serverPath, const QString &stdlibPath)
     clientCapabilities["textDocument"] = QJsonObject{
         {"completion", QJsonObject{
             {"completionItem", QJsonObject{
-                {"snippetSupport", false}
+                {"snippetSupport", true}
             }}
         }},
         {"hover", QJsonObject{

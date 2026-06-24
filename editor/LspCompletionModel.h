@@ -40,6 +40,7 @@ public:
     explicit LspCompleter(LspCompletionModel *model, QObject *parent = nullptr);
 
     QString insertText() const;
+    int insertTextFormat() const;
     int completionKind() const;
 
 private slots:
@@ -48,6 +49,7 @@ private slots:
 private:
     QAbstractItemView *m_popup = nullptr;
     mutable int m_currentKind = 0;
+    mutable int m_currentInsertTextFormat = 1;
     mutable QString m_currentInsertText;
 };
 

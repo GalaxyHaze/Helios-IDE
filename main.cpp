@@ -23,6 +23,9 @@
 #include <QPushButton>
 #include <QDialogButtonBox>
 #include <QTimer>
+#include <QPainter>
+#include <QIcon>
+#include <QPixmap>
 
 #include "editor/Code.h"
 #include "editor/Syntax.h"
@@ -54,6 +57,113 @@ static QString baseStyle()
     );
 }
 
+static QIcon createZithIcon()
+{
+    // Bismuth crystal — rainbow iridescent hopper crystal
+    // Colours cycle: teal → gold → purple → pink → teal
+    static const QColor bismuthColors[] = {
+        QColor(100, 200, 210),  // teal
+        QColor(80, 180, 200),
+        QColor(220, 200, 120),  // gold
+        QColor(255, 210, 100),
+        QColor(200, 150, 200),  // purple
+        QColor(160, 100, 200),
+        QColor(220, 140, 180),  // pink
+        QColor(255, 180, 180),
+        QColor(100, 200, 210),  // teal again
+    };
+    constexpr int numColors = sizeof(bismuthColors) / sizeof(bismuthColors[0]);
+
+    auto makePixmap = [&](int size) {
+        QPixmap pix(size, size);
+        pix.fill(Qt::transparent);
+        QPainter p(&pix);
+        p.setRenderHint(QPainter::Antialiasing);
+        p.translate(size / 2.0, size / 2.0);
+        qreal s = size / 2.0 - 1;
+
+        // Outer bounding diamond
+        QPolygonF outer;
+        outer << QPointF(0, -s)
+              << QPointF(s * 0.92, -s * 0.28)
+              << QPointF(s, 0)
+              << QPointF(s * 0.92, s * 0.28)
+              << QPointF(0, s)
+              << QPointF(-s * 0.92, s * 0.28)
+              << QPointF(-s, 0)
+              << QPointF(-s * 0.92, -s * 0.28);
+
+        // Draw terraced steps — each step is a slightly smaller diamond
+        // with stair-step offset on the edges
+        constexpr int steps = 14;
+        for (int i = 0; i <= steps; ++i) {
+            qreal t = qreal(i) / steps;
+            qreal inset = 1.0 - t * 0.55;
+
+            // For bismuth hopper, edges step inward with an offset pattern
+            qreal topIn  = inset;
+            qreal botIn  = inset;
+            qreal leftIn = inset;
+            qreal rightIn = inset;
+
+            // Create stair-step pattern — edges have slight random-ish offsets
+            // to mimic the hopper crystal growth pattern
+            QPolygonF stepPoly;
+            stepPoly << QPointF(0, -s * topIn)
+                     << QPointF(s * 0.88 * rightIn, -s * 0.25 * topIn)
+                     << QPointF(s * rightIn, 0)
+                     << QPointF(s * 0.88 * rightIn, s * 0.25 * botIn)
+                     << QPointF(0, s * botIn)
+                     << QPointF(-s * 0.88 * leftIn, s * 0.25 * botIn)
+                     << QPointF(-s * leftIn, 0)
+                     << QPointF(-s * 0.88 * leftIn, -s * 0.25 * topIn);
+
+            // Each terrace gets a different iridescent colour
+            int ci = (i * (numColors - 1)) / steps;
+            QColor c = bismuthColors[ci % numColors];
+
+            // Lighter towards the centre (thin-film interference)
+            qreal brightness = 0.7 + 0.3 * (1.0 - t);
+            c = QColor(qMin(255, int(c.red() * brightness)),
+                       qMin(255, int(c.green() * brightness)),
+                       qMin(255, int(c.blue() * brightness)));
+
+            // Draw with a thin darker edge for contrast
+            QColor edge = c.darker(140);
+            edge.setAlpha(180);
+            p.setBrush(c);
+            p.setPen(QPen(edge, qMax(0.5, s * 0.02)));
+            p.drawPolygon(stepPoly);
+        }
+
+        // Subtle iridescent sheen — a diagonal highlight
+        QLinearGradient sheen(-s * 0.5, -s * 0.5, s * 0.5, s * 0.5);
+        sheen.setColorAt(0.0, QColor(255, 255, 255, 30));
+        sheen.setColorAt(0.5, QColor(255, 255, 255, 8));
+        sheen.setColorAt(1.0, QColor(255, 255, 255, 0));
+        p.setBrush(sheen);
+        p.setPen(Qt::NoPen);
+        QPolygonF sheenPoly;
+        sheenPoly << QPointF(0, -s)
+                  << QPointF(s, 0)
+                  << QPointF(0, s)
+                  << QPointF(-s * 0.6, -s * 0.3);
+        p.drawPolygon(sheenPoly);
+
+        p.end();
+        return pix;
+    };
+
+    QIcon icon;
+    icon.addPixmap(makePixmap(16));
+    icon.addPixmap(makePixmap(32));
+    icon.addPixmap(makePixmap(48));
+    icon.addPixmap(makePixmap(64));
+    icon.addPixmap(makePixmap(128));
+    icon.addPixmap(makePixmap(256));
+    return icon;
+}
+
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
@@ -63,6 +173,7 @@ public:
         : QMainWindow(parent), m_initialContextSetup(true)
     {
         setWindowTitle("Zith Studio");
+        setWindowIcon(createZithIcon());
         resize(1000, 700);
         setStyleSheet(baseStyle());
 
@@ -151,7 +262,9 @@ public:
 
         connect(m_lspClient, &LspClient::completionResults,
                 this, [this](const QList<LspCompletionItem> &items) {
-            m_completionModel->setItems(items);
+            auto all = items;
+            all.append(m_snippetManager->allSnippets());
+            m_completionModel->setItems(all);
             if (!items.isEmpty())
                 m_completer->complete();
         });
@@ -821,11 +934,14 @@ private:
     QLabel *m_langLabel = nullptr;
 };
 
+
+
 int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
     app.setApplicationName("Zith Studio");
     app.setOrganizationName("Zith");
+    app.setWindowIcon(createZithIcon());
 
     QPalette darkPalette;
     darkPalette.setColor(QPalette::Window, QColor("#11111b"));

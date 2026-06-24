@@ -81,6 +81,11 @@ int LspCompleter::completionKind() const
     return m_currentKind;
 }
 
+int LspCompleter::insertTextFormat() const
+{
+    return m_currentInsertTextFormat;
+}
+
 void LspCompleter::onHighlighted(const QModelIndex &index)
 {
     auto *model = qobject_cast<LspCompletionModel *>(completionModel());
@@ -89,4 +94,5 @@ void LspCompleter::onHighlighted(const QModelIndex &index)
 
     m_currentInsertText = model->data(index, LspCompletionModel::InsertTextRole).toString();
     m_currentKind = model->data(index, LspCompletionModel::KindRole).toInt();
+    m_currentInsertTextFormat = model->data(index, LspCompletionModel::InsertTextFormatRole).toInt();
 }

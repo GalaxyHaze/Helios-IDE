@@ -13,6 +13,7 @@
 #include <QAbstractItemView>
 #include <QHelpEvent>
 #include <QWheelEvent>
+#include <QRegularExpression>
 #include <qnamespace.h>
 
 static const QColor BG        = QColor("#11111b");
@@ -80,8 +81,12 @@ void CodeEditor::setLspClient(LspClient *client)
         });
 
         connect(m_lspClient, &LspClient::hoverResult, this, [this](const LspHoverInfo &info) {
-            if (!info.contents.isEmpty())
-                QToolTip::showText(QCursor::pos(), info.contents, this);
+            if (!info.contents.isEmpty()) {
+                QString text = info.contents;
+                text.replace(QRegularExpression("```\\w*\\n?"), "");
+                text.replace(QRegularExpression("\\n?```"), "");
+                QToolTip::showText(QCursor::pos(), text.trimmed(), this);
+            }
         });
 
         connect(m_lspClient, &LspClient::definitionResult, this, [this](const LspLocation &loc) {
@@ -112,7 +117,9 @@ void CodeEditor::setCompleter(LspCompleter *completer)
     if (m_completer) {
         m_completer->setWidget(this);
         connect(m_completer, QOverload<const QString &>::of(&QCompleter::activated),
-                this, &CodeEditor::onCompletionSelected);
+                this, [this](const QString &text) {
+            onCompletionSelected(text, m_completer->insertTextFormat());
+        });
     }
 }
 
@@ -343,7 +350,7 @@ void CodeEditor::keyPressEvent(QKeyEvent *e)
         case Qt::Key_Return:
         case Qt::Key_Tab:
             if (!m_completer->currentCompletion().isEmpty()) {
-                onCompletionSelected(m_completer->insertText());
+                onCompletionSelected(m_completer->insertText(), m_completer->insertTextFormat());
                 return;
             }
             break;
@@ -620,9 +627,24 @@ void CodeEditor::triggerCompletion()
     m_lspClient->requestCompletion(m_fileUri, {line, character});
 }
 
-void CodeEditor::onCompletionSelected(const QString &insertText)
+static QString expandSnippet(const QString &text)
 {
-    replaceCurrentWord(insertText);
+    QString result = text;
+    // Replace ${N:default} with "default"
+    static QRegularExpression phRe(R"(\$\{(\d+):([^}]*)\})");
+    result.replace(phRe, R"(\2)");
+    // Replace $N with empty
+    static QRegularExpression dollarRe(R"(\$\d+)");
+    result.replace(dollarRe, "");
+    return result;
+}
+
+void CodeEditor::onCompletionSelected(const QString &insertText, int insertTextFormat)
+{
+    QString text = insertText;
+    if (insertTextFormat == 2)
+        text = expandSnippet(text);
+    replaceCurrentWord(text);
 }
 
 void CodeEditor::replaceCurrentWord(const QString &insertText)

@@ -39,7 +39,8 @@ bool SnippetManager::loadFromJson(const QString &jsonPath)
         QStringList lines;
         for (const auto &v : bodyArr)
             lines.append(v.toString());
-        s.body = processBody(lines.join("\n"));
+        s.rawBody = lines.join("\n");
+        s.body = processBody(s.rawBody);
 
         m_snippets.insert(s.prefix, s);
     }
@@ -77,4 +78,19 @@ QString SnippetManager::processBody(const QString &raw)
     result.replace("$$", "$");
     result.replace(QChar('\t'), "    ");
     return result;
+}
+
+QList<LspCompletionItem> SnippetManager::allSnippets() const
+{
+    QList<LspCompletionItem> items;
+    for (auto it = m_snippets.begin(); it != m_snippets.end(); ++it) {
+        LspCompletionItem item;
+        item.label = it->prefix;
+        item.kind = 15; // Snippet
+        item.detail = it->description;
+        item.insertText = it->rawBody;
+        item.insertTextFormat = 2; // Snippet
+        items.append(item);
+    }
+    return items;
 }
