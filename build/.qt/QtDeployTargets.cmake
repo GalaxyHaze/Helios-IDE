@@ -1,0 +1,2 @@
+set(__QT_DEPLOY_TARGET_Zith_Studio_FILE /home/diogo/CLionProjects/Zith-Studio/build/Zith_Studio)
+set(__QT_DEPLOY_TARGET_Zith_Studio_TYPE EXECUTABLE)

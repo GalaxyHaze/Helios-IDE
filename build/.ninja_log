@@ -1,0 +1,22 @@
+# ninja log v7
+8	82	1782311816622447852	Zith_Studio_autogen/timestamp	edaacd3afd1a6d9f
+8	82	1782311816622447852	Zith_Studio_autogen/mocs_compilation.cpp	edaacd3afd1a6d9f
+8	82	1782311816622447852	/home/diogo/CLionProjects/Zith-Studio/build/Zith_Studio_autogen/timestamp	edaacd3afd1a6d9f
+8	82	1782311816622447852	/home/diogo/CLionProjects/Zith-Studio/build/Zith_Studio_autogen/mocs_compilation.cpp	edaacd3afd1a6d9f
+874	11248	1782311761038446283	CMakeFiles/Zith_Studio.dir/Zith_Studio_autogen/mocs_compilation.cpp.o	fe42ac1e3f69e929
+741	10178	1782311789955447099	CMakeFiles/Zith_Studio.dir/main.cpp.o	b35d485a2b30abe6
+703	6989	1782306220023747963	CMakeFiles/Zith_Studio.dir/editor/Syntax.cpp.o	1ca6e0e770710f69
+874	11041	1782311761040151817	CMakeFiles/Zith_Studio.dir/editor/Code.cpp.o	bdf7ecec45196c80
+6806	7673	1782311823420448044	Zith_Studio	83b7d5823a41df13
+70	6753	1782305569394186119	CMakeFiles/Zith_Studio.dir/editor/LspClient.cpp.o	88a4a76fc3418340
+703	7730	1782306220024046799	CMakeFiles/Zith_Studio.dir/editor/DiagnosticsPanel.cpp.o	5e1e9152d4b10da9
+729	7509	1782305418744267248	CMakeFiles/Zith_Studio.dir/editor/LspCompletionModel.cpp.o	69bfc780af737d23
+4	529	1782311912091209101	build.ninja	e73c23d99cdbf77d
+4	529	1782311912085450547	/home/diogo/CLionProjects/Zith-Studio/build/cmake_install.cmake	e73c23d99cdbf77d
+838	9188	1782307670610813922	CMakeFiles/Zith_Studio.dir/editor/CompilerPanel.cpp.o	ffdd35c14bbfe3eb
+76	6199	1782307699051331618	CMakeFiles/Zith_Studio.dir/editor/SnippetManager.cpp.o	6c6a66b6c3f0e74c
+81	6074	1782310230345403074	CMakeFiles/Zith_Studio.dir/editor/BreadcrumbsBar.cpp.o	13e93480c514dd76
+804	6858	1782310397917439443	CMakeFiles/Zith_Studio.dir/editor/ActivityBar.cpp.o	43ba003366f0badf
+763	7413	1782310762308062124	CMakeFiles/Zith_Studio.dir/editor/FileTreePanel.cpp.o	e1942353440dff86
+875	5909	1782311761040411328	CMakeFiles/Zith_Studio.dir/editor/ContextManager.cpp.o	7d64ddcfff83d03d
+82	6806	1782311816696447854	CMakeFiles/Zith_Studio.dir/editor/FindReplaceBar.cpp.o	f7d74c4dccc11649
