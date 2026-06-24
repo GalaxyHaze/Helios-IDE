@@ -45,6 +45,11 @@ CodeEditor::CodeEditor(QWidget *parent)
     ).arg(BG.name(), FG.name(), SEL_BG.name()));
 
     setCursorWidth(2);
+    viewport()->setMouseTracking(true);
+
+    m_hoverTimer = new QTimer(this);
+    m_hoverTimer->setSingleShot(true);
+    connect(m_hoverTimer, &QTimer::timeout, this, &CodeEditor::onHoverTimeout);
 
     connect(this, &CodeEditor::blockCountChanged, this, &CodeEditor::updateLineNumberAreaWidth);
     connect(this, &CodeEditor::updateRequest, this, &CodeEditor::updateLineNumberArea);
@@ -551,6 +556,9 @@ bool CodeEditor::handleAutoClose(QChar ch)
 
 void CodeEditor::mousePressEvent(QMouseEvent *e)
 {
+    m_hoverTimer->stop();
+    QToolTip::hideText();
+
     if (e->button() == Qt::LeftButton &&
         e->modifiers() == Qt::ControlModifier &&
         m_lspClient)
@@ -573,20 +581,29 @@ void CodeEditor::mouseMoveEvent(QMouseEvent *e)
         viewport()->setCursor(Qt::IBeamCursor);
     }
 
+    QTextCursor c = cursorForPosition(e->pos());
+    int line = c.blockNumber();
+    int ch = c.positionInBlock();
+    if (line != m_hoverLine || ch != m_hoverChar) {
+        m_hoverLine = line;
+        m_hoverChar = ch;
+        QToolTip::hideText();
+        m_hoverTimer->start(500);
+    }
+
     QPlainTextEdit::mouseMoveEvent(e);
 }
 
 bool CodeEditor::event(QEvent *e)
 {
-    if (e->type() == QEvent::ToolTip && m_lspClient) {
-        QHelpEvent *help = static_cast<QHelpEvent *>(e);
-        QTextCursor cursor = cursorForPosition(help->pos());
-        int line = cursor.blockNumber();
-        int character = cursor.positionInBlock();
-        m_lspClient->requestHover(m_fileUri, {line, character});
-        return true;
-    }
     return QPlainTextEdit::event(e);
+}
+
+void CodeEditor::onHoverTimeout()
+{
+    if (m_lspClient && !m_fileUri.isEmpty() && m_hoverLine >= 0) {
+        m_lspClient->requestHover(m_fileUri, {m_hoverLine, m_hoverChar});
+    }
 }
 
 // ── Completion ───────────────────────────────────────────────────────

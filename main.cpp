@@ -795,30 +795,30 @@ private slots:
     }
 
 private:
-    QTabWidget *m_tabWidget;
+    QTabWidget *m_tabWidget = nullptr;
     QMap<CodeEditor*, SyntaxHighlighter*> m_highlighters;
-    LspClient *m_lspClient;
-    LspCompletionModel *m_completionModel;
-    LspCompleter *m_completer;
-    DiagnosticsPanel *m_diagnosticsPanel;
-    CompilerPanel *m_compilerPanel;
-    BreadcrumbsBar *m_breadcrumbs;
-    FindReplaceBar *m_findReplaceBar;
-    ActivityBar *m_activityBar;
-    FileTreePanel *m_fileTree;
-    ContextManager *m_contextManager;
-    SnippetManager *m_snippetManager;
+    LspClient *m_lspClient = nullptr;
+    LspCompletionModel *m_completionModel = nullptr;
+    LspCompleter *m_completer = nullptr;
+    DiagnosticsPanel *m_diagnosticsPanel = nullptr;
+    CompilerPanel *m_compilerPanel = nullptr;
+    BreadcrumbsBar *m_breadcrumbs = nullptr;
+    FindReplaceBar *m_findReplaceBar = nullptr;
+    ActivityBar *m_activityBar = nullptr;
+    FileTreePanel *m_fileTree = nullptr;
+    ContextManager *m_contextManager = nullptr;
+    SnippetManager *m_snippetManager = nullptr;
     bool m_initialContextSetup;
     QSplitter *m_splitter;
     int m_fileTreeWidth = 220;
     bool m_fileTreeAnimating = false;
-    QLabel *m_lspLabel;
-    QLabel *m_contextLabel;
-    QLabel *m_errorLabel;
-    QLabel *m_posLabel;
-    QLabel *m_indentLabel;
-    QLabel *m_encodingLabel;
-    QLabel *m_langLabel;
+    QLabel *m_lspLabel = nullptr;
+    QLabel *m_contextLabel = nullptr;
+    QLabel *m_errorLabel = nullptr;
+    QLabel *m_posLabel = nullptr;
+    QLabel *m_indentLabel = nullptr;
+    QLabel *m_encodingLabel = nullptr;
+    QLabel *m_langLabel = nullptr;
 };
 
 int main(int argc, char *argv[])

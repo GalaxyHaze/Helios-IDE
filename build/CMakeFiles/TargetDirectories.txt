@@ -1,5 +1,0 @@
-/home/diogo/CLionProjects/Zith-Studio/build/CMakeFiles/Zith_Studio.dir
-/home/diogo/CLionProjects/Zith-Studio/build/CMakeFiles/edit_cache.dir
-/home/diogo/CLionProjects/Zith-Studio/build/CMakeFiles/rebuild_cache.dir
-/home/diogo/CLionProjects/Zith-Studio/build/CMakeFiles/Zith_Studio_autogen_timestamp_deps.dir
-/home/diogo/CLionProjects/Zith-Studio/build/CMakeFiles/Zith_Studio_autogen.dir

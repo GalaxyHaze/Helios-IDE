@@ -5,6 +5,7 @@
 #include <QWidget>
 #include <QMap>
 #include <QList>
+#include <QTimer>
 #include "LspClient.h"
 
 class LspCompleter;
@@ -70,6 +71,7 @@ private:
     void replaceCurrentWord(const QString &insertText);
     void updateDiagnosticHighlights();
     void matchBrackets();
+    void onHoverTimeout();
     void autoIndent();
     bool handleAutoClose(QChar ch);
     bool isAutoCloseChar(QChar ch) const;
@@ -88,6 +90,9 @@ private:
     QList<QTextEdit::ExtraSelection> m_diagnosticSelections;
     QList<QTextEdit::ExtraSelection> m_bracketSelections;
     QList<QTextEdit::ExtraSelection> m_findSelections;
+    QTimer *m_hoverTimer = nullptr;
+    int m_hoverLine = -1;
+    int m_hoverChar = -1;
     int m_hoverTimerId = 0;
 };
 
