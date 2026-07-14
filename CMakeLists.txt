@@ -14,7 +14,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network)
 
 add_executable(Helios
     main.cpp
@@ -22,6 +22,7 @@ add_executable(Helios
     editor/Code.cpp
     editor/Syntax.cpp
     editor/LspClient.cpp
+    editor/ZithToolchainManager.cpp
     editor/LspCompletionModel.cpp
     editor/DiagnosticsPanel.cpp
     editor/ActivityBar.cpp
@@ -40,5 +41,6 @@ add_executable(Helios
 target_link_libraries(Helios PRIVATE
     Qt6::Core
     Qt6::Gui
+    Qt6::Network
     Qt6::Widgets
 )

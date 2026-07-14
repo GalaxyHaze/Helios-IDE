@@ -41,6 +41,7 @@
 #include "SearchPanel.h"
 #include "GitPanel.h"
 #include "SettingsPanel.h"
+#include "ZithToolchainManager.h"
 
 static QString baseStyle()
 {
@@ -122,8 +123,7 @@ MainWindow::MainWindow(QWidget *parent)
     setCentralWidget(m_splitter);
 
     m_snippetManager = new SnippetManager(this);
-    m_snippetManager->loadFromJson(
-        "/home/diogo/zith-extension/vs-code/snippets/zith.json");
+    m_snippetManager->loadFromJson(":/snippets/zith-snippets.json");
 
     m_completionModel = new LspCompletionModel(this);
     m_completer = new LspCompleter(m_completionModel, this);
@@ -136,12 +136,7 @@ MainWindow::MainWindow(QWidget *parent)
     );
 
     m_lspClient = new LspClient(this);
-
-    QString lspPath = "/home/diogo/zith-lsp/build/zith-lsp";
-    QString stdlibPath = "/home/diogo/zith-lsp/build/_deps/zithc-src/stdlib";
-    if (!m_lspClient->start(lspPath, stdlibPath)) {
-        statusBar()->showMessage("Failed to start LSP server", 5000);
-    }
+    m_zithToolchainManager = new ZithToolchainManager(this);
 
     connect(m_lspClient, &LspClient::completionResults,
             this, [this](const QList<LspCompletionItem> &items) {
@@ -153,6 +148,11 @@ MainWindow::MainWindow(QWidget *parent)
     });
 
     connect(m_lspClient, &LspClient::initialized, this, [this]() {
+        setLspStatus("LSP ⬤", "#a6d189");
+        m_runtimeStatusText = m_runtimeTag.isEmpty()
+            ? "LSP connected."
+            : QString("Connected to runtime %1.").arg(m_runtimeTag);
+        updateSettingsRuntimeInfo();
         statusBar()->showMessage("LSP connected", 3000);
         auto *ed = currentEditor();
         if (ed && !ed->filePath().isEmpty()) {
@@ -168,6 +168,9 @@ MainWindow::MainWindow(QWidget *parent)
 
     connect(m_lspClient, &LspClient::serverError,
             this, [this](const QString &msg) {
+        setLspStatus("LSP !", "#e78284");
+        m_runtimeStatusText = "LSP error: " + msg;
+        updateSettingsRuntimeInfo();
         statusBar()->showMessage("LSP: " + msg, 5000);
     });
 
@@ -201,6 +204,22 @@ MainWindow::MainWindow(QWidget *parent)
     statusBar()->addPermanentWidget(m_encodingLabel);
     statusBar()->addPermanentWidget(m_langLabel);
 
+    connect(m_zithToolchainManager, &ZithToolchainManager::statusChanged,
+            this, [this](const QString &message) {
+        m_runtimeStatusText = message;
+        updateSettingsRuntimeInfo();
+        statusBar()->showMessage(message, 5000);
+    });
+    connect(m_zithToolchainManager, &ZithToolchainManager::failed,
+            this, [this](const QString &message) {
+        setLspStatus("LSP !", "#e78284");
+        m_runtimeStatusText = message;
+        updateSettingsRuntimeInfo();
+        statusBar()->showMessage(message, 8000);
+    });
+    connect(m_zithToolchainManager, &ZithToolchainManager::ready,
+            this, &MainWindow::startLspRuntime);
+
     m_contextManager = new ContextManager(this);
 
     connect(m_fileTree, &FileTreePanel::fileActivated,
@@ -224,8 +243,15 @@ MainWindow::MainWindow(QWidget *parent)
             this, &MainWindow::setEditorFontSize);
     connect(m_settingsPanel, &SettingsPanel::wordWrapChanged,
             this, &MainWindow::setWordWrapEnabled);
+    connect(m_settingsPanel, &SettingsPanel::refreshRuntimeRequested,
+            this, [this]() {
+        ensureLspRuntime(false);
+    });
+    connect(m_settingsPanel, &SettingsPanel::clearRuntimeCacheRequested,
+            this, &MainWindow::clearRuntimeCache);
     m_settingsPanel->setFontSize(m_editorFontSize);
     m_settingsPanel->setWordWrapEnabled(m_wordWrapEnabled);
+    updateSettingsRuntimeInfo();
 
     auto *ctxLeft = new QShortcut(QKeySequence("Alt+Left"), this);
     connect(ctxLeft, &QShortcut::activated, this, [this]() {
@@ -261,14 +287,12 @@ MainWindow::MainWindow(QWidget *parent)
             restoreContextState(ctx);
     });
 
-    QString defaultFile = "/home/diogo/zith-extension/vs-code/example.zith";
-    if (QFileInfo::exists(defaultFile)) {
-        m_contextManager->setCurrentRoot(QFileInfo(defaultFile).absolutePath());
-        openFilePath(defaultFile);
-    } else {
-        m_contextManager->setCurrentRoot(QDir::homePath());
-        createTab();
-    }
+    m_contextManager->setCurrentRoot(QDir::homePath());
+    createTab();
+    m_runtimeStatusText = "Resolving latest Zith runtime...";
+    setLspStatus("LSP ○", "#f9e2af");
+    updateSettingsRuntimeInfo();
+    ensureLspRuntime(true);
 
     auto *findShortcut = new QShortcut(QKeySequence::Find, this);
     connect(findShortcut, &QShortcut::activated, this, [this]() {
@@ -449,13 +473,10 @@ MainWindow::MainWindow(QWidget *parent)
     connect(restartLspAct, &QAction::triggered, this, [this]() {
         m_lspClient->stop();
         m_completionModel->setItems({});
-        QString lspPath = "/home/diogo/zith-lsp/build/zith-lsp";
-        QString stdlibPath = "/home/diogo/zith-lsp/build/_deps/zithc-src/stdlib";
-        if (m_lspClient->start(lspPath, stdlibPath)) {
-            statusBar()->showMessage("LSP restarting...", 3000);
-        } else {
-            statusBar()->showMessage("Failed to restart LSP", 5000);
-        }
+        m_activeLspPath.clear();
+        m_activeStdlibPath.clear();
+        setLspStatus("LSP ○", "#f9e2af");
+        ensureLspRuntime(false);
     });
 
     QMenu *viewMenu = menuBar()->addMenu("&View");
@@ -816,7 +837,13 @@ void MainWindow::restoreContextState(const Context &ctx)
         if (editor) {
             if (m_lspClient && m_lspClient->isRunning() && !editor->fileUri().isEmpty())
                 m_lspClient->closeDocument(editor->fileUri());
-            m_highlighters.remove(editor);
+            if (m_highlighters.contains(editor)) {
+                auto *hl = m_highlighters.take(editor);
+                if (hl) {
+                    hl->setDocument(nullptr);
+                    delete hl;
+                }
+            }
             m_tabWidget->removeTab(0);
             editor->deleteLater();
             continue;
@@ -880,6 +907,113 @@ void MainWindow::updateEditorChrome(CodeEditor *editor)
         : QFileInfo(editor->filePath()).fileName()));
 }
 
+void MainWindow::setLspStatus(const QString &text, const QString &color)
+{
+    if (!m_lspLabel)
+        return;
+
+    m_lspLabel->setText(text);
+    m_lspLabel->setStyleSheet(QString("color: %1; padding: 0 4px;").arg(color));
+}
+
+void MainWindow::ensureLspRuntime(bool preferCached)
+{
+    if (!m_zithToolchainManager)
+        return;
+
+    m_runtimeStatusText = preferCached
+        ? "Resolving latest Zith runtime..."
+        : "Refreshing Zith runtime...";
+    setLspStatus("LSP ○", "#f9e2af");
+    updateSettingsRuntimeInfo();
+    m_zithToolchainManager->ensureLatest(preferCached);
+}
+
+void MainWindow::startLspRuntime(const QString &lspPath,
+                                 const QString &stdlibPath,
+                                 const QString &tag)
+{
+    if (m_lspClient->isRunning() &&
+        m_activeLspPath == lspPath &&
+        m_activeStdlibPath == stdlibPath) {
+        m_runtimeTag = tag;
+        m_runtimeStatusText = QString("Runtime %1 already active.").arg(tag);
+        updateSettingsRuntimeInfo();
+        statusBar()->showMessage(QString("Zith runtime %1 is already active.").arg(tag), 3000);
+        return;
+    }
+
+    if (m_lspClient->isRunning())
+        m_lspClient->stop();
+
+    m_completionModel->setItems({});
+    m_runtimeTag = tag;
+    m_activeLspPath = lspPath;
+    m_activeStdlibPath = stdlibPath;
+    m_runtimeStatusText = QString("Starting runtime %1...").arg(tag);
+
+    setLspStatus("LSP ○", "#f9e2af");
+    updateSettingsRuntimeInfo();
+    if (m_lspClient->start(lspPath, stdlibPath)) {
+        statusBar()->showMessage(QString("Starting Zith runtime %1...").arg(tag), 3000);
+    } else {
+        setLspStatus("LSP !", "#e78284");
+        m_runtimeStatusText = "Failed to start the resolved Zith runtime.";
+        updateSettingsRuntimeInfo();
+        statusBar()->showMessage("Failed to start LSP server", 5000);
+    }
+}
+
+void MainWindow::updateSettingsRuntimeInfo()
+{
+    if (!m_settingsPanel || !m_zithToolchainManager)
+        return;
+
+    m_settingsPanel->setRuntimeInfo(
+        m_runtimeStatusText,
+        m_runtimeTag,
+        m_activeLspPath,
+        m_activeStdlibPath,
+        m_zithToolchainManager->runtimeCacheRootPath());
+}
+
+void MainWindow::clearRuntimeCache()
+{
+    if (!m_zithToolchainManager)
+        return;
+
+    const QMessageBox::StandardButton result = QMessageBox::question(
+        this,
+        "Clear Zith runtime cache?",
+        "This removes the cached zith-lsp binary and stdlib. Helios will fetch them again on the next refresh.",
+        QMessageBox::Yes | QMessageBox::Cancel,
+        QMessageBox::Cancel);
+    if (result != QMessageBox::Yes)
+        return;
+
+    if (m_lspClient->isRunning())
+        m_lspClient->stop();
+
+    QString errorMessage;
+    if (!m_zithToolchainManager->clearCachedRuntime(&errorMessage)) {
+        m_runtimeStatusText = errorMessage;
+        setLspStatus("LSP !", "#e78284");
+        updateSettingsRuntimeInfo();
+        statusBar()->showMessage(errorMessage, 8000);
+        return;
+    }
+
+    m_completionModel->setItems({});
+    m_runtimeTag.clear();
+    m_activeLspPath.clear();
+    m_activeStdlibPath.clear();
+    m_runtimeStatusText = "Runtime cache cleared. Resolving latest Zith runtime...";
+    setLspStatus("LSP ○", "#f9e2af");
+    updateSettingsRuntimeInfo();
+    statusBar()->showMessage("Zith runtime cache cleared.", 4000);
+    ensureLspRuntime(false);
+}
+
 void MainWindow::releaseEditor(CodeEditor *editor)
 {
     if (!editor)
@@ -891,6 +1025,12 @@ void MainWindow::releaseEditor(CodeEditor *editor)
     const int idx = m_tabWidget->indexOf(editor);
     if (idx >= 0)
         m_tabWidget->removeTab(idx);
-    m_highlighters.remove(editor);
+    if (m_highlighters.contains(editor)) {
+        auto *hl = m_highlighters.take(editor);
+        if (hl) {
+            hl->setDocument(nullptr);
+            delete hl;
+        }
+    }
     editor->deleteLater();
 }

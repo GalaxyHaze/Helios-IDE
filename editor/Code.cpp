@@ -71,6 +71,19 @@ CodeEditor::CodeEditor(QWidget *parent) : QPlainTextEdit(parent) {
   highlightCurrentLine();
 }
 
+CodeEditor::~CodeEditor() {
+  m_suppressDocumentSync = true;
+  if (m_documentSyncTimer) {
+    m_documentSyncTimer->stop();
+  }
+  if (m_hoverTimer) {
+    m_hoverTimer->stop();
+  }
+  if (document()) {
+    document()->disconnect(this);
+  }
+}
+
 void CodeEditor::setFilePath(const QString &path) {
   m_filePath = path;
   m_fileUri = QUrl::fromLocalFile(path).toString();

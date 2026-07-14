@@ -1,0 +1,38 @@
+{
+    "Function": {
+        "prefix": "fn",
+        "description": "Declare a function",
+        "body": [
+            "fn ${1:name}(${2}) {",
+            "    ${0}",
+            "}"
+        ]
+    },
+    "Main Function": {
+        "prefix": "main",
+        "description": "Create a main entry point",
+        "body": [
+            "fn main() {",
+            "    ${0}",
+            "}"
+        ]
+    },
+    "If Statement": {
+        "prefix": "if",
+        "description": "Insert an if statement",
+        "body": [
+            "if (${1:condition}) {",
+            "    ${0}",
+            "}"
+        ]
+    },
+    "Struct": {
+        "prefix": "struct",
+        "description": "Declare a struct",
+        "body": [
+            "struct ${1:Name} {",
+            "    ${0}",
+            "}"
+        ]
+    }
+}

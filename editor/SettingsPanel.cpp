@@ -2,7 +2,9 @@
 
 #include <QCheckBox>
 #include <QFormLayout>
+#include <QHBoxLayout>
 #include <QLabel>
+#include <QPushButton>
 #include <QSpinBox>
 #include <QVBoxLayout>
 
@@ -41,11 +43,60 @@ SettingsPanel::SettingsPanel(QWidget *parent)
     form->addRow(QString(), m_wordWrapCheck);
 
     layout->addLayout(form);
+
+    auto *runtimeTitle = new QLabel("Zith Runtime");
+    runtimeTitle->setStyleSheet("color: #c6d0f5; font-weight: bold; font-size: 13px; padding-top: 8px;");
+    layout->addWidget(runtimeTitle);
+
+    auto *runtimeHint = new QLabel(
+        "Helios manages the cached Zith LSP and stdlib runtime used by this window.");
+    runtimeHint->setWordWrap(true);
+    runtimeHint->setStyleSheet("color: #8c8fa1; font-size: 12px;");
+    layout->addWidget(runtimeHint);
+
+    auto *runtimeForm = new QFormLayout;
+    runtimeForm->setContentsMargins(0, 4, 0, 0);
+    runtimeForm->setSpacing(kPanelSpacing);
+
+    auto makeValueLabel = []() {
+        auto *label = new QLabel("Unavailable");
+        label->setWordWrap(true);
+        label->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        label->setStyleSheet("color: #c6d0f5; font-size: 12px;");
+        return label;
+    };
+
+    m_runtimeStatusValue = makeValueLabel();
+    m_runtimeTagValue = makeValueLabel();
+    m_runtimeLspPathValue = makeValueLabel();
+    m_runtimeStdlibPathValue = makeValueLabel();
+    m_runtimeCachePathValue = makeValueLabel();
+
+    runtimeForm->addRow("Status", m_runtimeStatusValue);
+    runtimeForm->addRow("Tag", m_runtimeTagValue);
+    runtimeForm->addRow("LSP", m_runtimeLspPathValue);
+    runtimeForm->addRow("Stdlib", m_runtimeStdlibPathValue);
+    runtimeForm->addRow("Cache", m_runtimeCachePathValue);
+    layout->addLayout(runtimeForm);
+
+    auto *runtimeButtons = new QHBoxLayout;
+    runtimeButtons->setContentsMargins(0, 0, 0, 0);
+    runtimeButtons->setSpacing(6);
+
+    m_refreshRuntimeButton = new QPushButton("Refresh runtime");
+    m_clearRuntimeCacheButton = new QPushButton("Clear cache");
+    runtimeButtons->addWidget(m_refreshRuntimeButton);
+    runtimeButtons->addWidget(m_clearRuntimeCacheButton);
+    runtimeButtons->addStretch();
+    layout->addLayout(runtimeButtons);
+
     layout->addStretch();
 
     setStyleSheet(
         "SettingsPanel { background: #11111b; color: #c6d0f5; }"
         "QSpinBox { background: #1e1e2e; color: #c6d0f5; border: 1px solid #363a4f; border-radius: 4px; padding: 4px 6px; }"
+        "QPushButton { background: #363a4f; color: #c6d0f5; border: none; border-radius: 4px; padding: 6px 10px; }"
+        "QPushButton:hover { background: #45475a; }"
         "QCheckBox { color: #c6d0f5; }"
         "QLabel { color: #c6d0f5; }"
     );
@@ -54,6 +105,10 @@ SettingsPanel::SettingsPanel(QWidget *parent)
             this, &SettingsPanel::fontSizeChanged);
     connect(m_wordWrapCheck, &QCheckBox::toggled,
             this, &SettingsPanel::wordWrapChanged);
+    connect(m_refreshRuntimeButton, &QPushButton::clicked,
+            this, &SettingsPanel::refreshRuntimeRequested);
+    connect(m_clearRuntimeCacheButton, &QPushButton::clicked,
+            this, &SettingsPanel::clearRuntimeCacheRequested);
 }
 
 void SettingsPanel::setFontSize(int pointSize)
@@ -64,4 +119,17 @@ void SettingsPanel::setFontSize(int pointSize)
 void SettingsPanel::setWordWrapEnabled(bool enabled)
 {
     m_wordWrapCheck->setChecked(enabled);
+}
+
+void SettingsPanel::setRuntimeInfo(const QString &status,
+                                   const QString &tag,
+                                   const QString &lspPath,
+                                   const QString &stdlibPath,
+                                   const QString &cachePath)
+{
+    m_runtimeStatusValue->setText(status.isEmpty() ? "Unavailable" : status);
+    m_runtimeTagValue->setText(tag.isEmpty() ? "Unavailable" : tag);
+    m_runtimeLspPathValue->setText(lspPath.isEmpty() ? "Unavailable" : lspPath);
+    m_runtimeStdlibPathValue->setText(stdlibPath.isEmpty() ? "Unavailable" : stdlibPath);
+    m_runtimeCachePathValue->setText(cachePath.isEmpty() ? "Unavailable" : cachePath);
 }

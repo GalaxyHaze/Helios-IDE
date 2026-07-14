@@ -2,4 +2,7 @@
     <qresource prefix="/icons">
         <file>helios-icon.svg</file>
     </qresource>
+    <qresource prefix="/snippets">
+        <file>zith-snippets.json</file>
+    </qresource>
 </RCC>

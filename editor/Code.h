@@ -17,6 +17,7 @@ class CodeEditor : public QPlainTextEdit {
 
 public:
   explicit CodeEditor(QWidget *parent = nullptr);
+  ~CodeEditor() override;
 
   void setFilePath(const QString &path);
   void setInitialDocumentText(const QString &text, int initialVersion = 1);

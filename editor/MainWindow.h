@@ -25,6 +25,7 @@ class SnippetManager;
 class SearchPanel;
 class GitPanel;
 class SettingsPanel;
+class ZithToolchainManager;
 struct Context;
 
 QIcon createHeliosIcon();
@@ -56,6 +57,13 @@ private slots:
     void saveUiPreferences() const;
     void updateEditorChrome(CodeEditor *editor);
     void releaseEditor(CodeEditor *editor);
+    void setLspStatus(const QString &text, const QString &color);
+    void ensureLspRuntime(bool preferCached);
+    void startLspRuntime(const QString &lspPath,
+                         const QString &stdlibPath,
+                         const QString &tag);
+    void updateSettingsRuntimeInfo();
+    void clearRuntimeCache();
 
 private:
     QTabWidget *m_tabWidget = nullptr;
@@ -75,6 +83,7 @@ private:
     SettingsPanel *m_settingsPanel = nullptr;
     ContextManager *m_contextManager = nullptr;
     SnippetManager *m_snippetManager = nullptr;
+    ZithToolchainManager *m_zithToolchainManager = nullptr;
     bool m_initialContextSetup;
     QSplitter *m_splitter;
     int m_fileTreeWidth = 220;
@@ -88,6 +97,10 @@ private:
     QLabel *m_indentLabel = nullptr;
     QLabel *m_encodingLabel = nullptr;
     QLabel *m_langLabel = nullptr;
+    QString m_runtimeStatusText;
+    QString m_runtimeTag;
+    QString m_activeLspPath;
+    QString m_activeStdlibPath;
 };
 
 #endif

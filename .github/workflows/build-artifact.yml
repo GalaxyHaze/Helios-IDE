@@ -1,0 +1,192 @@
+name: Build Artifact
+
+concurrency:
+  group: build-${{ inputs.tag_name || github.ref_name }}
+  cancel-in-progress: true
+
+on:
+  push:
+    tags:
+      - 'v[0-9]*.[0-9]*.[0-9]*'
+      - 'v[0-9]*.[0-9]*.[0-9]*.[0-9]*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag for the release, for example v0.1.0'
+        required: false
+        default: ''
+      draft:
+        description: 'Create the release as draft'
+        type: boolean
+        default: true
+  workflow_call:
+    inputs:
+      tag_name:
+        type: string
+        required: false
+      draft:
+        type: boolean
+        required: false
+        default: true
+
+permissions:
+  contents: write
+
+env:
+  CMAKE_VERSION: '3.28.x'
+  QT_VERSION: '6.8.3'
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      draft: ${{ steps.meta.outputs.draft }}
+    steps:
+      - id: meta
+        name: Resolve tag and draft mode
+        shell: bash
+        run: |
+          TAG="${{ inputs.tag_name || github.event.inputs.tag_name || github.ref_name }}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+          DRAFT="true"
+          if [ "${{ github.event_name }}" = "workflow_call" ]; then
+            if [ "${{ inputs.draft }}" = "true" ]; then DRAFT="true"; else DRAFT="false"; fi
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ "${{ github.event.inputs.draft }}" = "true" ]; then DRAFT="true"; else DRAFT="false"; fi
+          fi
+          echo "draft=$DRAFT" >> "$GITHUB_OUTPUT"
+
+      - name: Create release
+        if: github.event_name != 'workflow_call'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          draft: ${{ steps.meta.outputs.draft }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-desktop:
+    needs: create-release
+    name: Build ${{ matrix.target_name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target_name: helios-linux-amd64
+            archive_name: helios-linux-amd64.tar.gz
+            executable_name: Helios
+            configure_flags: >-
+              -DCMAKE_C_COMPILER=clang
+              -DCMAKE_CXX_COMPILER=clang++
+
+          - os: macos-latest
+            target_name: helios-macos
+            archive_name: helios-macos.zip
+            executable_name: Helios
+            configure_flags: ''
+
+          - os: windows-latest
+            target_name: helios-windows-amd64
+            archive_name: helios-windows-amd64.zip
+            executable_name: Helios.exe
+            configure_flags: ''
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup CMake
+        uses: jwlawson/actions-setup-cmake@v2
+        with:
+          cmake-version: ${{ env.CMAKE_VERSION }}
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build clang libgl1-mesa-dev libxkbcommon-x11-0
+
+      - name: Install macOS build dependencies
+        if: runner.os == 'macOS'
+        shell: bash
+        run: brew install ninja
+
+      - name: Install Windows build dependencies
+        if: runner.os == 'Windows'
+        shell: bash
+        run: choco install ninja -y
+
+      - name: Setup MSVC environment
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          cache: true
+
+      - name: Clean stale build directory
+        shell: bash
+        run: rm -rf build
+
+      - name: Configure CMake
+        shell: bash
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            ${{ matrix.configure_flags }}
+
+      - name: Build
+        shell: bash
+        run: cmake --build build --config Release
+
+      - name: Prepare package directory
+        shell: bash
+        run: |
+          mkdir -p package artifacts
+          cp "build/${{ matrix.executable_name }}" "package/${{ matrix.executable_name }}"
+          cat > package/README.txt <<'EOF'
+          Helios build artifact
+
+          This archive currently contains the built application binary only.
+          Qt runtime libraries are not bundled yet for full standalone deployment
+          on every platform.
+          EOF
+
+      - name: Archive Unix artifact
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            tar -czf "artifacts/${{ matrix.archive_name }}" -C package .
+          else
+            ditto -c -k --sequesterRsrc --keepParent package "artifacts/${{ matrix.archive_name }}"
+          fi
+
+      - name: Archive Windows artifact
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path package\* -DestinationPath artifacts\${{ matrix.archive_name }}
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target_name }}
+          path: artifacts/${{ matrix.archive_name }}
+
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.create-release.outputs.tag || inputs.tag_name }}
+          files: artifacts/${{ matrix.archive_name }}
+          draft: ${{ needs.create-release.outputs.draft || inputs.draft }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

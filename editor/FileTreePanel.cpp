@@ -12,6 +12,8 @@ FileTreePanel::FileTreePanel(QWidget *parent)
     layout->setSpacing(0);
 
     m_model = new QFileSystemModel(this);
+    m_model->setReadOnly(true);
+    m_model->setResolveSymlinks(false);
     m_model->setFilter(QDir::AllDirs | QDir::Files | QDir::NoDotAndDotDot);
     m_model->setNameFilters({"*.zith", "*.toml", "*.json", "*.md"});
     m_model->setNameFilterDisables(false);
@@ -19,6 +21,9 @@ FileTreePanel::FileTreePanel(QWidget *parent)
     m_treeView = new QTreeView;
     m_treeView->setModel(m_model);
     m_treeView->setHeaderHidden(true);
+    m_treeView->hideColumn(1);
+    m_treeView->hideColumn(2);
+    m_treeView->hideColumn(3);
     // Filesystem models can insert many rows at once; animation makes each insertion repaint.
     m_treeView->setAnimated(false);
     m_treeView->setUniformRowHeights(true);
