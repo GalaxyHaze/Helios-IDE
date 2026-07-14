@@ -63,6 +63,7 @@ private slots:
                          const QString &stdlibPath,
                          const QString &tag);
     void updateSettingsRuntimeInfo();
+    void updateLspDiagnostics();
     void clearRuntimeCache();
 
 private:
@@ -84,6 +85,7 @@ private:
     ContextManager *m_contextManager = nullptr;
     SnippetManager *m_snippetManager = nullptr;
     ZithToolchainManager *m_zithToolchainManager = nullptr;
+    QString m_lastLspError;
     bool m_initialContextSetup;
     QSplitter *m_splitter;
     int m_fileTreeWidth = 220;

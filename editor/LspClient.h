@@ -8,6 +8,7 @@
 #include <QObject>
 #include <QProcess>
 #include <QString>
+#include <QTimer>
 #include <QUrl>
 #include <functional>
 
@@ -67,11 +68,18 @@ public:
   bool start(const QString &serverPath, const QString &stdlibPath = {}, const QString &workspaceRoot = {});
   void stop();
   bool isRunning() const;
+  // True once the server has answered `initialize`; requests are gated on this.
+  bool isReady() const;
+  // 0 = None, 1 = Full, 2 = Incremental (as advertised by the server).
+  int documentSyncKind() const;
 
   void openDocument(const QString &uri, const QString &languageId,
                     const QString &text);
   void changeDocument(const QString &uri, const QList<LspTextChange> &changes,
                       int version);
+  // Whole-document replacement, used when the server advertises SyncKind::Full.
+  void changeDocumentFull(const QString &uri, const QString &fullText,
+                          int version);
   void closeDocument(const QString &uri);
   void saveDocument(const QString &uri);
 
@@ -86,6 +94,7 @@ public:
 signals:
   void initialized();
   void serverError(const QString &message);
+  void serverStopped();
   void diagnosticsReceived(const QString &uri,
                            const QList<LspDiagnostic> &diagnostics);
   void completionResults(const QList<LspCompletionItem> &items);
@@ -117,9 +126,13 @@ private:
   int m_nextId = 0;
   bool m_initialized = false;
   bool m_shutdownRequested = false;
+  int m_syncKind = 1; // default Full until the server advertises otherwise
+
+  void failPendingRequests(const QString &reason);
 
   struct PendingRequest {
     std::function<void(const QJsonObject &)> callback;
+    QString method;
   };
   QHash<int, PendingRequest> m_pendingRequests;
 };

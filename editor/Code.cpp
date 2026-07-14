@@ -396,6 +396,12 @@ void CodeEditor::matchBrackets() {
 // ── Key Handling ─────────────────────────────────────────────────────
 
 void CodeEditor::keyPressEvent(QKeyEvent *e) {
+  // ── Go to definition (F12) ──────────────────────────────────
+  if (e->key() == Qt::Key_F12 && m_lspClient) {
+    goToDefinitionAtCursor();
+    return;
+  }
+
   // ── Completer popup active ──────────────────────────────────
   if (m_completer && m_completer->popup()->isVisible()) {
     switch (e->key()) {
@@ -706,6 +712,14 @@ void CodeEditor::triggerSignatureHelp() {
   m_lspClient->requestSignatureHelp(m_fileUri, {line, character});
 }
 
+void CodeEditor::goToDefinitionAtCursor() {
+  if (!m_lspClient || m_fileUri.isEmpty())
+    return;
+  QTextCursor cursor = textCursor();
+  m_lspClient->requestDefinition(
+      m_fileUri, {cursor.blockNumber(), cursor.positionInBlock()});
+}
+
 void CodeEditor::requestHoverAtCursor() {}
 
 void CodeEditor::setFindSelections(
@@ -760,8 +774,16 @@ void CodeEditor::flushDocumentChanges() {
     return;
 
   m_documentVersion++;
-  m_lspClient->changeDocument(m_fileUri, m_pendingDocumentChanges,
-                              m_documentVersion);
+  // Prefer incremental ranged edits, but fall back to a whole-document sync
+  // when the server only advertises TextDocumentSyncKind::Full (e.g. older
+  // published zith-lsp releases).
+  if (m_lspClient->documentSyncKind() == 2) {
+    m_lspClient->changeDocument(m_fileUri, m_pendingDocumentChanges,
+                                m_documentVersion);
+  } else {
+    m_lspClient->changeDocumentFull(m_fileUri, m_documentText,
+                                    m_documentVersion);
+  }
   m_pendingDocumentChanges.clear();
 }
 

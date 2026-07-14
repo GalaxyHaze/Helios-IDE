@@ -4,6 +4,7 @@
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QPlainTextEdit>
 #include <QPushButton>
 #include <QSpinBox>
 #include <QVBoxLayout>
@@ -90,6 +91,37 @@ SettingsPanel::SettingsPanel(QWidget *parent)
     runtimeButtons->addStretch();
     layout->addLayout(runtimeButtons);
 
+    auto *diagTitle = new QLabel("LSP Diagnostics");
+    diagTitle->setStyleSheet("color: #c6d0f5; font-weight: bold; font-size: 13px; padding-top: 8px;");
+    layout->addWidget(diagTitle);
+
+    auto *diagForm = new QFormLayout;
+    diagForm->setContentsMargins(0, 4, 0, 0);
+    diagForm->setSpacing(kPanelSpacing);
+
+    m_lspConnectionValue = makeValueLabel();
+    m_lspSyncModeValue = makeValueLabel();
+    m_lspLastErrorValue = makeValueLabel();
+    m_lspLastErrorValue->setStyleSheet("color: #e78284; font-size: 12px;");
+
+    diagForm->addRow("Connection", m_lspConnectionValue);
+    diagForm->addRow("Sync mode", m_lspSyncModeValue);
+    diagForm->addRow("Last error", m_lspLastErrorValue);
+    layout->addLayout(diagForm);
+
+    auto *logLabel = new QLabel("Recent LSP log");
+    logLabel->setStyleSheet("color: #8c8fa1; font-size: 12px; padding-top: 4px;");
+    layout->addWidget(logLabel);
+
+    m_lspLogView = new QPlainTextEdit;
+    m_lspLogView->setReadOnly(true);
+    m_lspLogView->setMaximumBlockCount(200);
+    m_lspLogView->setFixedHeight(140);
+    m_lspLogView->setStyleSheet(
+        "QPlainTextEdit { background: #1e1e2e; color: #a5adce; border: 1px solid #363a4f;"
+        " border-radius: 4px; font-family: monospace; font-size: 11px; }");
+    layout->addWidget(m_lspLogView);
+
     layout->addStretch();
 
     setStyleSheet(
@@ -132,4 +164,28 @@ void SettingsPanel::setRuntimeInfo(const QString &status,
     m_runtimeLspPathValue->setText(lspPath.isEmpty() ? "Unavailable" : lspPath);
     m_runtimeStdlibPathValue->setText(stdlibPath.isEmpty() ? "Unavailable" : stdlibPath);
     m_runtimeCachePathValue->setText(cachePath.isEmpty() ? "Unavailable" : cachePath);
+}
+
+void SettingsPanel::setLspDiagnostics(const QString &connection,
+                                      const QString &syncMode,
+                                      const QString &lastError)
+{
+    if (m_lspConnectionValue)
+        m_lspConnectionValue->setText(connection.isEmpty() ? "Unknown" : connection);
+    if (m_lspSyncModeValue)
+        m_lspSyncModeValue->setText(syncMode.isEmpty() ? "Unknown" : syncMode);
+    if (m_lspLastErrorValue)
+        m_lspLastErrorValue->setText(lastError.isEmpty() ? "None" : lastError);
+}
+
+void SettingsPanel::appendLspLog(const QString &line)
+{
+    if (m_lspLogView && !line.isEmpty())
+        m_lspLogView->appendPlainText(line);
+}
+
+void SettingsPanel::clearLspLog()
+{
+    if (m_lspLogView)
+        m_lspLogView->clear();
 }

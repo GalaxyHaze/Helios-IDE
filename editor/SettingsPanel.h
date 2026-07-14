@@ -7,6 +7,7 @@ class QCheckBox;
 class QLabel;
 class QPushButton;
 class QSpinBox;
+class QPlainTextEdit;
 
 class SettingsPanel : public QWidget
 {
@@ -22,6 +23,12 @@ public:
                         const QString &lspPath,
                         const QString &stdlibPath,
                         const QString &cachePath);
+    // LSP diagnostics area: connection state, sync mode and last error.
+    void setLspDiagnostics(const QString &connection,
+                           const QString &syncMode,
+                           const QString &lastError);
+    void appendLspLog(const QString &line);
+    void clearLspLog();
 
 signals:
     void fontSizeChanged(int pointSize);
@@ -35,6 +42,10 @@ private:
     QLabel *m_runtimeLspPathValue = nullptr;
     QLabel *m_runtimeStdlibPathValue = nullptr;
     QLabel *m_runtimeCachePathValue = nullptr;
+    QLabel *m_lspConnectionValue = nullptr;
+    QLabel *m_lspSyncModeValue = nullptr;
+    QLabel *m_lspLastErrorValue = nullptr;
+    QPlainTextEdit *m_lspLogView = nullptr;
     QPushButton *m_refreshRuntimeButton = nullptr;
     QPushButton *m_clearRuntimeCacheButton = nullptr;
     QSpinBox *m_fontSizeSpin = nullptr;

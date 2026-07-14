@@ -15,6 +15,7 @@ bool LspClient::start(const QString &serverPath, const QString &stdlibPath, cons
 
   m_shutdownRequested = false;
   m_initialized = false;
+  m_syncKind = 1;
   m_nextId = 0;
   m_pendingRequests.clear();
   m_buffer.clear();
@@ -75,6 +76,17 @@ bool LspClient::start(const QString &serverPath, const QString &stdlibPath, cons
   }
 
   sendRequest("initialize", initParams, [this](const QJsonObject &resp) {
+    // Record the server's advertised text-document sync kind so we send the
+    // right kind of didChange (incremental ranges vs. whole-document text).
+    QJsonObject caps = resp["result"].toObject()["capabilities"].toObject();
+    QJsonValue syncVal = caps["textDocumentSync"];
+    if (syncVal.isObject())
+      m_syncKind = syncVal.toObject()["change"].toInt(1);
+    else if (syncVal.isDouble())
+      m_syncKind = syncVal.toInt(1);
+    else
+      m_syncKind = 1;
+
     m_initialized = true;
     emit initialized();
 
@@ -116,18 +128,45 @@ void LspClient::stop() {
 
   m_process->deleteLater();
   m_process = nullptr;
+  const bool wasInitialized = m_initialized;
   m_initialized = false;
   m_shutdownRequested = false;
-  m_pendingRequests.clear();
+  m_syncKind = 1;
+  failPendingRequests("LSP server stopped");
   m_buffer.clear();
+  if (wasInitialized)
+    emit serverStopped();
 }
 
 bool LspClient::isRunning() const {
   return m_process && m_process->state() == QProcess::Running;
 }
 
+bool LspClient::isReady() const {
+  return isRunning() && m_initialized;
+}
+
+int LspClient::documentSyncKind() const { return m_syncKind; }
+
+void LspClient::failPendingRequests(const QString &reason) {
+  if (m_pendingRequests.isEmpty())
+    return;
+  const auto pending = m_pendingRequests;
+  m_pendingRequests.clear();
+  for (auto it = pending.begin(); it != pending.end(); ++it) {
+    if (it.value().callback) {
+      // Deliver an empty error response so feature callbacks fail gracefully.
+      QJsonObject err;
+      err["error"] = QJsonObject{{"message", reason}};
+      it.value().callback(err);
+    }
+  }
+}
+
 void LspClient::openDocument(const QString &uri, const QString &languageId,
                              const QString &text) {
+  if (!isReady())
+    return;
   QJsonObject textDoc;
   textDoc["uri"] = uri;
   textDoc["languageId"] = languageId;
@@ -147,7 +186,7 @@ void LspClient::openDocument(const QString &uri, const QString &languageId,
 void LspClient::changeDocument(const QString &uri,
                                const QList<LspTextChange> &changes,
                                int version) {
-  if (changes.isEmpty())
+  if (!isReady() || changes.isEmpty())
     return;
 
   QJsonObject textDoc;
@@ -185,7 +224,32 @@ void LspClient::changeDocument(const QString &uri,
   sendMessage(msg);
 }
 
+void LspClient::changeDocumentFull(const QString &uri, const QString &fullText,
+                                   int version) {
+  if (!isReady())
+    return;
+
+  QJsonObject textDoc;
+  textDoc["uri"] = uri;
+  textDoc["version"] = version;
+
+  QJsonObject contentChange;
+  contentChange["text"] = fullText;
+
+  QJsonObject params;
+  params["textDocument"] = textDoc;
+  params["contentChanges"] = QJsonArray{contentChange};
+
+  QJsonObject msg;
+  msg["jsonrpc"] = "2.0";
+  msg["method"] = "textDocument/didChange";
+  msg["params"] = params;
+  sendMessage(msg);
+}
+
 void LspClient::closeDocument(const QString &uri) {
+  if (!isReady())
+    return;
   QJsonObject textDoc;
   textDoc["uri"] = uri;
 
@@ -200,6 +264,8 @@ void LspClient::closeDocument(const QString &uri) {
 }
 
 void LspClient::saveDocument(const QString &uri) {
+  if (!isReady())
+    return;
   QJsonObject textDoc;
   textDoc["uri"] = uri;
 
@@ -457,6 +523,16 @@ void LspClient::sendMessage(const QJsonObject &msg) {
 
 void LspClient::sendRequest(const QString &method, const QJsonObject &params,
                             std::function<void(const QJsonObject &)> callback) {
+  // Only `initialize` may be sent before the server reports it is ready.
+  if (method != QLatin1String("initialize") && !isReady()) {
+    if (callback) {
+      QJsonObject err;
+      err["error"] = QJsonObject{{"message", "LSP not initialized"}};
+      callback(err);
+    }
+    return;
+  }
+
   int id = nextId();
   QJsonObject msg;
   msg["jsonrpc"] = "2.0";
@@ -464,8 +540,23 @@ void LspClient::sendRequest(const QString &method, const QJsonObject &params,
   msg["method"] = method;
   msg["params"] = params;
 
-  if (callback)
-    m_pendingRequests.insert(id, {callback});
+  if (callback) {
+    m_pendingRequests.insert(id, {callback, method});
+    // Guard against a server that never answers: fail the callback after 8s so
+    // the UI never hangs waiting on a stale request.
+    QTimer::singleShot(8000, this, [this, id]() {
+      auto it = m_pendingRequests.find(id);
+      if (it == m_pendingRequests.end())
+        return;
+      auto req = it.value();
+      m_pendingRequests.erase(it);
+      if (req.callback) {
+        QJsonObject err;
+        err["error"] = QJsonObject{{"message", "LSP request timed out"}};
+        req.callback(err);
+      }
+    });
+  }
 
   sendMessage(msg);
 }

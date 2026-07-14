@@ -71,6 +71,7 @@ private slots:
 private:
   void triggerCompletion();
   void triggerSignatureHelp();
+  void goToDefinitionAtCursor();
   void requestHoverAtCursor();
   void replaceCurrentWord(const QString &insertText);
   void updateDiagnosticHighlights();

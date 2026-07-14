@@ -154,23 +154,40 @@ MainWindow::MainWindow(QWidget *parent)
             : QString("Connected to runtime %1.").arg(m_runtimeTag);
         updateSettingsRuntimeInfo();
         statusBar()->showMessage("LSP connected", 3000);
-        auto *ed = currentEditor();
-        if (ed && !ed->filePath().isEmpty()) {
-            QFile f(ed->filePath());
-            if (f.open(QIODevice::ReadOnly | QIODevice::Text)) {
-                m_lspClient->openDocument(
-                    ed->fileUri(), "zith",
-                    QString::fromUtf8(f.readAll()));
-                f.close();
-            }
+        // Re-open every buffer the user already has open so the freshly
+        // (re)started server has the full workspace state.
+        for (int i = 0; i < m_tabWidget->count(); ++i) {
+            auto *ed = qobject_cast<CodeEditor*>(m_tabWidget->widget(i));
+            if (!ed || ed->filePath().isEmpty())
+                continue;
+            m_lspClient->openDocument(ed->fileUri(), "zith",
+                                      ed->toPlainText());
         }
+        m_lastLspError.clear();
+        updateLspDiagnostics();
+    });
+
+    connect(m_lspClient, &LspClient::serverStopped, this, [this]() {
+        setLspStatus("LSP ○", "#f9e2af");
+        m_runtimeStatusText = "LSP server stopped.";
+        updateSettingsRuntimeInfo();
+        updateLspDiagnostics();
+    });
+
+    connect(m_lspClient, &LspClient::logMessage, this, [this](const QString &msg) {
+        if (m_settingsPanel)
+            m_settingsPanel->appendLspLog(msg);
     });
 
     connect(m_lspClient, &LspClient::serverError,
             this, [this](const QString &msg) {
         setLspStatus("LSP !", "#e78284");
         m_runtimeStatusText = "LSP error: " + msg;
+        m_lastLspError = msg;
         updateSettingsRuntimeInfo();
+        updateLspDiagnostics();
+        if (m_settingsPanel)
+            m_settingsPanel->appendLspLog("[error] " + msg);
         statusBar()->showMessage("LSP: " + msg, 5000);
     });
 
@@ -489,7 +506,7 @@ void MainWindow::openFilePath(const QString &path)
 
     // Let the tab paint before serializing and sending the complete document to the LSP.
     QTimer::singleShot(0, editor, [this, editor, content]() {
-        if (m_lspClient && m_lspClient->isRunning())
+        if (m_lspClient && m_lspClient->isReady())
             m_lspClient->openDocument(editor->fileUri(), "zith", content);
     });
 }
@@ -693,7 +710,7 @@ void MainWindow::saveFile()
 
         m_breadcrumbs->setPath(ed->filePath());
 
-        if (m_lspClient && m_lspClient->isRunning())
+        if (m_lspClient && m_lspClient->isReady())
             m_lspClient->saveDocument(ed->fileUri());
     }
 }
@@ -803,7 +820,7 @@ void MainWindow::restoreContextState(const Context &ctx)
     while (m_tabWidget->count() > 0) {
         auto *editor = qobject_cast<CodeEditor*>(m_tabWidget->widget(0));
         if (editor) {
-            if (m_lspClient && m_lspClient->isRunning() && !editor->fileUri().isEmpty())
+            if (m_lspClient && m_lspClient->isReady() && !editor->fileUri().isEmpty())
                 m_lspClient->closeDocument(editor->fileUri());
             if (m_highlighters.contains(editor)) {
                 auto *hl = m_highlighters.take(editor);
@@ -946,6 +963,36 @@ void MainWindow::updateSettingsRuntimeInfo()
         m_activeLspPath,
         m_activeStdlibPath,
         m_zithToolchainManager->runtimeCacheRootPath());
+
+    updateLspDiagnostics();
+}
+
+void MainWindow::updateLspDiagnostics()
+{
+    if (!m_settingsPanel)
+        return;
+
+    QString connection = "Not started";
+    if (m_lspClient) {
+        if (m_lspClient->isReady())
+            connection = "Connected";
+        else if (m_lspClient->isRunning())
+            connection = "Starting (waiting for initialize)";
+        else
+            connection = "Stopped";
+    }
+
+    QString syncMode = "Unknown";
+    if (m_lspClient && m_lspClient->isReady()) {
+        switch (m_lspClient->documentSyncKind()) {
+        case 2:  syncMode = "Incremental"; break;
+        case 1:  syncMode = "Full"; break;
+        case 0:  syncMode = "None"; break;
+        default: syncMode = "Unknown"; break;
+        }
+    }
+
+    m_settingsPanel->setLspDiagnostics(connection, syncMode, m_lastLspError);
 }
 
 void MainWindow::clearRuntimeCache()
@@ -990,7 +1037,7 @@ void MainWindow::releaseEditor(CodeEditor *editor)
     if (!editor)
         return;
 
-    if (m_lspClient && m_lspClient->isRunning() && !editor->fileUri().isEmpty())
+    if (m_lspClient && m_lspClient->isReady() && !editor->fileUri().isEmpty())
         m_lspClient->closeDocument(editor->fileUri());
 
     const int idx = m_tabWidget->indexOf(editor);
