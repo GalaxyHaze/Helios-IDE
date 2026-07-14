@@ -1,63 +1,98 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
-  <defs>
-    <!-- Vibrant warm solar gradient -->
-    <radialGradient id="helios-core" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#fff9e6"/>
-      <stop offset="35%" stop-color="#ffb703"/>
-      <stop offset="70%" stop-color="#fb8500"/>
-      <stop offset="100%" stop-color="#d62828"/>
-    </radialGradient>
-    
-    <!-- Outer radiant ring gradient -->
-    <linearGradient id="helios-ring" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#ffb703"/>
-      <stop offset="50%" stop-color="#fb8500"/>
-      <stop offset="100%" stop-color="#800f2f"/>
-    </linearGradient>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
 
-    <!-- Subtle glow/shadow effect -->
-    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur stdDeviation="6" result="blur" />
-      <feComposite in="SourceGraphic" in2="blur" operator="over" />
-    </filter>
-  </defs>
-
-  <!-- Background subtle warm circular glow -->
-  <circle cx="100" cy="100" r="85" fill="#fb8500" opacity="0.08" />
-
-  <!-- Outer geometric starburst (12-point elegant solar rays) -->
-  <g transform="translate(100,100)" stroke="url(#helios-ring)" stroke-width="2.5" fill="none" opacity="0.85">
-    <circle cx="0" cy="0" r="55" stroke-dasharray="1 14" stroke-linecap="round" stroke-width="6"/>
-    <!-- Outer sharp geometric ray constructs -->
-    <path d="M 0,-75 L 12,-50 L -12,-50 Z" fill="url(#helios-ring)" stroke="none"/>
-    <path d="M 0,75 L 12,50 L -12,50 Z" fill="url(#helios-ring)" stroke="none" transform="rotate(180)"/>
-    <path d="M 75,0 L 50,12 L 50,-12 Z" fill="url(#helios-ring)" stroke="none" transform="rotate(90)"/>
-    <path d="M -75,0 L -50,12 L -50,-12 Z" fill="url(#helios-ring)" stroke="none" transform="rotate(270)"/>
-    
-    <path d="M 0,-75 L 10,-50 L -10,-50 Z" fill="url(#helios-ring)" stroke="none" transform="rotate(30)" opacity="0.7"/>
-    <path d="M 0,-75 L 10,-50 L -10,-50 Z" fill="url(#helios-ring)" stroke="none" transform="rotate(60)" opacity="0.7"/>
-    <path d="M 0,-75 L 10,-50 L -10,-50 Z" fill="url(#helios-ring)" stroke="none" transform="rotate(120)" opacity="0.7"/>
-    <path d="M 0,-75 L 10,-50 L -10,-50 Z" fill="url(#helios-ring)" stroke="none" transform="rotate(150)" opacity="0.7"/>
-    <path d="M 0,-75 L 10,-50 L -10,-50 Z" fill="url(#helios-ring)" stroke="none" transform="rotate(210)" opacity="0.7"/>
-    <path d="M 0,-75 L 10,-50 L -10,-50 Z" fill="url(#helios-ring)" stroke="none" transform="rotate(240)" opacity="0.7"/>
-    <path d="M 0,-75 L 10,-50 L -10,-50 Z" fill="url(#helios-ring)" stroke="none" transform="rotate(300)" opacity="0.7"/>
-    <path d="M 0,-75 L 10,-50 L -10,-50 Z" fill="url(#helios-ring)" stroke="none" transform="rotate(330)" opacity="0.7"/>
-  </g>
-
-  <!-- Overlapping geometric orbital rings -->
-  <circle cx="100" cy="100" r="50" fill="none" stroke="#ffb703" stroke-width="1" opacity="0.3" />
-  <circle cx="100" cy="100" r="62" fill="none" stroke="#fb8500" stroke-width="1.5" stroke-dasharray="12 6" opacity="0.4" />
-
-  <!-- The core solar sphere -->
-  <circle cx="100" cy="100" r="38" fill="url(#helios-core)" filter="url(#glow)" />
-  
-  <!-- Sleek technical overlay in the core (abstract 'H' for Helios) -->
-  <g transform="translate(100,100)" stroke="#fff" stroke-width="3" stroke-linecap="round" fill="none" opacity="0.95">
-    <path d="M -12,-16 L -12,16" />
-    <path d="M 12,-16 L 12,16" />
-    <path d="M -12,0 L 12,0" />
-    <!-- Small spark details -->
-    <circle cx="0" cy="-12" r="1.5" fill="#fff" stroke="none" />
-    <circle cx="0" cy="12" r="1.5" fill="#fff" stroke="none" />
+<svg
+   width="512"
+   height="512"
+   viewBox="0 0 135.46666 135.46667"
+   version="1.1"
+   id="svg1"
+   inkscape:version="1.4.4 (dcaf3e7d9e, 2026-05-05)"
+   sodipodi:docname="HeliosIdeApp.svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="mm"
+     showgrid="true"
+     inkscape:zoom="1.2535571"
+     inkscape:cx="97.323052"
+     inkscape:cy="278.80661"
+     inkscape:window-width="2048"
+     inkscape:window-height="1204"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="layer1">
+    <inkscape:grid
+       id="grid1"
+       units="px"
+       originx="0"
+       originy="0"
+       spacingx="2.1166666"
+       spacingy="2.1166666"
+       empcolor="#0099e5"
+       empopacity="0.30196078"
+       color="#0099e5"
+       opacity="0.14901961"
+       empspacing="8"
+       enabled="true"
+       visible="true" />
+  </sodipodi:namedview>
+  <defs
+     id="defs1" />
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1">
+    <path
+       d="m 67.733333,33.866667 -31.75,2.116666 -2.116666,31.75 2.116666,31.75 31.75,2.116667 31.75,-2.116667 2.116667,-31.75 -2.116667,-31.75 z m 0,2.116666 L 88.9,46.566667 99.483333,67.733333 88.9,88.9 67.733333,99.483333 46.566667,88.9 35.983333,67.733333 46.566667,46.566667 Z"
+       style="fill:#803300;stroke-width:0.264583"
+       id="path179" />
+    <path
+       style="fill:#d45500;stroke-width:0.264583"
+       d="m 101.6,65.616661 2.11667,-31.749997 h 31.74999 z"
+       id="path170" />
+    <path
+       style="fill:#d45500;stroke-width:0.264583"
+       d="m 101.6,69.849995 2.11667,31.749995 h 31.74999 z"
+       id="path171" />
+    <path
+       style="fill:#d45500;stroke-width:0.264583"
+       d="M 33.86667,65.61666 31.75,33.866663 H 9.7935691e-6 Z"
+       id="path172" />
+    <path
+       style="fill:#d45500;stroke-width:0.264583"
+       d="M 33.86667,69.849994 31.75,101.59999 H 9.7935691e-6 Z"
+       id="path173" />
+    <path
+       style="fill:#d45500;stroke-width:0.264583"
+       d="m 69.85,101.59999 31.75,2.11667 v 31.74999 z"
+       id="path174" />
+    <path
+       style="fill:#d45500;stroke-width:0.264583"
+       d="m 65.616666,101.59999 -31.749995,2.11667 v 31.74999 z"
+       id="path175" />
+    <path
+       style="fill:#d45500;stroke-width:0.264583"
+       d="M 69.850001,33.866662 101.6,31.749992 V 1.3967846e-6 Z"
+       id="path176" />
+    <path
+       style="fill:#d45500;stroke-width:0.264583"
+       d="M 65.616667,33.866662 33.866671,31.749992 V 1.3967846e-6 Z"
+       id="path177" />
+    <path
+       d="M 67.733333,0.01498617 A 67.73333,67.73333 0 0 1 0,67.733333 67.73333,67.73333 0 0 1 67.733333,135.46667 67.73333,67.73333 0 0 1 135.46667,67.733333 67.73333,67.73333 0 0 1 67.733333,0.01498617 Z M 50.8,50.8 67.733333,61.383333 84.666667,50.8 74.083333,67.733333 84.666667,84.666667 67.733333,74.083333 50.8,84.666667 61.383333,67.733333 Z"
+       style="fill:#ff6600;stroke-width:0.264583"
+       id="path192" />
   </g>
 </svg>

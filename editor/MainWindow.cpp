@@ -283,8 +283,12 @@ MainWindow::MainWindow(QWidget *parent)
         if (m_contextLabel)
             m_contextLabel->setText(QString("%1/%2")
                 .arg(index + 1).arg(m_contextManager->count()));
-        if (!m_initialContextSetup)
+        if (!m_initialContextSetup) {
             restoreContextState(ctx);
+            if (m_lspClient && m_lspClient->isRunning()) {
+                ensureLspRuntime(true);
+            }
+        }
     });
 
     m_contextManager->setCurrentRoot(QDir::homePath());
@@ -432,42 +436,6 @@ MainWindow::MainWindow(QWidget *parent)
     connect(exitAct, &QAction::triggered, this, [this]() { close(); });
 
     QMenu *toolsMenu = menuBar()->addMenu("&Tools");
-
-    auto runZithc = [this](const QString &cmd, bool needsFile) {
-        if (QProcess::execute("zithc", {"--version"}) != 0) {
-            statusBar()->showMessage("zithc not found in PATH", 5000);
-            return;
-        }
-        auto *ed = currentEditor();
-        if (!ed) return;
-        if (needsFile && ed->filePath().isEmpty()) {
-            statusBar()->showMessage("No file open", 5000);
-            return;
-        }
-        QStringList args = {cmd};
-        if (needsFile)
-            args << ed->filePath();
-        QString dir = ed->filePath().isEmpty()
-            ? QDir::homePath()
-            : QFileInfo(ed->filePath()).absolutePath();
-        m_compilerPanel->show();
-        m_compilerPanel->raise();
-        m_compilerPanel->runCommand(dir, "zithc", args);
-    };
-
-    QAction *buildAct = toolsMenu->addAction("&Build", QKeySequence("Ctrl+B"));
-    connect(buildAct, &QAction::triggered, this, [runZithc]() { runZithc("build", false); });
-
-    QAction *checkAct = toolsMenu->addAction("&Check File", QKeySequence("Ctrl+Shift+C"));
-    connect(checkAct, &QAction::triggered, this, [runZithc]() { runZithc("check", true); });
-
-    QAction *compileAct = toolsMenu->addAction("&Compile File", QKeySequence("Ctrl+Shift+B"));
-    connect(compileAct, &QAction::triggered, this, [runZithc]() { runZithc("compile", true); });
-
-    QAction *runAct = toolsMenu->addAction("&Run", QKeySequence("Ctrl+Shift+R"));
-    connect(runAct, &QAction::triggered, this, [runZithc]() { runZithc("run", true); });
-
-    toolsMenu->addSeparator();
 
     QAction *restartLspAct = toolsMenu->addAction("Restart &LSP", QKeySequence("Ctrl+Shift+L"));
     connect(restartLspAct, &QAction::triggered, this, [this]() {
@@ -933,9 +901,11 @@ void MainWindow::startLspRuntime(const QString &lspPath,
                                  const QString &stdlibPath,
                                  const QString &tag)
 {
+    QString currentWorkspace = m_contextManager ? m_contextManager->currentRoot() : QString();
     if (m_lspClient->isRunning() &&
         m_activeLspPath == lspPath &&
-        m_activeStdlibPath == stdlibPath) {
+        m_activeStdlibPath == stdlibPath &&
+        m_activeWorkspaceRoot == currentWorkspace) {
         m_runtimeTag = tag;
         m_runtimeStatusText = QString("Runtime %1 already active.").arg(tag);
         updateSettingsRuntimeInfo();
@@ -950,11 +920,12 @@ void MainWindow::startLspRuntime(const QString &lspPath,
     m_runtimeTag = tag;
     m_activeLspPath = lspPath;
     m_activeStdlibPath = stdlibPath;
+    m_activeWorkspaceRoot = currentWorkspace;
     m_runtimeStatusText = QString("Starting runtime %1...").arg(tag);
 
     setLspStatus("LSP ○", "#f9e2af");
     updateSettingsRuntimeInfo();
-    if (m_lspClient->start(lspPath, stdlibPath)) {
+    if (m_lspClient->start(lspPath, stdlibPath, currentWorkspace)) {
         statusBar()->showMessage(QString("Starting Zith runtime %1...").arg(tag), 3000);
     } else {
         setLspStatus("LSP !", "#e78284");

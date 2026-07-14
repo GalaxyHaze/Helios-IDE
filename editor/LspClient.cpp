@@ -9,9 +9,15 @@ LspClient::LspClient(QObject *parent) : QObject(parent) {}
 
 LspClient::~LspClient() { stop(); }
 
-bool LspClient::start(const QString &serverPath, const QString &stdlibPath) {
+bool LspClient::start(const QString &serverPath, const QString &stdlibPath, const QString &workspaceRoot) {
   if (m_process)
     stop();
+
+  m_shutdownRequested = false;
+  m_initialized = false;
+  m_nextId = 0;
+  m_pendingRequests.clear();
+  m_buffer.clear();
 
   if (!QFileInfo::exists(serverPath)) {
     emit serverError("LSP server not found: " + serverPath);
@@ -55,8 +61,12 @@ bool LspClient::start(const QString &serverPath, const QString &stdlibPath) {
   QJsonObject initParams;
   initParams["processId"] = QJsonValue::Null;
   initParams["capabilities"] = clientCapabilities;
-  initParams["rootUri"] = QUrl::fromLocalFile(QDir::currentPath()).toString();
-  initParams["rootPath"] = QDir::currentPath();
+  QString resolvedRoot = workspaceRoot;
+  if (resolvedRoot.isEmpty()) {
+    resolvedRoot = QDir::currentPath();
+  }
+  initParams["rootUri"] = QUrl::fromLocalFile(resolvedRoot).toString();
+  initParams["rootPath"] = resolvedRoot;
 
   if (!stdlibPath.isEmpty()) {
     QJsonObject initOpts;
@@ -105,6 +115,7 @@ void LspClient::stop() {
   m_process->deleteLater();
   m_process = nullptr;
   m_initialized = false;
+  m_shutdownRequested = false;
   m_pendingRequests.clear();
   m_buffer.clear();
 }
@@ -556,10 +567,12 @@ void LspClient::onProcessError(QProcess::ProcessError error) {
   Q_UNUSED(error)
   emit serverError("LSP process error: " +
                    (m_process ? m_process->errorString() : "unknown"));
+  stop();
 }
 
 void LspClient::onProcessFinished(int exitCode, QProcess::ExitStatus status) {
   if (status == QProcess::CrashExit)
     emit serverError("LSP server crashed with exit code " +
                      QString::number(exitCode));
+  stop();
 }

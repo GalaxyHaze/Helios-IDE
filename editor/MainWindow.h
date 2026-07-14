@@ -101,6 +101,7 @@ private:
     QString m_runtimeTag;
     QString m_activeLspPath;
     QString m_activeStdlibPath;
+    QString m_activeWorkspaceRoot;
 };
 
 #endif

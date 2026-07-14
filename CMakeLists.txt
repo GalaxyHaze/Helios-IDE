@@ -16,6 +16,14 @@ set(CMAKE_AUTOUIC ON)
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network)
 
+if(APPLE)
+    # Qt6 may hardcode linking to the deprecated AGL framework, which is missing in newer macOS SDKs.
+    # We can create a dummy AGL framework to satisfy the linker.
+    execute_process(COMMAND mkdir -p ${CMAKE_BINARY_DIR}/dummy_frameworks/AGL.framework)
+    execute_process(COMMAND xcrun clang -dynamiclib -o ${CMAKE_BINARY_DIR}/dummy_frameworks/AGL.framework/AGL -x c /dev/null)
+    link_directories(BEFORE ${CMAKE_BINARY_DIR}/dummy_frameworks)
+endif()
+
 add_executable(Helios
     main.cpp
     editor/MainWindow.cpp

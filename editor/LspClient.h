@@ -64,7 +64,7 @@ public:
   explicit LspClient(QObject *parent = nullptr);
   ~LspClient();
 
-  bool start(const QString &serverPath, const QString &stdlibPath = {});
+  bool start(const QString &serverPath, const QString &stdlibPath = {}, const QString &workspaceRoot = {});
   void stop();
   bool isRunning() const;
 
