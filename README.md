@@ -194,6 +194,8 @@ The repository now separates release automation into:
 - `.github/workflows/build-artifact.yml` for cross-platform release builds
 - `.github/workflows/package-managers.yml` for Scoop and Homebrew package manager updates
 
+Package manager updates are intended for stable releases. Draft and prerelease runs still build artifacts, but they do not update Scoop or Homebrew metadata automatically.
+
 This is intentionally conservative: the workflow does not yet attempt full self-contained Qt deployment on every platform.
 
 ## Roadmap

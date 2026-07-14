@@ -47,16 +47,46 @@ jobs:
         run: |
           VERSION="${{ inputs.version }}"
           VERSION="${VERSION#v}"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+            echo "Version '$VERSION' is not valid semver."
+            exit 1
+          fi
           TAG="v${VERSION}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag_name=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Validate release context
+        shell: bash
+        run: |
+          if [ "${{ github.ref_name }}" != "main" ]; then
+            echo "Releases must be created from the main branch."
+            exit 1
+          fi
+
+          git fetch origin main --tags
+
+          CURRENT_SHA="$(git rev-parse HEAD)"
+          MAIN_SHA="$(git rev-parse origin/main)"
+
+          if [ "$CURRENT_SHA" != "$MAIN_SHA" ]; then
+            echo "The checked out commit does not match origin/main."
+            echo "HEAD=$CURRENT_SHA"
+            echo "origin/main=$MAIN_SHA"
+            exit 1
+          fi
 
       - name: Create or verify tag
         shell: bash
         run: |
           TAG="${{ steps.meta.outputs.tag_name }}"
           if git rev-parse "$TAG" >/dev/null 2>&1; then
-            echo "Tag $TAG already exists."
+            TAG_SHA="$(git rev-list -n 1 "$TAG")"
+            HEAD_SHA="$(git rev-parse HEAD)"
+            if [ "$TAG_SHA" != "$HEAD_SHA" ]; then
+              echo "Tag $TAG already exists but points to $TAG_SHA instead of $HEAD_SHA."
+              exit 1
+            fi
+            echo "Tag $TAG already exists on the current commit."
           else
             git tag -a "$TAG" -m "Release $TAG"
             git push origin "$TAG"
@@ -105,6 +135,7 @@ jobs:
     secrets: inherit
 
   package-managers:
+    if: ${{ !inputs.draft && !inputs.prerelease }}
     needs:
       - tag-and-release
       - build-artifacts
