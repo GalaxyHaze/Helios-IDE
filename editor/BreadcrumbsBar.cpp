@@ -24,12 +24,23 @@ void BreadcrumbsBar::setPath(const QString &filePath, const QString &function)
     QFileInfo fi(filePath);
     QStringList dirs;
     QDir d = fi.dir();
-    while (!d.isRoot()) {
+    do {
         QString name = d.dirName();
         if (!name.isEmpty())
             dirs.prepend(name);
-        if (!d.cdUp()) break;
-    }
+#ifdef _WIN32
+        // Add drive letter for root dir
+        if (d.isRoot())
+        {
+            QString drivePath = d.path();
+            const int driveNameLength = 2;
+            if(drivePath.length() > driveNameLength) {
+                drivePath = drivePath.left(driveNameLength);
+            }
+            dirs.prepend(drivePath);
+        }
+#endif
+    } while (d.cdUp());
 
     rebuild(dirs, fi.fileName(), function);
     show();
