@@ -80,6 +80,18 @@ jobs:
             target_name: helios-linux-amd64
             archive_name: helios-linux-amd64.tar.gz
             executable_name: Helios
+            qt_host: linux
+            qt_arch: linux_gcc_64
+            configure_flags: >-
+              -DCMAKE_C_COMPILER=clang
+              -DCMAKE_CXX_COMPILER=clang++
+
+          - os: ubuntu-24.04-arm
+            target_name: helios-linux-arm64
+            archive_name: helios-linux-arm64.tar.gz
+            executable_name: Helios
+            qt_host: linux_arm64
+            qt_arch: linux_gcc_arm64
             configure_flags: >-
               -DCMAKE_C_COMPILER=clang
               -DCMAKE_CXX_COMPILER=clang++
@@ -88,12 +100,26 @@ jobs:
             target_name: helios-macos
             archive_name: helios-macos.zip
             executable_name: Helios
+            qt_host: mac
+            qt_arch: clang_64
             configure_flags: ''
 
           - os: windows-latest
             target_name: helios-windows-amd64
             archive_name: helios-windows-amd64.zip
             executable_name: Helios.exe
+            qt_host: windows
+            qt_arch: win64_msvc2022_64
+            msvc_arch: amd64
+            configure_flags: ''
+
+          - os: windows-11-arm
+            target_name: helios-windows-arm64
+            archive_name: helios-windows-arm64.zip
+            executable_name: Helios.exe
+            qt_host: windows_arm64
+            qt_arch: win64_msvc2022_arm64
+            msvc_arch: arm64
             configure_flags: ''
 
     steps:
@@ -124,11 +150,17 @@ jobs:
       - name: Setup MSVC environment
         if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.msvc_arch }}
 
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
           version: ${{ env.QT_VERSION }}
+          host: ${{ matrix.qt_host }}
+          target: desktop
+          arch: ${{ matrix.qt_arch }}
+          install-deps: true
           cache: true
 
       - name: Clean stale build directory

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 4.1)
+cmake_minimum_required(VERSION 3.21)
 project(Helios)
 
 # Ninja is a single-configuration generator. Default to an optimized build while

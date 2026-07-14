@@ -10,7 +10,7 @@
     <img alt="Release" src="https://img.shields.io/github/v/release/GalaxyHaze/Zith-Studio">
     <img alt="Qt 6" src="https://img.shields.io/badge/Qt-6-41CD52?logo=qt&logoColor=white">
     <img alt="C++17" src="https://img.shields.io/badge/C%2B%2B-17-00599C?logo=c%2B%2B&logoColor=white">
-    <img alt="CMake" src="https://img.shields.io/badge/CMake-4.1%2B-064F8C?logo=cmake&logoColor=white">
+    <img alt="CMake" src="https://img.shields.io/badge/CMake-3.21%2B-064F8C?logo=cmake&logoColor=white">
   </p>
 </div>
 
@@ -95,7 +95,7 @@ Key modules inside `editor/`:
 
 ## Requirements
 
-- CMake `4.1+`
+- CMake `3.21+`
 - Qt `6` with `Core`, `Gui` and `Widgets`
 - a C++17 compiler
 - Ninja recommended
@@ -137,7 +137,7 @@ This repository includes a GitHub Actions workflow at `.github/workflows/build-a
 
 Current artifact behavior:
 
-- builds `Release` binaries for Linux, macOS and Windows
+- builds `Release` binaries for Linux, Linux arm64, macOS, Windows and Windows arm64
 - uploads CI artifacts for each platform
 - on tagged releases, also attaches the archived build output to the GitHub release
 - packages the built executable and a short note about Qt runtime expectations
