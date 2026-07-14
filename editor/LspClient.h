@@ -126,6 +126,7 @@ private:
   int m_nextId = 0;
   bool m_initialized = false;
   bool m_shutdownRequested = false;
+  bool m_stopping = false;
   int m_syncKind = 1; // default Full until the server advertises otherwise
 
   void failPendingRequests(const QString &reason);

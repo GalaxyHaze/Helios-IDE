@@ -454,6 +454,54 @@ MainWindow::MainWindow(QWidget *parent)
 
     QMenu *toolsMenu = menuBar()->addMenu("&Tools");
 
+    // Resolve the zith compiler: prefer the one shipped next to the active LSP
+    // runtime, otherwise fall back to `zithc` on PATH. Keeps Tools decoupled
+    // from a hardcoded install path while remaining usable out of the box.
+    auto resolveCompiler = [this]() -> QString {
+        if (!m_activeLspPath.isEmpty()) {
+            const QDir dir = QFileInfo(m_activeLspPath).absoluteDir();
+            for (const QString &name : {QStringLiteral("zithc"),
+                                        QStringLiteral("zith")}) {
+                const QString candidate = dir.absoluteFilePath(name);
+                if (QFileInfo(candidate).isExecutable())
+                    return candidate;
+            }
+        }
+        return QStringLiteral("zithc"); // rely on PATH
+    };
+
+    auto runZith = [this, resolveCompiler](const QString &cmd, bool needsFile) {
+        auto *ed = currentEditor();
+        if (needsFile && (!ed || ed->filePath().isEmpty())) {
+            statusBar()->showMessage("Open and save a file first", 5000);
+            return;
+        }
+        const QString compiler = resolveCompiler();
+        QStringList args = {cmd};
+        if (needsFile)
+            args << ed->filePath();
+        const QString dir = (ed && !ed->filePath().isEmpty())
+            ? QFileInfo(ed->filePath()).absolutePath()
+            : (m_contextManager ? m_contextManager->currentRoot() : QDir::homePath());
+        m_compilerPanel->show();
+        m_compilerPanel->raise();
+        m_compilerPanel->runCommand(dir, compiler, args);
+    };
+
+    QAction *buildAct = toolsMenu->addAction("&Build", QKeySequence("Ctrl+B"));
+    connect(buildAct, &QAction::triggered, this, [runZith]() { runZith("build", false); });
+
+    QAction *checkAct = toolsMenu->addAction("&Check File", QKeySequence("Ctrl+Shift+C"));
+    connect(checkAct, &QAction::triggered, this, [runZith]() { runZith("check", true); });
+
+    QAction *compileAct = toolsMenu->addAction("&Compile File", QKeySequence("Ctrl+Shift+B"));
+    connect(compileAct, &QAction::triggered, this, [runZith]() { runZith("compile", true); });
+
+    QAction *runAct = toolsMenu->addAction("&Run", QKeySequence("Ctrl+Shift+R"));
+    connect(runAct, &QAction::triggered, this, [runZith]() { runZith("run", true); });
+
+    toolsMenu->addSeparator();
+
     QAction *restartLspAct = toolsMenu->addAction("Restart &LSP", QKeySequence("Ctrl+Shift+L"));
     connect(restartLspAct, &QAction::triggered, this, [this]() {
         m_lspClient->stop();

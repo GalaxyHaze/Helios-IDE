@@ -101,10 +101,19 @@ bool LspClient::start(const QString &serverPath, const QString &stdlibPath, cons
 }
 
 void LspClient::stop() {
-  if (!m_process)
+  if (!m_process || m_stopping)
     return;
 
-  if (m_process->state() == QProcess::Running) {
+  // Guard against re-entrancy: waitForFinished() below spins a local event
+  // loop that can deliver QProcess::finished/errorOccurred, whose slots call
+  // stop() again. Take ownership of the process pointer up front and detach
+  // its signals so the nested delivery becomes a no-op.
+  m_stopping = true;
+  QProcess *process = m_process;
+  m_process = nullptr;
+  process->disconnect(this);
+
+  if (process->state() == QProcess::Running) {
     if (!m_shutdownRequested) {
       m_shutdownRequested = true;
 
@@ -112,28 +121,32 @@ void LspClient::stop() {
       shutdown["jsonrpc"] = "2.0";
       shutdown["id"] = nextId();
       shutdown["method"] = "shutdown";
-      sendMessage(shutdown);
+      QByteArray data = QJsonDocument(shutdown).toJson(QJsonDocument::Compact);
+      process->write("Content-Length: " + QByteArray::number(data.size()) +
+                     "\r\n\r\n" + data);
     }
 
     QJsonObject exit;
     exit["jsonrpc"] = "2.0";
     exit["method"] = "exit";
-    sendMessage(exit);
+    QByteArray data = QJsonDocument(exit).toJson(QJsonDocument::Compact);
+    process->write("Content-Length: " + QByteArray::number(data.size()) +
+                   "\r\n\r\n" + data);
 
-    if (!m_process->waitForFinished(1000)) {
-      m_process->kill();
-      m_process->waitForFinished(500);
+    if (!process->waitForFinished(1000)) {
+      process->kill();
+      process->waitForFinished(500);
     }
   }
 
-  m_process->deleteLater();
-  m_process = nullptr;
+  process->deleteLater();
   const bool wasInitialized = m_initialized;
   m_initialized = false;
   m_shutdownRequested = false;
   m_syncKind = 1;
   failPendingRequests("LSP server stopped");
   m_buffer.clear();
+  m_stopping = false;
   if (wasInitialized)
     emit serverStopped();
 }
@@ -658,12 +671,16 @@ void LspClient::handleNotification(const QJsonObject &msg) {
 
 void LspClient::onProcessError(QProcess::ProcessError error) {
   Q_UNUSED(error)
+  if (m_stopping)
+    return;
   emit serverError("LSP process error: " +
                    (m_process ? m_process->errorString() : "unknown"));
   stop();
 }
 
 void LspClient::onProcessFinished(int exitCode, QProcess::ExitStatus status) {
+  if (m_stopping)
+    return;
   if (status == QProcess::CrashExit)
     emit serverError("LSP server crashed with exit code " +
                      QString::number(exitCode));
