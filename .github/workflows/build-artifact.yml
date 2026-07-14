@@ -179,7 +179,14 @@ jobs:
         shell: bash
         run: cmake --build build --config Release
 
-      - name: Prepare package directory
+      - name: Deploy Qt runtime on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          windeployqt --release --compiler-runtime build/Helios.exe
+
+      - name: Prepare Unix package directory
+        if: runner.os != 'Windows'
         shell: bash
         run: |
           mkdir -p package artifacts
@@ -191,6 +198,30 @@ jobs:
           Qt runtime libraries are not bundled yet for full standalone deployment
           on every platform.
           EOF
+
+      - name: Prepare Windows package directory
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path package, artifacts | Out-Null
+          Copy-Item build\Helios.exe package\Helios.exe -Force
+
+          $runtimeDirs = @("platforms", "styles", "iconengines", "imageformats", "networkinformation", "tls")
+          foreach ($dir in $runtimeDirs) {
+            if (Test-Path "build\$dir") {
+              Copy-Item "build\$dir" "package\$dir" -Recurse -Force
+            }
+          }
+
+          Get-ChildItem build -Filter *.dll | ForEach-Object {
+            Copy-Item $_.FullName package -Force
+          }
+
+          @'
+          Helios build artifact
+
+          This archive contains Helios.exe and the Qt runtime deployed with windeployqt.
+          '@ | Set-Content -Path package\README.txt
 
       - name: Archive Unix artifact
         if: runner.os != 'Windows'

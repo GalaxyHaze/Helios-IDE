@@ -6,8 +6,8 @@
   <p><strong>A desktop IDE for Zith projects, built with Qt 6.</strong></p>
 
   <p>
-    <img alt="Build" src="https://github.com/GalaxyHaze/Zith-Studio/actions/workflows/build-artifact.yml/badge.svg">
-    <img alt="Release" src="https://img.shields.io/github/v/release/GalaxyHaze/Zith-Studio">
+    <img alt="Build" src="https://github.com/GalaxyHaze/Helios-IDE/actions/workflows/build-artifact.yml/badge.svg">
+    <img alt="Release" src="https://img.shields.io/github/v/release/GalaxyHaze/Helios-IDE">
     <img alt="Qt 6" src="https://img.shields.io/badge/Qt-6-41CD52?logo=qt&logoColor=white">
     <img alt="C++17" src="https://img.shields.io/badge/C%2B%2B-17-00599C?logo=c%2B%2B&logoColor=white">
     <img alt="CMake" src="https://img.shields.io/badge/CMake-3.21%2B-064F8C?logo=cmake&logoColor=white">
@@ -108,8 +108,8 @@ For the full Zith-oriented workflow, Helios also expects:
 ## Quick Start
 
 ```bash
-git clone https://github.com/GalaxyHaze/Zith-Studio.git
-cd Zith-Studio
+git clone https://github.com/GalaxyHaze/Helios-IDE.git
+cd Helios-IDE
 cmake -S . -B build -G Ninja -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
 cmake --build build
 ./build/Helios
@@ -141,6 +141,38 @@ Current artifact behavior:
 - uploads CI artifacts for each platform
 - on tagged releases, also attaches the archived build output to the GitHub release
 - packages the built executable and a short note about Qt runtime expectations
+- deploys the Qt runtime into the Windows release archives so Scoop can install a runnable app
+
+## Install
+
+### Scoop
+
+The repository ships a Scoop manifest scaffold at `.github/scoop/bucket/helios.json`.
+
+Once the bucket is published, the intended flow is:
+
+```powershell
+scoop bucket add helios <bucket-url>
+scoop install helios
+```
+
+### Installer Scripts
+
+Unix-like systems:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/GalaxyHaze/Helios-IDE/main/scripts/install.sh | bash
+```
+
+Windows PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/GalaxyHaze/Helios-IDE/main/scripts/install.ps1 | iex
+```
+
+### Homebrew
+
+The project now includes a formula scaffold at `packaging/homebrew/helios.rb` intended for a future tap repository such as `homebrew-helios`.
 
 This is intentionally conservative: the workflow does not yet attempt full self-contained Qt deployment on every platform.
 

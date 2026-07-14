@@ -1,0 +1,137 @@
+name: Update Packages Manifest
+
+concurrency:
+  group: update-packages
+  cancel-in-progress: true
+
+on:
+  workflow_run:
+    workflows: ["Build Artifact"]
+    types:
+      - completed
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release tag to update manifests for, for example v0.1.0'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  update-package:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Resolve tag name
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.tag_name }}"
+          else
+            TAG=$(gh api repos/${{ github.repository }}/releases/latest --jq '.tag_name' 2>/dev/null || true)
+          fi
+
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+            echo "Tag '$TAG' is not a valid semver tag."
+            exit 1
+          fi
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download release archives
+        run: |
+          mkdir -p release-assets
+
+          gh release download "${{ steps.tag.outputs.tag }}" \
+            --repo "${{ github.repository }}" \
+            --pattern "helios-windows-amd64.zip" \
+            --pattern "helios-windows-arm64.zip" \
+            --dir release-assets
+
+          test -f release-assets/helios-windows-amd64.zip
+          test -f release-assets/helios-windows-arm64.zip
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute SHA256 hashes
+        id: hashes
+        run: |
+          AMD64=$(sha256sum release-assets/helios-windows-amd64.zip | cut -d' ' -f1)
+          ARM64=$(sha256sum release-assets/helios-windows-arm64.zip | cut -d' ' -f1)
+          echo "amd64=$AMD64" >> "$GITHUB_OUTPUT"
+          echo "arm64=$ARM64" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
+
+      - name: Update scoop manifest
+        run: |
+          cp .github/scoop/bucket/helios.json .github/scoop/bucket/helios.json.bak
+
+          jq \
+            --arg version "${{ steps.tag.outputs.version }}" \
+            --arg amd64 "${{ steps.hashes.outputs.amd64 }}" \
+            --arg arm64 "${{ steps.hashes.outputs.arm64 }}" \
+            '
+              .version = $version |
+              .architecture["64bit"].url = "https://github.com/${{ github.repository }}/releases/download/v\($version)/helios-windows-amd64.zip" |
+              .architecture["64bit"].hash = $amd64 |
+              .architecture.arm64.url = "https://github.com/${{ github.repository }}/releases/download/v\($version)/helios-windows-arm64.zip" |
+              .architecture.arm64.hash = $arm64 |
+              .checkver.github = "${{ github.repository }}"
+            ' .github/scoop/bucket/helios.json.bak > .github/scoop/bucket/helios.json
+
+          jq empty .github/scoop/bucket/helios.json
+          rm -f .github/scoop/bucket/helios.json.bak
+
+      - name: Commit scoop changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .github/scoop/bucket/helios.json
+          if ! git diff --staged --quiet; then
+            git commit -m "chore: update scoop manifest to ${{ steps.tag.outputs.tag }}"
+            git push
+          fi
+
+      - name: Compute Homebrew source SHA256
+        id: brew
+        run: |
+          VERSION="${{ steps.tag.outputs.version }}"
+          URL="https://github.com/${{ github.repository }}/archive/refs/tags/v${VERSION}.tar.gz"
+          SHA=$(curl -sL "$URL" | sha256sum | cut -d' ' -f1)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Trigger Homebrew tap update
+        if: vars.HOMEBREW_TAP_REPO != '' && secrets.RELEASE_PAT != ''
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+        run: |
+          jq -n \
+            --arg version "${{ steps.brew.outputs.version }}" \
+            --arg url "${{ steps.brew.outputs.url }}" \
+            --arg sha256 "${{ steps.brew.outputs.sha256 }}" \
+            '{
+              event_type: "new-release",
+              client_payload: {
+                version: $version,
+                url: $url,
+                sha256: $sha256
+              }
+            }' | \
+          gh api "repos/${{ vars.HOMEBREW_TAP_REPO }}/dispatches" --input -
+
+      - name: Clean up
+        if: always()
+        run: rm -rf release-assets
