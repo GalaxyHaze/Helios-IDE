@@ -77,7 +77,7 @@ void BreadcrumbsBar::rebuild(const QStringList &dirs, const QString &file, const
 
     auto addLabel = [this](const QString &text, const QString &color, bool useLargeFont, bool bold = false) {
         auto *label = new QLabel(text);
-        int fontSize = 11 + (useLargeFont ? 11 + cjkExtraHeight);
+        int fontSize = 11 + (useLargeFont ? 11 + cjkExtraHeight : 0);
         QString style = QString("color: %1; font-size: %2px; padding: 0 2px;").arg(color, QString::number(fontSize));
         if (bold)
             style += " font-weight: bold;";
