@@ -1,39 +1,36 @@
-name: Update Packages Manifest
+name: Manage Package Managers
 
 concurrency:
-  group: update-packages
+  group: package-managers-${{ inputs.tag_name || github.event.inputs.tag_name }}
   cancel-in-progress: true
 
 on:
-  workflow_run:
-    workflows: ["Build Artifact"]
-    types:
-      - completed
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Release tag to update manifests for, for example v0.1.0'
+        description: "Release tag to update package managers for, for example v0.1.0"
+        required: true
+  workflow_call:
+    inputs:
+      tag_name:
+        type: string
         required: true
 
 permissions:
   contents: write
 
 jobs:
-  update-package:
-    if: >
-      github.event_name == 'workflow_dispatch' ||
-      github.event.workflow_run.conclusion == 'success'
+  update-package-managers:
     runs-on: ubuntu-latest
+    env:
+      RELEASE_PAT_AVAILABLE: ${{ secrets.RELEASE_PAT }}
 
     steps:
       - name: Resolve tag name
         id: tag
+        shell: bash
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            TAG="${{ github.event.inputs.tag_name }}"
-          else
-            TAG=$(gh api repos/${{ github.repository }}/releases/latest --jq '.tag_name' 2>/dev/null || true)
-          fi
+          TAG="${{ inputs.tag_name || github.event.inputs.tag_name }}"
 
           if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
             echo "Tag '$TAG' is not a valid semver tag."
@@ -42,10 +39,9 @@ jobs:
 
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Download release archives
+      - name: Download Windows release archives
+        shell: bash
         run: |
           mkdir -p release-assets
 
@@ -60,8 +56,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Compute SHA256 hashes
+      - name: Compute Scoop hashes
         id: hashes
+        shell: bash
         run: |
           AMD64=$(sha256sum release-assets/helios-windows-amd64.zip | cut -d' ' -f1)
           ARM64=$(sha256sum release-assets/helios-windows-arm64.zip | cut -d' ' -f1)
@@ -73,7 +70,8 @@ jobs:
         with:
           token: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
 
-      - name: Update scoop manifest
+      - name: Update Scoop manifest
+        shell: bash
         run: |
           cp .github/scoop/bucket/helios.json .github/scoop/bucket/helios.json.bak
 
@@ -93,7 +91,8 @@ jobs:
           jq empty .github/scoop/bucket/helios.json
           rm -f .github/scoop/bucket/helios.json.bak
 
-      - name: Commit scoop changes
+      - name: Commit Scoop changes
+        shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -105,6 +104,7 @@ jobs:
 
       - name: Compute Homebrew source SHA256
         id: brew
+        shell: bash
         run: |
           VERSION="${{ steps.tag.outputs.version }}"
           URL="https://github.com/${{ github.repository }}/archive/refs/tags/v${VERSION}.tar.gz"
@@ -114,9 +114,10 @@ jobs:
           echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
 
       - name: Trigger Homebrew tap update
-        if: vars.HOMEBREW_TAP_REPO != '' && secrets.RELEASE_PAT != ''
+        if: vars.HOMEBREW_TAP_REPO != '' && env.RELEASE_PAT_AVAILABLE != ''
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+        shell: bash
         run: |
           jq -n \
             --arg version "${{ steps.brew.outputs.version }}" \
@@ -134,4 +135,5 @@ jobs:
 
       - name: Clean up
         if: always()
+        shell: bash
         run: rm -rf release-assets

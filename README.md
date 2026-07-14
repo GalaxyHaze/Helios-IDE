@@ -147,13 +147,12 @@ Current artifact behavior:
 
 ### Scoop
 
-The repository ships a Scoop manifest scaffold at `.github/scoop/bucket/helios.json`.
+The repository ships a Scoop manifest at `.github/scoop/bucket/helios.json`.
 
-Once the bucket is published, the intended flow is:
+Today you can install directly from the manifest URL:
 
 ```powershell
-scoop bucket add helios <bucket-url>
-scoop install helios
+scoop install https://raw.githubusercontent.com/GalaxyHaze/Helios-IDE/main/.github/scoop/bucket/helios.json
 ```
 
 ### Installer Scripts
@@ -172,7 +171,28 @@ irm https://raw.githubusercontent.com/GalaxyHaze/Helios-IDE/main/scripts/install
 
 ### Homebrew
 
-The project now includes a formula scaffold at `packaging/homebrew/helios.rb` intended for a future tap repository such as `homebrew-helios`.
+The Homebrew tap is published at `GalaxyHaze/homebrew-helios`.
+
+Current install flow:
+
+```bash
+brew tap GalaxyHaze/helios
+brew install --HEAD helios
+```
+
+Once the stable release automation has populated the versioned formula, you can use:
+
+```bash
+brew install helios
+```
+
+## Release Automation
+
+The repository now separates release automation into:
+
+- `.github/workflows/create-release.yml` for tag + release page + artifact build + package manager updates
+- `.github/workflows/build-artifact.yml` for cross-platform release builds
+- `.github/workflows/package-managers.yml` for Scoop and Homebrew package manager updates
 
 This is intentionally conservative: the workflow does not yet attempt full self-contained Qt deployment on every platform.
 
@@ -191,6 +211,6 @@ Current direction:
 ## Current Caveats
 
 - First-run LSP bootstrap depends on being able to reach the latest Zith release unless a cached runtime or explicit override is already available.
-- Release artifacts are build outputs, not fully bundled installers.
+- Linux and macOS release artifacts are still build outputs rather than polished native installers.
 - There is no dedicated automated test suite yet.
 - The app is under active iteration and should be treated as a fast-moving tool rather than a frozen product.

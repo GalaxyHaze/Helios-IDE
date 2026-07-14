@@ -1,0 +1,114 @@
+name: Create Release Pipeline
+
+concurrency:
+  group: release-${{ inputs.version }}
+  cancel-in-progress: false
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version number, for example 0.1.0"
+        required: true
+      draft:
+        description: "Create the GitHub release as draft"
+        type: boolean
+        default: false
+      prerelease:
+        description: "Mark the GitHub release as prerelease"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  tag-and-release:
+    runs-on: ubuntu-latest
+    outputs:
+      tag_name: ${{ steps.meta.outputs.tag_name }}
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Resolve tag metadata
+        id: meta
+        shell: bash
+        run: |
+          VERSION="${{ inputs.version }}"
+          VERSION="${VERSION#v}"
+          TAG="v${VERSION}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag_name=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Create or verify tag
+        shell: bash
+        run: |
+          TAG="${{ steps.meta.outputs.tag_name }}"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists."
+          else
+            git tag -a "$TAG" -m "Release $TAG"
+            git push origin "$TAG"
+          fi
+
+      - name: Create or update release page
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag_name }}
+          name: Release ${{ steps.meta.outputs.tag_name }}
+          draft: ${{ inputs.draft }}
+          prerelease: ${{ inputs.prerelease }}
+          generate_release_notes: true
+          append_body: true
+          body: |
+            ## Install
+
+            ### Homebrew
+            ```bash
+            brew tap GalaxyHaze/helios
+            brew install --HEAD helios
+            ```
+
+            ### Scoop
+            ```powershell
+            scoop install https://raw.githubusercontent.com/${{ github.repository }}/main/.github/scoop/bucket/helios.json
+            ```
+
+            ### Installer Scripts
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/scripts/install.sh | bash
+            ```
+
+            ```powershell
+            irm https://raw.githubusercontent.com/${{ github.repository }}/main/scripts/install.ps1 | iex
+            ```
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-artifacts:
+    needs: tag-and-release
+    uses: ./.github/workflows/build-artifact.yml
+    with:
+      tag_name: ${{ needs.tag-and-release.outputs.tag_name }}
+      draft: ${{ inputs.draft }}
+    secrets: inherit
+
+  package-managers:
+    needs:
+      - tag-and-release
+      - build-artifacts
+    uses: ./.github/workflows/package-managers.yml
+    with:
+      tag_name: ${{ needs.tag-and-release.outputs.tag_name }}
+    secrets: inherit
