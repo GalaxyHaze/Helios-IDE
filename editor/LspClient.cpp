@@ -92,24 +92,26 @@ void LspClient::stop() {
   if (!m_process)
     return;
 
-  if (!m_shutdownRequested) {
-    m_shutdownRequested = true;
+  if (m_process->state() == QProcess::Running) {
+    if (!m_shutdownRequested) {
+      m_shutdownRequested = true;
 
-    QJsonObject shutdown;
-    shutdown["jsonrpc"] = "2.0";
-    shutdown["id"] = nextId();
-    shutdown["method"] = "shutdown";
-    sendMessage(shutdown);
-  }
+      QJsonObject shutdown;
+      shutdown["jsonrpc"] = "2.0";
+      shutdown["id"] = nextId();
+      shutdown["method"] = "shutdown";
+      sendMessage(shutdown);
+    }
 
-  QJsonObject exit;
-  exit["jsonrpc"] = "2.0";
-  exit["method"] = "exit";
-  sendMessage(exit);
+    QJsonObject exit;
+    exit["jsonrpc"] = "2.0";
+    exit["method"] = "exit";
+    sendMessage(exit);
 
-  if (!m_process->waitForFinished(2000)) {
-    m_process->kill();
-    m_process->waitForFinished(1000);
+    if (!m_process->waitForFinished(1000)) {
+      m_process->kill();
+      m_process->waitForFinished(500);
+    }
   }
 
   m_process->deleteLater();

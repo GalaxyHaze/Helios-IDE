@@ -59,6 +59,9 @@ void ZithToolchainManager::ensureLatest(bool preferCached)
     if (tryUseEnvironmentOverrides())
         return;
 
+    if (tryUseLocalDevelopmentOverrides())
+        return;
+
     if (preferCached) {
         QString lspPath;
         QString stdlibPath;
@@ -262,6 +265,39 @@ bool ZithToolchainManager::tryUseEnvironmentOverrides()
 
     emit statusChanged("Using Zith runtime from environment overrides.");
     finishWithResolvedRuntime(lspPath, stdlibPath, "environment");
+    return true;
+}
+
+bool ZithToolchainManager::tryUseLocalDevelopmentOverrides()
+{
+    QStringList lspCandidates = {
+        "../zith-lsp/build/zith-lsp",
+        "../zith-lsp/out/build/dev/zith-lsp"
+    };
+    QString stdlibCandidate = "../Zith/stdlib";
+
+    QDir base(QDir::currentPath());
+    QString resolvedLsp;
+    for (const QString &candidate : lspCandidates) {
+        QString absPath = QDir::cleanPath(base.absoluteFilePath(candidate));
+        QFileInfo info(absPath);
+        if (info.exists() && info.isFile() && info.isExecutable()) {
+            resolvedLsp = absPath;
+            break;
+        }
+    }
+
+    if (resolvedLsp.isEmpty())
+        return false;
+
+    QString resolvedStdlib = QDir::cleanPath(base.absoluteFilePath(stdlibCandidate));
+    QFileInfo stdlibInfo(resolvedStdlib);
+    if (!stdlibInfo.exists() || !stdlibInfo.isDir()) {
+        resolvedStdlib = "";
+    }
+
+    emit statusChanged("Using local development Zith runtime from ../zith-lsp.");
+    finishWithResolvedRuntime(resolvedLsp, resolvedStdlib, "local-dev");
     return true;
 }
 
