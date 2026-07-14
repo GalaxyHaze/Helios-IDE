@@ -57,7 +57,8 @@ bool LspClient::start(const QString &serverPath, const QString &stdlibPath, cons
        QJsonObject{{"completionItem", QJsonObject{{"snippetSupport", true}}}}},
       {"hover",
        QJsonObject{{"contentFormat", QJsonArray{"markdown", "plaintext"}}}},
-      {"definition", QJsonObject{}}};
+      {"definition", QJsonObject{}},
+      {"implementation", QJsonObject{}}};
 
   QJsonObject initParams;
   initParams["processId"] = QJsonValue::Null;
@@ -87,14 +88,14 @@ bool LspClient::start(const QString &serverPath, const QString &stdlibPath, cons
     else
       m_syncKind = 1;
 
-    m_initialized = true;
-    emit initialized();
-
     QJsonObject initNotify;
     initNotify["jsonrpc"] = "2.0";
     initNotify["method"] = "initialized";
     initNotify["params"] = QJsonObject();
     sendMessage(initNotify);
+
+    m_initialized = true;
+    emit initialized();
   });
 
   return true;
@@ -305,7 +306,7 @@ void LspClient::requestCompletion(const QString &uri, const LspPosition &pos) {
   params["position"] = position;
 
   sendRequest("textDocument/completion", params,
-              [this](const QJsonObject &resp) {
+              [this, uri](const QJsonObject &resp) {
                 QList<LspCompletionItem> items;
                 QJsonValue result = resp["result"];
                 QJsonArray arr;
@@ -329,7 +330,7 @@ void LspClient::requestCompletion(const QString &uri, const LspPosition &pos) {
                   items.append(item);
                 }
 
-                emit completionResults(items);
+                emit completionResults(uri, items);
               });
 }
 
@@ -345,10 +346,10 @@ void LspClient::requestHover(const QString &uri, const LspPosition &pos) {
   params["textDocument"] = textDoc;
   params["position"] = position;
 
-  sendRequest("textDocument/hover", params, [this](const QJsonObject &resp) {
+  sendRequest("textDocument/hover", params, [this, uri](const QJsonObject &resp) {
     QJsonObject result = resp["result"].toObject();
     if (result.isEmpty()) {
-      emit hoverResult({});
+      emit hoverResult(uri, {});
       return;
     }
 
@@ -379,7 +380,7 @@ void LspClient::requestHover(const QString &uri, const LspPosition &pos) {
       info.range.end.character = range["end"].toObject()["character"].toInt();
     }
 
-    emit hoverResult(info);
+    emit hoverResult(uri, info);
   });
 }
 
@@ -396,7 +397,7 @@ void LspClient::requestDefinition(const QString &uri, const LspPosition &pos) {
   params["position"] = position;
 
   sendRequest(
-      "textDocument/definition", params, [this](const QJsonObject &resp) {
+      "textDocument/definition", params, [this, uri](const QJsonObject &resp) {
         QJsonValue result = resp["result"];
         QJsonObject loc;
 
@@ -409,20 +410,87 @@ void LspClient::requestDefinition(const QString &uri, const LspPosition &pos) {
         }
 
         if (loc.isEmpty()) {
-          emit definitionResult({});
+          emit definitionResult(uri, {});
           return;
         }
 
         LspLocation location;
-        location.uri = loc["uri"].toString();
-        QJsonObject r = loc["range"].toObject();
-        location.range.start.line = r["start"].toObject()["line"].toInt();
-        location.range.start.character =
-            r["start"].toObject()["character"].toInt();
-        location.range.end.line = r["end"].toObject()["line"].toInt();
-        location.range.end.character = r["end"].toObject()["character"].toInt();
+        if (loc.contains("targetUri")) {
+          location.uri = loc["targetUri"].toString();
+          QJsonObject r = loc["targetSelectionRange"].toObject();
+          if (r.isEmpty())
+            r = loc["targetRange"].toObject();
+          location.range.start.line = r["start"].toObject()["line"].toInt();
+          location.range.start.character =
+              r["start"].toObject()["character"].toInt();
+          location.range.end.line = r["end"].toObject()["line"].toInt();
+          location.range.end.character = r["end"].toObject()["character"].toInt();
+        } else {
+          location.uri = loc["uri"].toString();
+          QJsonObject r = loc["range"].toObject();
+          location.range.start.line = r["start"].toObject()["line"].toInt();
+          location.range.start.character =
+              r["start"].toObject()["character"].toInt();
+          location.range.end.line = r["end"].toObject()["line"].toInt();
+          location.range.end.character = r["end"].toObject()["character"].toInt();
+        }
 
-        emit definitionResult(location);
+        emit definitionResult(uri, location);
+      });
+}
+
+void LspClient::requestImplementation(const QString &uri, const LspPosition &pos) {
+  QJsonObject textDoc;
+  textDoc["uri"] = uri;
+
+  QJsonObject position;
+  position["line"] = pos.line;
+  position["character"] = pos.character;
+
+  QJsonObject params;
+  params["textDocument"] = textDoc;
+  params["position"] = position;
+
+  sendRequest(
+      "textDocument/implementation", params, [this, uri](const QJsonObject &resp) {
+        QJsonValue result = resp["result"];
+        QJsonObject loc;
+
+        if (result.isArray()) {
+          QJsonArray arr = result.toArray();
+          if (!arr.isEmpty())
+            loc = arr.first().toObject();
+        } else if (result.isObject()) {
+          loc = result.toObject();
+        }
+
+        if (loc.isEmpty()) {
+          emit implementationResult(uri, {});
+          return;
+        }
+
+        LspLocation location;
+        if (loc.contains("targetUri")) {
+          location.uri = loc["targetUri"].toString();
+          QJsonObject r = loc["targetSelectionRange"].toObject();
+          if (r.isEmpty())
+            r = loc["targetRange"].toObject();
+          location.range.start.line = r["start"].toObject()["line"].toInt();
+          location.range.start.character =
+              r["start"].toObject()["character"].toInt();
+          location.range.end.line = r["end"].toObject()["line"].toInt();
+          location.range.end.character = r["end"].toObject()["character"].toInt();
+        } else {
+          location.uri = loc["uri"].toString();
+          QJsonObject r = loc["range"].toObject();
+          location.range.start.line = r["start"].toObject()["line"].toInt();
+          location.range.start.character =
+              r["start"].toObject()["character"].toInt();
+          location.range.end.line = r["end"].toObject()["line"].toInt();
+          location.range.end.character = r["end"].toObject()["character"].toInt();
+        }
+
+        emit implementationResult(uri, location);
       });
 }
 
@@ -440,10 +508,10 @@ void LspClient::requestSignatureHelp(const QString &uri,
   params["position"] = position;
 
   sendRequest("textDocument/signatureHelp", params,
-              [this](const QJsonObject &resp) {
+              [this, uri](const QJsonObject &resp) {
                 QJsonObject result = resp["result"].toObject();
                 if (result.isEmpty()) {
-                  emit signatureHelpResult({});
+                  emit signatureHelpResult(uri, {});
                   return;
                 }
 
@@ -458,7 +526,7 @@ void LspClient::requestSignatureHelp(const QString &uri,
                 }
                 help.activeParameter = result["activeParameter"].toInt();
 
-                emit signatureHelpResult(help);
+                emit signatureHelpResult(uri, help);
               });
 }
 

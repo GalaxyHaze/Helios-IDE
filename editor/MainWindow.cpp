@@ -139,12 +139,18 @@ MainWindow::MainWindow(QWidget *parent)
     m_zithToolchainManager = new ZithToolchainManager(this);
 
     connect(m_lspClient, &LspClient::completionResults,
-            this, [this](const QList<LspCompletionItem> &items) {
+            this, [this](const QString &uri, const QList<LspCompletionItem> &items) {
+        CodeEditor *activeEd = currentEditor();
+        if (!activeEd || activeEd->fileUri() != uri)
+            return;
+
         auto all = items;
         all.append(m_snippetManager->allSnippets());
         m_completionModel->setItems(all);
-        if (!items.isEmpty())
+        if (!all.isEmpty()) {
+            m_completer->setWidget(activeEd);
             m_completer->complete();
+        }
     });
 
     connect(m_lspClient, &LspClient::initialized, this, [this]() {

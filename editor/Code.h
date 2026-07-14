@@ -72,6 +72,7 @@ private:
   void triggerCompletion();
   void triggerSignatureHelp();
   void goToDefinitionAtCursor();
+  void goToImplementationAtCursor();
   void requestHoverAtCursor();
   void replaceCurrentWord(const QString &insertText);
   void updateDiagnosticHighlights();

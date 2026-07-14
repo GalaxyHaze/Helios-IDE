@@ -114,8 +114,8 @@ void CodeEditor::setLspClient(LspClient *client) {
             });
 
     connect(m_lspClient, &LspClient::hoverResult, this,
-            [this](const LspHoverInfo &info) {
-              if (!info.contents.isEmpty()) {
+            [this](const QString &uri, const LspHoverInfo &info) {
+              if (uri == m_fileUri && !info.contents.isEmpty()) {
                 QString text = info.contents;
                 text.replace(QRegularExpression("```\\w*\\n?"), "");
                 text.replace(QRegularExpression("\\n?```"), "");
@@ -124,15 +124,22 @@ void CodeEditor::setLspClient(LspClient *client) {
             });
 
     connect(m_lspClient, &LspClient::definitionResult, this,
-            [this](const LspLocation &loc) {
-              if (!loc.uri.isEmpty())
+            [this](const QString &uri, const LspLocation &loc) {
+              if (uri == m_fileUri && !loc.uri.isEmpty())
+                emit navigateToLocation(loc.uri, loc.range.start.line,
+                                        loc.range.start.character);
+            });
+
+    connect(m_lspClient, &LspClient::implementationResult, this,
+            [this](const QString &uri, const LspLocation &loc) {
+              if (uri == m_fileUri && !loc.uri.isEmpty())
                 emit navigateToLocation(loc.uri, loc.range.start.line,
                                         loc.range.start.character);
             });
 
     connect(m_lspClient, &LspClient::signatureHelpResult, this,
-            [this](const LspSignatureHelp &help) {
-              if (!help.parameters.isEmpty()) {
+            [this](const QString &uri, const LspSignatureHelp &help) {
+              if (uri == m_fileUri && !help.parameters.isEmpty()) {
                 QString text = help.activeSignature;
                 text += "\n\n";
                 for (int i = 0; i < help.parameters.size(); i++) {
@@ -154,7 +161,9 @@ void CodeEditor::setCompleter(LspCompleter *completer) {
     m_completer->setWidget(this);
     connect(m_completer, QOverload<const QString &>::of(&QCompleter::activated),
             this, [this](const QString &text) {
-              onCompletionSelected(text, m_completer->insertTextFormat());
+              if (m_completer->widget() == this) {
+                onCompletionSelected(text, m_completer->insertTextFormat());
+              }
             });
   }
 }
@@ -396,9 +405,19 @@ void CodeEditor::matchBrackets() {
 // ── Key Handling ─────────────────────────────────────────────────────
 
 void CodeEditor::keyPressEvent(QKeyEvent *e) {
-  // ── Go to definition (F12) ──────────────────────────────────
+  // ── Go to definition (F12) / Go to implementation (Ctrl+F12) ──
   if (e->key() == Qt::Key_F12 && m_lspClient) {
-    goToDefinitionAtCursor();
+    if (e->modifiers() == Qt::ControlModifier) {
+      goToImplementationAtCursor();
+    } else {
+      goToDefinitionAtCursor();
+    }
+    return;
+  }
+
+  // ── Smart trigger completion (Ctrl+Space) ───────────────────
+  if (e->modifiers() == Qt::ControlModifier && e->key() == Qt::Key_Space) {
+    triggerCompletion();
     return;
   }
 
@@ -662,6 +681,7 @@ bool CodeEditor::event(QEvent *e) { return QPlainTextEdit::event(e); }
 
 void CodeEditor::onHoverTimeout() {
   if (m_lspClient && !m_fileUri.isEmpty() && m_hoverLine >= 0) {
+    flushDocumentChanges();
     m_lspClient->requestHover(m_fileUri, {m_hoverLine, m_hoverChar});
   }
 }
@@ -671,6 +691,9 @@ void CodeEditor::onHoverTimeout() {
 void CodeEditor::triggerCompletion() {
   if (!m_completer || !m_lspClient)
     return;
+
+  flushDocumentChanges();
+  m_completer->setWidget(this);
 
   QTextCursor cursor = textCursor();
   int line = cursor.blockNumber();
@@ -706,6 +729,9 @@ void CodeEditor::replaceCurrentWord(const QString &insertText) {
 }
 
 void CodeEditor::triggerSignatureHelp() {
+  if (!m_lspClient || m_fileUri.isEmpty())
+    return;
+  flushDocumentChanges();
   QTextCursor cursor = textCursor();
   int line = cursor.blockNumber();
   int character = cursor.positionInBlock();
@@ -715,8 +741,18 @@ void CodeEditor::triggerSignatureHelp() {
 void CodeEditor::goToDefinitionAtCursor() {
   if (!m_lspClient || m_fileUri.isEmpty())
     return;
+  flushDocumentChanges();
   QTextCursor cursor = textCursor();
   m_lspClient->requestDefinition(
+      m_fileUri, {cursor.blockNumber(), cursor.positionInBlock()});
+}
+
+void CodeEditor::goToImplementationAtCursor() {
+  if (!m_lspClient || m_fileUri.isEmpty())
+    return;
+  flushDocumentChanges();
+  QTextCursor cursor = textCursor();
+  m_lspClient->requestImplementation(
       m_fileUri, {cursor.blockNumber(), cursor.positionInBlock()});
 }
 
@@ -733,19 +769,12 @@ void CodeEditor::updateDiagnosticDisplay() { highlightCurrentLine(); }
 // ── Document Sync ───────────────────────────────────────────────────
 
 LspPosition CodeEditor::lspPositionForOffset(int offset) const {
-  const int documentLength = static_cast<int>(m_documentText.size());
-  const int boundedOffset = qBound(0, offset, documentLength);
-  int line = 0;
-  int lineStart = 0;
-
-  for (int i = 0; i < boundedOffset; ++i) {
-    if (m_documentText.at(i) == QLatin1Char('\n')) {
-      ++line;
-      lineStart = i + 1;
-    }
-  }
-
-  return {line, boundedOffset - lineStart};
+  QTextBlock block = document()->findBlock(offset);
+  if (!block.isValid())
+    return {0, 0};
+  int line = block.blockNumber();
+  int character = offset - block.position();
+  return {line, character};
 }
 
 void CodeEditor::onDocumentContentsChanged(int position, int charsRemoved,
@@ -770,6 +799,7 @@ void CodeEditor::onDocumentContentsChanged(int position, int charsRemoved,
 }
 
 void CodeEditor::flushDocumentChanges() {
+  m_documentSyncTimer->stop();
   if (m_pendingDocumentChanges.isEmpty() || !m_lspClient || m_fileUri.isEmpty())
     return;
 

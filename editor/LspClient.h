@@ -86,6 +86,7 @@ public:
   void requestCompletion(const QString &uri, const LspPosition &pos);
   void requestHover(const QString &uri, const LspPosition &pos);
   void requestDefinition(const QString &uri, const LspPosition &pos);
+  void requestImplementation(const QString &uri, const LspPosition &pos);
   void requestSignatureHelp(const QString &uri, const LspPosition &pos);
   void requestSemanticTokens(const QString &uri);
   void requestFormatting(const QString &uri);
@@ -97,10 +98,11 @@ signals:
   void serverStopped();
   void diagnosticsReceived(const QString &uri,
                            const QList<LspDiagnostic> &diagnostics);
-  void completionResults(const QList<LspCompletionItem> &items);
-  void hoverResult(const LspHoverInfo &info);
-  void definitionResult(const LspLocation &location);
-  void signatureHelpResult(const LspSignatureHelp &help);
+  void completionResults(const QString &uri, const QList<LspCompletionItem> &items);
+  void hoverResult(const QString &uri, const LspHoverInfo &info);
+  void definitionResult(const QString &uri, const LspLocation &location);
+  void implementationResult(const QString &uri, const LspLocation &location);
+  void signatureHelpResult(const QString &uri, const LspSignatureHelp &help);
   void semanticTokensResult(const QJsonArray &tokens);
   void formattingResult(const QList<QPair<LspRange, QString>> &edits);
   void documentSymbolsResult(const QJsonArray &symbols);

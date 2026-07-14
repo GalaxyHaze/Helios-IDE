@@ -10,6 +10,7 @@ endif()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(default_build_type "Release")
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
@@ -24,6 +25,7 @@ if(APPLE)
     link_directories(BEFORE ${CMAKE_BINARY_DIR}/dummy_frameworks)
 endif()
 
+# Define o executável principal
 add_executable(Helios
     main.cpp
     editor/MainWindow.cpp
@@ -52,3 +54,25 @@ target_link_libraries(Helios PRIVATE
     Qt6::Network
     Qt6::Widgets
 )
+
+#Optmizations, clang, please use Clang to compile this
+if(CMAKE_BUILD_TYPE MATCHES "Release|RelWithDebInfo|MinSizeRel")
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        message(STATUS "Helios: Aplicando otimizações agressivas para o compilador Clang.")
+
+        target_compile_options(Helios PRIVATE -O3 -march=native)
+
+        include(CheckIPOSupported)
+        check_ipo_supported(RESULT ipo_supported OUTPUT ipo_error)
+
+        if(ipo_supported)
+            set_target_properties(Helios PROPERTIES INTERPROCEDURAL_OPTIMIZATION TRUE)
+            
+            target_compile_options(Helios PRIVATE -flto=thin)
+            target_link_options(Helios PRIVATE -flto=thin)
+            message(STATUS "Helios: ThinLTO ativo com sucesso!")
+        else()
+            message(WARNING "Helios: LTO não suportado neste ambiente: ${ipo_error}")
+        endif()
+    endif()
+endif()
