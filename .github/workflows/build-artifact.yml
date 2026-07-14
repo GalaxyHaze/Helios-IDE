@@ -96,7 +96,7 @@ jobs:
               -DCMAKE_C_COMPILER=clang
               -DCMAKE_CXX_COMPILER=clang++
 
-          - os: macos-latest
+          - os: macos-14
             target_name: helios-macos
             archive_name: helios-macos.zip
             executable_name: Helios
