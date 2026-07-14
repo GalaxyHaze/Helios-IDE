@@ -1,5 +1,5 @@
 <RCC>
     <qresource prefix="/icons">
-        <file>zith-icon.svg</file>
+        <file>helios-icon.svg</file>
     </qresource>
 </RCC>

@@ -100,6 +100,14 @@ FindReplaceBar::FindReplaceBar(QWidget *parent)
     connect(m_replaceBtn, &QPushButton::clicked, this, &FindReplaceBar::replace);
     connect(m_replaceAllBtn, &QPushButton::clicked, this, &FindReplaceBar::replaceAll);
 
+    m_findInput->installEventFilter(this);
+    m_replaceInput->installEventFilter(this);
+    m_prevBtn->installEventFilter(this);
+    m_nextBtn->installEventFilter(this);
+    m_replaceBtn->installEventFilter(this);
+    m_replaceAllBtn->installEventFilter(this);
+    m_closeBtn->installEventFilter(this);
+
     hide();
 }
 

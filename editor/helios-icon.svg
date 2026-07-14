@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <defs>
+    <!-- Vibrant warm solar gradient -->
+    <radialGradient id="helios-core" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#fff9e6"/>
+      <stop offset="35%" stop-color="#ffb703"/>
+      <stop offset="70%" stop-color="#fb8500"/>
+      <stop offset="100%" stop-color="#d62828"/>
+    </radialGradient>
+    
+    <!-- Outer radiant ring gradient -->
+    <linearGradient id="helios-ring" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffb703"/>
+      <stop offset="50%" stop-color="#fb8500"/>
+      <stop offset="100%" stop-color="#800f2f"/>
+    </linearGradient>
+
+    <!-- Subtle glow/shadow effect -->
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="6" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Background subtle warm circular glow -->
+  <circle cx="100" cy="100" r="85" fill="#fb8500" opacity="0.08" />
+
+  <!-- Outer geometric starburst (12-point elegant solar rays) -->
+  <g transform="translate(100,100)" stroke="url(#helios-ring)" stroke-width="2.5" fill="none" opacity="0.85">
+    <circle cx="0" cy="0" r="55" stroke-dasharray="1 14" stroke-linecap="round" stroke-width="6"/>
+    <!-- Outer sharp geometric ray constructs -->
+    <path d="M 0,-75 L 12,-50 L -12,-50 Z" fill="url(#helios-ring)" stroke="none"/>
+    <path d="M 0,75 L 12,50 L -12,50 Z" fill="url(#helios-ring)" stroke="none" transform="rotate(180)"/>
+    <path d="M 75,0 L 50,12 L 50,-12 Z" fill="url(#helios-ring)" stroke="none" transform="rotate(90)"/>
+    <path d="M -75,0 L -50,12 L -50,-12 Z" fill="url(#helios-ring)" stroke="none" transform="rotate(270)"/>
+    
+    <path d="M 0,-75 L 10,-50 L -10,-50 Z" fill="url(#helios-ring)" stroke="none" transform="rotate(30)" opacity="0.7"/>
+    <path d="M 0,-75 L 10,-50 L -10,-50 Z" fill="url(#helios-ring)" stroke="none" transform="rotate(60)" opacity="0.7"/>
+    <path d="M 0,-75 L 10,-50 L -10,-50 Z" fill="url(#helios-ring)" stroke="none" transform="rotate(120)" opacity="0.7"/>
+    <path d="M 0,-75 L 10,-50 L -10,-50 Z" fill="url(#helios-ring)" stroke="none" transform="rotate(150)" opacity="0.7"/>
+    <path d="M 0,-75 L 10,-50 L -10,-50 Z" fill="url(#helios-ring)" stroke="none" transform="rotate(210)" opacity="0.7"/>
+    <path d="M 0,-75 L 10,-50 L -10,-50 Z" fill="url(#helios-ring)" stroke="none" transform="rotate(240)" opacity="0.7"/>
+    <path d="M 0,-75 L 10,-50 L -10,-50 Z" fill="url(#helios-ring)" stroke="none" transform="rotate(300)" opacity="0.7"/>
+    <path d="M 0,-75 L 10,-50 L -10,-50 Z" fill="url(#helios-ring)" stroke="none" transform="rotate(330)" opacity="0.7"/>
+  </g>
+
+  <!-- Overlapping geometric orbital rings -->
+  <circle cx="100" cy="100" r="50" fill="none" stroke="#ffb703" stroke-width="1" opacity="0.3" />
+  <circle cx="100" cy="100" r="62" fill="none" stroke="#fb8500" stroke-width="1.5" stroke-dasharray="12 6" opacity="0.4" />
+
+  <!-- The core solar sphere -->
+  <circle cx="100" cy="100" r="38" fill="url(#helios-core)" filter="url(#glow)" />
+  
+  <!-- Sleek technical overlay in the core (abstract 'H' for Helios) -->
+  <g transform="translate(100,100)" stroke="#fff" stroke-width="3" stroke-linecap="round" fill="none" opacity="0.95">
+    <path d="M -12,-16 L -12,16" />
+    <path d="M 12,-16 L 12,16" />
+    <path d="M -12,0 L 12,0" />
+    <!-- Small spark details -->
+    <circle cx="0" cy="-12" r="1.5" fill="#fff" stroke="none" />
+    <circle cx="0" cy="12" r="1.5" fill="#fff" stroke="none" />
+  </g>
+</svg>

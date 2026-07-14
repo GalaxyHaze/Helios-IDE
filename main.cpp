@@ -6,9 +6,9 @@
 int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
-    app.setApplicationName("Zith Studio");
-    app.setOrganizationName("Zith");
-    app.setWindowIcon(createZithIcon());
+    app.setApplicationName("Helios");
+    app.setOrganizationName("Helios");
+    app.setWindowIcon(createHeliosIcon());
 
     QPalette darkPalette;
     darkPalette.setColor(QPalette::Window, QColor("#11111b"));

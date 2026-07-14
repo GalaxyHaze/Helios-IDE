@@ -77,25 +77,26 @@ ActivityBar::ActivityBar(QWidget *parent)
 
     QWidget *content = new QWidget;
     auto *layout = new QVBoxLayout(content);
-    layout->setContentsMargins(0, 4, 0, 4);
-    layout->setSpacing(2);
+    layout->setContentsMargins(4, 8, 4, 8);
+    layout->setSpacing(4);
 
-    m_buttons.append(createButton(explorerIcon(), "Explorer (Ctrl+B)"));
+    m_buttons.append(createButton(explorerIcon(), "Explorer (Ctrl+Shift+E)"));
     m_buttons.append(createButton(searchIcon(), "Search (Ctrl+Shift+F)"));
     m_buttons.append(createButton(gitIcon(), "Source Control (Ctrl+Shift+G)"));
 
-    layout->addStretch();
-
     m_buttons.append(createButton(settingsIcon(), "Settings (Ctrl+,)"));
 
-    for (auto *btn : m_buttons)
-        layout->addWidget(btn);
+    for (int i = 0; i < 3; ++i)
+        layout->addWidget(m_buttons[i]);
+
+    layout->addStretch();
+    layout->addWidget(m_buttons.back());
 
     setWidget(content);
     setActiveMode(Explorer);
 
     setStyleSheet(
-        "ActivityBar { background: #11111b; border-right: 1px solid #1e1e2e; }"
+        "ActivityBar { background: #0f1119; border-right: 1px solid #1e1e2e; }"
     );
 }
 
@@ -110,9 +111,9 @@ QToolButton *ActivityBar::createButton(const QIcon &icon, const QString &tooltip
     btn->setCursor(Qt::PointingHandCursor);
     btn->setCheckable(true);
     btn->setStyleSheet(
-        "QToolButton { background: transparent; border: none; border-radius: 6px; }"
-        "QToolButton:hover { background: #363a4f; }"
-        "QToolButton:checked { background: #1e1e2e; }"
+        "QToolButton { background: transparent; border: 1px solid transparent; border-radius: 8px; }"
+        "QToolButton:hover { background: #232634; border-color: #363a4f; }"
+        "QToolButton:checked { background: #1e1e2e; border-color: #7287fd; }"
     );
 
     connect(btn, &QToolButton::clicked, this, [this, btn]() {

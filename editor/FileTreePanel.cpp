@@ -19,7 +19,9 @@ FileTreePanel::FileTreePanel(QWidget *parent)
     m_treeView = new QTreeView;
     m_treeView->setModel(m_model);
     m_treeView->setHeaderHidden(true);
-    m_treeView->setAnimated(true);
+    // Filesystem models can insert many rows at once; animation makes each insertion repaint.
+    m_treeView->setAnimated(false);
+    m_treeView->setUniformRowHeights(true);
     m_treeView->setIndentation(14);
     m_treeView->setRootIsDecorated(true);
     m_treeView->setExpandsOnDoubleClick(true);

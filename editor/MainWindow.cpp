@@ -22,6 +22,9 @@
 #include <QTimer>
 #include <QLineEdit>
 #include <QPalette>
+#include <QSettings>
+#include <QStackedWidget>
+#include <QSignalBlocker>
 
 #include "Code.h"
 #include "Syntax.h"
@@ -35,6 +38,9 @@
 #include "FileTreePanel.h"
 #include "ContextManager.h"
 #include "FindReplaceBar.h"
+#include "SearchPanel.h"
+#include "GitPanel.h"
+#include "SettingsPanel.h"
 
 static QString baseStyle()
 {
@@ -53,18 +59,19 @@ static QString baseStyle()
     );
 }
 
-QIcon createZithIcon()
+QIcon createHeliosIcon()
 {
-    return QIcon(QStringLiteral(":/icons/zith-icon.svg"));
+    return QIcon(QStringLiteral(":/icons/helios-icon.svg"));
 }
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), m_initialContextSetup(true)
 {
-    setWindowTitle("Zith Studio");
-    setWindowIcon(createZithIcon());
+    setWindowTitle("Helios");
+    setWindowIcon(createHeliosIcon());
     resize(1000, 700);
     setStyleSheet(baseStyle());
+    loadUiPreferences();
 
     m_tabWidget = new QTabWidget;
     m_tabWidget->setTabsClosable(true);
@@ -92,11 +99,20 @@ MainWindow::MainWindow(QWidget *parent)
     editorLayout->addWidget(m_tabWidget, 1);
 
     m_fileTree = new FileTreePanel;
-    m_fileTree->setMinimumWidth(150);
-    m_fileTree->setMaximumWidth(400);
+    m_searchPanel = new SearchPanel;
+    m_gitPanel = new GitPanel;
+    m_settingsPanel = new SettingsPanel;
+
+    m_sidePanel = new QStackedWidget;
+    m_sidePanel->addWidget(m_fileTree);
+    m_sidePanel->addWidget(m_searchPanel);
+    m_sidePanel->addWidget(m_gitPanel);
+    m_sidePanel->addWidget(m_settingsPanel);
+    m_sidePanel->setMinimumWidth(150);
+    m_sidePanel->setMaximumWidth(420);
 
     m_splitter = new QSplitter(Qt::Horizontal);
-    m_splitter->addWidget(m_fileTree);
+    m_splitter->addWidget(m_sidePanel);
     m_splitter->addWidget(editorPanel);
     m_splitter->setStretchFactor(0, 0);
     m_splitter->setStretchFactor(1, 1);
@@ -104,23 +120,6 @@ MainWindow::MainWindow(QWidget *parent)
     m_splitter->setSizes({220, 800});
 
     setCentralWidget(m_splitter);
-
-    auto applyZoom = [this](double factor) {
-        int basePt = 11;
-        auto scale = [&](QLabel *label) {
-            if (!label) return;
-            QFont f = label->font();
-            f.setPointSize(qMax(8, int(basePt * factor)));
-            label->setFont(f);
-        };
-        scale(m_contextLabel);
-        scale(m_lspLabel);
-        scale(m_errorLabel);
-        scale(m_posLabel);
-        scale(m_indentLabel);
-        scale(m_encodingLabel);
-        scale(m_langLabel);
-    };
 
     m_snippetManager = new SnippetManager(this);
     m_snippetManager->loadFromJson(
@@ -209,6 +208,25 @@ MainWindow::MainWindow(QWidget *parent)
         openFilePath(path);
     });
 
+    connect(m_searchPanel, &SearchPanel::fileActivated,
+            this, [this](const QString &path, int line, int column) {
+        openFilePath(path);
+        if (auto *ed = currentEditor())
+            ed->goToLine(line, column);
+    });
+
+    connect(m_gitPanel, &GitPanel::fileActivated,
+            this, [this](const QString &path) {
+        openFilePath(path);
+    });
+
+    connect(m_settingsPanel, &SettingsPanel::fontSizeChanged,
+            this, &MainWindow::setEditorFontSize);
+    connect(m_settingsPanel, &SettingsPanel::wordWrapChanged,
+            this, &MainWindow::setWordWrapEnabled);
+    m_settingsPanel->setFontSize(m_editorFontSize);
+    m_settingsPanel->setWordWrapEnabled(m_wordWrapEnabled);
+
     auto *ctxLeft = new QShortcut(QKeySequence("Alt+Left"), this);
     connect(ctxLeft, &QShortcut::activated, this, [this]() {
         saveContextState();
@@ -234,6 +252,8 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_contextManager, &ContextManager::contextChanged,
             this, [this](int index, const Context &ctx) {
         m_fileTree->setRootPath(ctx.rootPath);
+        m_searchPanel->setRootPath(ctx.rootPath);
+        m_gitPanel->setRootPath(ctx.rootPath);
         if (m_contextLabel)
             m_contextLabel->setText(QString("%1/%2")
                 .arg(index + 1).arg(m_contextManager->count()));
@@ -282,22 +302,32 @@ MainWindow::MainWindow(QWidget *parent)
         }
     });
 
+    auto *explorerShortcut = new QShortcut(QKeySequence("Ctrl+Shift+E"), this);
+    connect(explorerShortcut, &QShortcut::activated, this, [this]() {
+        m_activityBar->setActiveMode(ActivityBar::Explorer);
+    });
+
+    auto *workspaceSearchShortcut = new QShortcut(QKeySequence("Ctrl+Shift+F"), this);
+    connect(workspaceSearchShortcut, &QShortcut::activated, this, [this]() {
+        m_activityBar->setActiveMode(ActivityBar::Search);
+    });
+
+    auto *gitShortcut = new QShortcut(QKeySequence("Ctrl+Shift+G"), this);
+    connect(gitShortcut, &QShortcut::activated, this, [this]() {
+        m_activityBar->setActiveMode(ActivityBar::Git);
+    });
+
+    auto *settingsShortcut = new QShortcut(QKeySequence("Ctrl+,"), this);
+    connect(settingsShortcut, &QShortcut::activated, this, [this]() {
+        m_activityBar->setActiveMode(ActivityBar::Settings);
+    });
+
     m_initialContextSetup = false;
     saveContextState();
 
     connect(m_tabWidget, &QTabWidget::currentChanged, this, [this](int idx) {
         auto *ed = qobject_cast<CodeEditor*>(m_tabWidget->widget(idx));
-        if (!ed) return;
-        m_findReplaceBar->setEditor(ed);
-        if (ed->filePath().isEmpty())
-            m_breadcrumbs->clear();
-        else
-            m_breadcrumbs->setPath(ed->filePath());
-        QTextCursor c = ed->textCursor();
-        m_posLabel->setText(QString("Ln %1, Col %2")
-            .arg(c.blockNumber() + 1).arg(c.positionInBlock() + 1));
-        setWindowTitle("Zith Studio - " + (ed->filePath().isEmpty()
-            ? QString("Untitled") : QFileInfo(ed->filePath()).fileName()));
+        updateEditorChrome(ed);
     });
 
     connect(m_tabWidget, &QTabWidget::tabCloseRequested, this, [this](int idx) {
@@ -309,22 +339,16 @@ MainWindow::MainWindow(QWidget *parent)
                     ed->filePath().isEmpty() ? "Untitled" : ed->filePath()),
                 QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
             if (result == QMessageBox::Save) {
-                bool was = (ed == currentEditor());
                 m_tabWidget->setCurrentIndex(idx);
                 saveFile();
-                if (!ed->document()->isModified()) {
-                    m_tabWidget->removeTab(idx);
-                    m_highlighters.remove(ed);
-                    ed->deleteLater();
-                }
+                if (!ed->document()->isModified())
+                    releaseEditor(ed);
                 return;
             } else if (result == QMessageBox::Cancel) {
                 return;
             }
         }
-        m_tabWidget->removeTab(idx);
-        m_highlighters.remove(ed);
-        ed->deleteLater();
+        releaseEditor(ed);
     });
 
     m_activityBar = new ActivityBar(this);
@@ -332,23 +356,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     connect(m_activityBar, &ActivityBar::modeChanged,
             this, [this](ActivityBar::Mode mode) {
-        if (mode == ActivityBar::Explorer) {
-            QList<int> sizes = m_splitter->sizes();
-            bool visible = sizes[0] > 0;
-            if (visible) {
-                m_fileTreeWidth = sizes[0];
-                toggleFileTree(false);
-            } else {
-                toggleFileTree(true);
-            }
-        } else if (mode == ActivityBar::Search) {
-            if (m_findReplaceBar->isVisible()) {
-                m_findReplaceBar->hide();
-            } else {
-                m_findReplaceBar->setEditor(currentEditor());
-                m_findReplaceBar->showFind();
-            }
-        }
+        setSidebarMode(mode);
     });
 
     m_diagnosticsPanel = new DiagnosticsPanel(this);
@@ -463,7 +471,7 @@ void MainWindow::openFilePath(const QString &path)
         auto *ed = qobject_cast<CodeEditor*>(m_tabWidget->widget(i));
         if (ed && ed->filePath() == path) {
             m_tabWidget->setCurrentIndex(i);
-            m_breadcrumbs->setPath(path);
+            updateEditorChrome(ed);
             return;
         }
     }
@@ -474,27 +482,30 @@ void MainWindow::openFilePath(const QString &path)
     QString content = QString::fromUtf8(file.readAll());
     file.close();
 
-    auto *editor = createTab();
+    auto *editor = createTab(false);
     editor->setFilePath(path);
-    editor->setPlainText(content);
+    editor->setInitialDocumentText(content);
     editor->document()->setModified(false);
     editor->clearDiagnostics();
 
-    int idx = m_tabWidget->currentIndex();
+    const int idx = m_tabWidget->indexOf(editor);
     m_tabWidget->setTabText(idx, QFileInfo(path).fileName());
     m_tabWidget->setTabToolTip(idx, path);
 
-    m_breadcrumbs->setPath(path);
     if (m_diagnosticsPanel) m_diagnosticsPanel->clear();
     if (m_completionModel) m_completionModel->setItems({});
 
-    setWindowTitle("Zith Studio - " + QFileInfo(path).fileName());
+    m_tabWidget->setCurrentIndex(idx);
+    updateEditorChrome(editor);
 
-    if (m_lspClient && m_lspClient->isRunning())
-        m_lspClient->openDocument(editor->fileUri(), "zith", content);
+    // Let the tab paint before serializing and sending the complete document to the LSP.
+    QTimer::singleShot(0, editor, [this, editor, content]() {
+        if (m_lspClient && m_lspClient->isRunning())
+            m_lspClient->openDocument(editor->fileUri(), "zith", content);
+    });
 }
 
-CodeEditor *MainWindow::createTab()
+CodeEditor *MainWindow::createTab(bool makeCurrent)
 {
     auto *editor = new CodeEditor;
 
@@ -502,6 +513,7 @@ CodeEditor *MainWindow::createTab()
     if (!QFontInfo(font).exactMatch())
         font = QFont("Monospace", 12);
     font.setStyleStrategy(QFont::PreferAntialias);
+    font.setPointSize(m_editorFontSize);
     editor->setFont(font);
 
     auto *hl = new SyntaxHighlighter(editor->document());
@@ -510,11 +522,18 @@ CodeEditor *MainWindow::createTab()
     editor->setSnippetManager(m_snippetManager);
     editor->setCompleter(m_completer);
     editor->setLspClient(m_lspClient);
+    applyEditorPreferences(editor);
 
     connectEditorSignals(editor);
 
-    int idx = m_tabWidget->addTab(editor, "Untitled");
-    m_tabWidget->setCurrentIndex(idx);
+    int idx = -1;
+    if (makeCurrent) {
+        idx = m_tabWidget->addTab(editor, "Untitled");
+        m_tabWidget->setCurrentIndex(idx);
+    } else {
+        QSignalBlocker blocker(m_tabWidget);
+        idx = m_tabWidget->addTab(editor, "Untitled");
+    }
     m_tabWidget->setTabToolTip(idx, {});
 
     return editor;
@@ -562,12 +581,6 @@ void MainWindow::connectEditorSignals(CodeEditor *editor)
             ed->goToLine(line, character);
     });
 
-    connect(m_lspClient, &LspClient::diagnosticsReceived,
-            editor, [editor](const QString &uri, const QList<LspDiagnostic> &diags) {
-        if (uri == editor->fileUri())
-            editor->setDiagnostics(diags);
-    });
-
     connect(editor->document(), &QTextDocument::modificationChanged,
             this, [this, editor](bool changed) {
         int idx = m_tabWidget->indexOf(editor);
@@ -586,7 +599,7 @@ void MainWindow::newFile()
     m_diagnosticsPanel->clear();
     m_completionModel->setItems({});
     m_breadcrumbs->clear();
-    setWindowTitle("Zith Studio - Untitled");
+    setWindowTitle("Helios - Untitled");
 }
 
 void MainWindow::newProject()
@@ -734,6 +747,56 @@ void MainWindow::toggleFileTree(bool show)
     timer->start(16);
 }
 
+void MainWindow::setSidebarMode(ActivityBar::Mode mode)
+{
+    const QList<int> sizes = m_splitter->sizes();
+    const bool visible = sizes[0] > 0;
+
+    if (mode == ActivityBar::Explorer && visible && m_sidePanel->currentIndex() == int(ActivityBar::Explorer)) {
+        m_fileTreeWidth = sizes[0];
+        toggleFileTree(false);
+        return;
+    }
+
+    m_sidePanel->setCurrentIndex(int(mode));
+
+    if (mode == ActivityBar::Git)
+        m_gitPanel->refreshStatus();
+
+    if (!visible)
+        toggleFileTree(true);
+}
+
+void MainWindow::applyEditorPreferences(CodeEditor *editor)
+{
+    if (!editor)
+        return;
+
+    QFont editorFont = editor->font();
+    editorFont.setPointSize(m_editorFontSize);
+    editor->setFont(editorFont);
+    editor->setLineWrapMode(m_wordWrapEnabled
+        ? QPlainTextEdit::WidgetWidth
+        : QPlainTextEdit::NoWrap);
+    editor->update();
+}
+
+void MainWindow::setEditorFontSize(int pointSize)
+{
+    m_editorFontSize = pointSize;
+    for (int i = 0; i < m_tabWidget->count(); ++i)
+        applyEditorPreferences(qobject_cast<CodeEditor*>(m_tabWidget->widget(i)));
+    saveUiPreferences();
+}
+
+void MainWindow::setWordWrapEnabled(bool enabled)
+{
+    m_wordWrapEnabled = enabled;
+    for (int i = 0; i < m_tabWidget->count(); ++i)
+        applyEditorPreferences(qobject_cast<CodeEditor*>(m_tabWidget->widget(i)));
+    saveUiPreferences();
+}
+
 void MainWindow::saveContextState()
 {
     int idx = m_contextManager->currentIndex();
@@ -749,9 +812,19 @@ void MainWindow::saveContextState()
 void MainWindow::restoreContextState(const Context &ctx)
 {
     while (m_tabWidget->count() > 0) {
-        QWidget *w = m_tabWidget->widget(0);
+        auto *editor = qobject_cast<CodeEditor*>(m_tabWidget->widget(0));
+        if (editor) {
+            if (m_lspClient && m_lspClient->isRunning() && !editor->fileUri().isEmpty())
+                m_lspClient->closeDocument(editor->fileUri());
+            m_highlighters.remove(editor);
+            m_tabWidget->removeTab(0);
+            editor->deleteLater();
+            continue;
+        }
+
+        QWidget *widget = m_tabWidget->widget(0);
         m_tabWidget->removeTab(0);
-        w->deleteLater();
+        widget->deleteLater();
     }
     if (ctx.openFiles.isEmpty()) {
         createTab();
@@ -767,4 +840,57 @@ void MainWindow::restoreContextState(const Context &ctx)
 CodeEditor *MainWindow::currentEditor() const
 {
     return qobject_cast<CodeEditor*>(m_tabWidget->currentWidget());
+}
+
+void MainWindow::loadUiPreferences()
+{
+    QSettings settings;
+    m_editorFontSize = settings.value("editor/fontSize", m_editorFontSize).toInt();
+    m_wordWrapEnabled = settings.value("editor/wordWrap", m_wordWrapEnabled).toBool();
+}
+
+void MainWindow::saveUiPreferences() const
+{
+    QSettings settings;
+    settings.setValue("editor/fontSize", m_editorFontSize);
+    settings.setValue("editor/wordWrap", m_wordWrapEnabled);
+}
+
+void MainWindow::updateEditorChrome(CodeEditor *editor)
+{
+    if (!editor) {
+        m_findReplaceBar->setEditor(nullptr);
+        m_breadcrumbs->clear();
+        m_posLabel->setText("Ln 1, Col 1");
+        setWindowTitle("Helios");
+        return;
+    }
+
+    m_findReplaceBar->setEditor(editor);
+    if (editor->filePath().isEmpty())
+        m_breadcrumbs->clear();
+    else
+        m_breadcrumbs->setPath(editor->filePath());
+
+    const QTextCursor cursor = editor->textCursor();
+    m_posLabel->setText(QString("Ln %1, Col %2")
+        .arg(cursor.blockNumber() + 1).arg(cursor.positionInBlock() + 1));
+    setWindowTitle("Helios - " + (editor->filePath().isEmpty()
+        ? QString("Untitled")
+        : QFileInfo(editor->filePath()).fileName()));
+}
+
+void MainWindow::releaseEditor(CodeEditor *editor)
+{
+    if (!editor)
+        return;
+
+    if (m_lspClient && m_lspClient->isRunning() && !editor->fileUri().isEmpty())
+        m_lspClient->closeDocument(editor->fileUri());
+
+    const int idx = m_tabWidget->indexOf(editor);
+    if (idx >= 0)
+        m_tabWidget->removeTab(idx);
+    m_highlighters.remove(editor);
+    editor->deleteLater();
 }

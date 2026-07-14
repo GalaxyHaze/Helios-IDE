@@ -132,14 +132,18 @@ SyntaxHighlighter::SyntaxHighlighter(QTextDocument *parent)
         {{"and","or","not"}, logicalOpFormat},
     };
 
-    for (const auto &g : groups) {
-        for (const QString &w : g.words) {
-            HighlightingRule rule;
-            rule.pattern = QRegularExpression("\\b" + w + "\\b");
-            rule.format = g.fmt;
-            keywordRules.append(rule);
-        }
-    }
+    auto groupedPattern = [](const QStringList &tokens, bool wordBoundary) {
+        QStringList escapedTokens;
+        escapedTokens.reserve(tokens.size());
+        for (const QString &token : tokens)
+            escapedTokens.append(QRegularExpression::escape(token));
+
+        const QString pattern = "(?:" + escapedTokens.join('|') + ')';
+        return QRegularExpression(wordBoundary ? "\\b" + pattern + "\\b" : pattern);
+    };
+
+    for (const auto &g : groups)
+        keywordRules.append({groupedPattern(g.words, true), g.fmt});
 
     // ── SYMBOL OPERATORS (need QRegularExpression::escape) ─────
     struct OpGroup {
@@ -162,14 +166,8 @@ SyntaxHighlighter::SyntaxHighlighter(QTextDocument *parent)
         {{",",";","."}, punctFormat},
     };
 
-    for (const auto &g : opGroups) {
-        for (const QString &s : g.symbols) {
-            HighlightingRule rule;
-            rule.pattern = QRegularExpression(QRegularExpression::escape(s));
-            rule.format = g.fmt;
-            operatorRules.append(rule);
-        }
-    }
+    for (const auto &g : opGroups)
+        operatorRules.append({groupedPattern(g.symbols, false), g.fmt});
 
     // ── Numbers — blue bold ────────────────────────────────────
     HighlightingRule hexRule;

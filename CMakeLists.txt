@@ -1,5 +1,12 @@
 cmake_minimum_required(VERSION 4.1)
-project(Zith_Studio)
+project(Helios)
+
+# Ninja is a single-configuration generator. Default to an optimized build while
+# preserving an explicit choice such as -DCMAKE_BUILD_TYPE=Debug.
+if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+    set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS Debug Release RelWithDebInfo MinSizeRel)
+endif()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -9,7 +16,7 @@ set(CMAKE_AUTOUIC ON)
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets)
 
-add_executable(Zith_Studio
+add_executable(Helios
     main.cpp
     editor/MainWindow.cpp
     editor/Code.cpp
@@ -24,10 +31,13 @@ add_executable(Zith_Studio
     editor/CompilerPanel.cpp
     editor/SnippetManager.cpp
     editor/FindReplaceBar.cpp
+    editor/SearchPanel.cpp
+    editor/GitPanel.cpp
+    editor/SettingsPanel.cpp
     editor/resources.qrc
 )
 
-target_link_libraries(Zith_Studio PRIVATE
+target_link_libraries(Helios PRIVATE
     Qt6::Core
     Qt6::Gui
     Qt6::Widgets
