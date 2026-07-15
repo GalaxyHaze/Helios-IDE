@@ -77,7 +77,7 @@ void BreadcrumbsBar::rebuild(const QStringList &dirs, const QString &file, const
 
     auto addLabel = [this](const QString &text, const QString &color, bool useLargeFont, bool bold = false) {
         auto *label = new QLabel(text);
-        int fontSize = 11 + (useLargeFont ? 11 + cjkExtraHeight : 0);
+        int fontSize = 11 + (useLargeFont ? cjkExtraHeight : 0);
         QString style = QString("color: %1; font-size: %2px; padding: 0 2px;").arg(color, QString::number(fontSize));
         if (bold)
             style += " font-weight: bold;";
@@ -102,7 +102,7 @@ void BreadcrumbsBar::rebuild(const QStringList &dirs, const QString &file, const
         addLabel(dir, "#9ca0b0", hasCJK);
         addSep();
     }
-    addLabel(file, "#c6d0f5", true);
+    addLabel(file, "#c6d0f5", hasCJK);
 
     if (!func.isEmpty()) {
         addSep();
