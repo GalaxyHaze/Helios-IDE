@@ -28,22 +28,39 @@ endif()
 # Define o executável principal
 add_executable(Helios
     main.cpp
+    editor/MainWindow.h
     editor/MainWindow.cpp
+    editor/Code.h
     editor/Code.cpp
+    editor/Syntax.h
     editor/Syntax.cpp
+    editor/LspClient.h
     editor/LspClient.cpp
+    editor/ZithToolchainManager.h
     editor/ZithToolchainManager.cpp
+    editor/LspCompletionModel.h
     editor/LspCompletionModel.cpp
+    editor/DiagnosticsPanel.h
     editor/DiagnosticsPanel.cpp
+    editor/ActivityBar.h
     editor/ActivityBar.cpp
+    editor/BreadcrumbsBar.h
     editor/BreadcrumbsBar.cpp
+    editor/FileTreePanel.h
     editor/FileTreePanel.cpp
+    editor/ContextManager.h
     editor/ContextManager.cpp
+    editor/CompilerPanel.h
     editor/CompilerPanel.cpp
+    editor/SnippetManager.h
     editor/SnippetManager.cpp
+    editor/FindReplaceBar.h
     editor/FindReplaceBar.cpp
+    editor/SearchPanel.h
     editor/SearchPanel.cpp
+    editor/GitPanel.h
     editor/GitPanel.cpp
+    editor/SettingsPanel.h
     editor/SettingsPanel.cpp
     editor/resources.qrc
 )
