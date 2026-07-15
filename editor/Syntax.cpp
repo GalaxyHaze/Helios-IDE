@@ -1,4 +1,5 @@
 #include "Syntax.h"
+#include <QApplication>
 
 // ── Zith Dark theme token colors ─────────────────────────────────────
 // Source: zith-extension/vs-code/themes/zith-color-theme.json
@@ -232,12 +233,19 @@ void SyntaxHighlighter::addKeywords(const QStringList &keywordList, const QColor
 
 void SyntaxHighlighter::highlightBlock(const QString &text)
 {
+    // On extra long lines, combined time of applying all regexes to that single line could have caused
+    // very noticeable complete application freeze. Since changing how highlightBlock is called isn't
+    // really an option, prevent freeze by processing events between regexes in this case.
+    bool extraLongLine = text.length() > 7000;
     // Apply keyword rules (types, control flow, keywords, booleans, comments)
     for (const HighlightingRule &rule : keywordRules) {
         QRegularExpressionMatchIterator it = rule.pattern.globalMatch(text);
         while (it.hasNext()) {
             QRegularExpressionMatch m = it.next();
             setFormat(m.capturedStart(), m.capturedLength(), rule.format);
+        }
+        if (extraLongLine) {
+            QApplication::processEvents();
         }
     }
 
@@ -248,6 +256,9 @@ void SyntaxHighlighter::highlightBlock(const QString &text)
             QRegularExpressionMatch m = it.next();
             setFormat(m.capturedStart(), m.capturedLength(), rule.format);
         }
+        if (extraLongLine) {
+            QApplication::processEvents();
+        }
     }
 
     // Apply string rules
@@ -256,6 +267,9 @@ void SyntaxHighlighter::highlightBlock(const QString &text)
         while (it.hasNext()) {
             QRegularExpressionMatch m = it.next();
             setFormat(m.capturedStart(), m.capturedLength(), rule.format);
+        }
+        if (extraLongLine) {
+            QApplication::processEvents();
         }
     }
 
