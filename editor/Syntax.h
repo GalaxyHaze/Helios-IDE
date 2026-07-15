@@ -4,6 +4,9 @@
 #include <QSyntaxHighlighter>
 #include <QTextDocument>
 #include <QRegularExpression>
+#ifdef SyntaxHighlighterPerfCheck
+#include <chrono>
+#endif
 
 class SyntaxHighlighter : public QSyntaxHighlighter
 {
@@ -11,6 +14,9 @@ class SyntaxHighlighter : public QSyntaxHighlighter
 
 public:
     SyntaxHighlighter(QTextDocument *parent = nullptr);
+#ifdef SyntaxHighlighterPerfCheck
+    virtual ~SyntaxHighlighter() override;
+#endif
 
 protected:
     void highlightBlock(const QString &text) override;
@@ -37,6 +43,10 @@ private:
     QRegularExpression commentStartExpression;
     QRegularExpression commentEndExpression;
     QTextCharFormat multiLineCommentFormat;
+
+#ifdef SyntaxHighlighterPerfCheck
+    std::chrono::microseconds highlightDuration;
+#endif
 };
 
 #endif // SYNTAXHIGHLIGHTER_H

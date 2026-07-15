@@ -1,10 +1,15 @@
 #include "Syntax.h"
 
+
 // ── Zith Dark theme token colors ─────────────────────────────────────
 // Source: zith-extension/vs-code/themes/zith-color-theme.json
 
 SyntaxHighlighter::SyntaxHighlighter(QTextDocument *parent)
     : QSyntaxHighlighter(parent)
+#ifdef SyntaxHighlighterPerfCheck
+	, highlightDuration(0)
+#endif
+
 {
     // Comments — muted purple, italic (#6A5A8A)
     QTextCharFormat commentFormat;
@@ -214,7 +219,24 @@ SyntaxHighlighter::SyntaxHighlighter(QTextDocument *parent)
         rule.format = commentFormat;
         keywordRules.append(rule);
     }
+
+    for (const HighlightingRule &rule : operatorRules) {
+        rule.pattern.optimize();
+    }
+    for (const HighlightingRule &rule : keywordRules) {
+        rule.pattern.optimize();
+    }
+    for (const HighlightingRule &rule : stringRules) {
+        rule.pattern.optimize();
+    }
 }
+
+#ifdef SyntaxHighlighterPerfCheck
+SyntaxHighlighter::~SyntaxHighlighter()
+{
+    qDebug() << "--- SyntaxHighlighter total timing" <<  highlightDuration << "\n";
+}
+#endif
 
 void SyntaxHighlighter::addKeywords(const QStringList &keywordList, const QColor &color, bool bold)
 {
@@ -232,30 +254,46 @@ void SyntaxHighlighter::addKeywords(const QStringList &keywordList, const QColor
 
 void SyntaxHighlighter::highlightBlock(const QString &text)
 {
+#ifdef SyntaxHighlighterPerfCheck
+    std::chrono::time_point start = std::chrono::high_resolution_clock::now();
+#endif
+    // Exclude leading whitespaces from block higlighting
+    int pos = 0;
+    int length = text.length();
+    while (pos < length) {
+        QChar c = text[pos];
+        if(c == ' ' || c == '\t') {
+            pos++;
+        } else {
+            break;
+        }
+    }
+    QStringView trimmedText(text.begin() + pos, text.end());
+
     // Apply keyword rules (types, control flow, keywords, booleans, comments)
     for (const HighlightingRule &rule : keywordRules) {
-        QRegularExpressionMatchIterator it = rule.pattern.globalMatch(text);
+        QRegularExpressionMatchIterator it = rule.pattern.globalMatch(trimmedText);
         while (it.hasNext()) {
             QRegularExpressionMatch m = it.next();
-            setFormat(m.capturedStart(), m.capturedLength(), rule.format);
+            setFormat(m.capturedStart() + pos, m.capturedLength(), rule.format);
         }
     }
 
     // Apply operator/symbol/number rules
     for (const HighlightingRule &rule : operatorRules) {
-        QRegularExpressionMatchIterator it = rule.pattern.globalMatch(text);
+        QRegularExpressionMatchIterator it = rule.pattern.globalMatch(trimmedText);
         while (it.hasNext()) {
             QRegularExpressionMatch m = it.next();
-            setFormat(m.capturedStart(), m.capturedLength(), rule.format);
+            setFormat(m.capturedStart() + pos, m.capturedLength(), rule.format);
         }
     }
 
     // Apply string rules
     for (const HighlightingRule &rule : stringRules) {
-        QRegularExpressionMatchIterator it = rule.pattern.globalMatch(text);
+        QRegularExpressionMatchIterator it = rule.pattern.globalMatch(trimmedText);
         while (it.hasNext()) {
             QRegularExpressionMatch m = it.next();
-            setFormat(m.capturedStart(), m.capturedLength(), rule.format);
+            setFormat(m.capturedStart() + pos, m.capturedLength(), rule.format);
         }
     }
 
@@ -281,4 +319,8 @@ void SyntaxHighlighter::highlightBlock(const QString &text)
         setFormat(startIndex, commentLength, multiLineCommentFormat);
         startIndex = text.indexOf(commentStartExpression, startIndex + commentLength);
     }
+#ifdef SyntaxHighlighterPerfCheck
+    std::chrono::time_point end = std::chrono::high_resolution_clock::now();
+    highlightDuration += std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+#endif
 }
