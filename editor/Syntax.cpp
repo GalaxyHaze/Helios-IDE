@@ -257,47 +257,52 @@ void SyntaxHighlighter::highlightBlock(const QString &text)
 #ifdef SyntaxHighlighterPerfCheck
     std::chrono::time_point start = std::chrono::high_resolution_clock::now();
 #endif
-    // Exclude leading whitespaces from block higlighting
+    // Exclude leading whitespaces from block highlighting search start
     int pos = 0;
     int length = text.length();
     while (pos < length) {
         QChar c = text[pos];
-        if(c == ' ' || c == '\t') {
+        if (c == ' ' || c == '\t') {
             pos++;
         } else {
             break;
         }
     }
-    QStringView trimmedText(text.begin() + pos, text.end());
 
-    // Apply keyword rules (types, control flow, keywords, booleans, comments)
-    for (const HighlightingRule &rule : keywordRules) {
-        QRegularExpressionMatchIterator it = rule.pattern.globalMatch(trimmedText);
-        while (it.hasNext()) {
-            QRegularExpressionMatch m = it.next();
-            setFormat(m.capturedStart() + pos, m.capturedLength(), rule.format);
+    // On extra long lines, combined time of applying all regexes to that single line can cause
+    // a very noticeable complete application freeze. Prevent this by bypassing heavy highlights on such lines.
+    bool extraLongLine = length > 5000;
+
+    if (!extraLongLine) {
+        // Apply keyword rules (types, control flow, keywords, booleans, comments)
+        for (const HighlightingRule &rule : keywordRules) {
+            QRegularExpressionMatchIterator it = rule.pattern.globalMatch(text, pos);
+            while (it.hasNext()) {
+                QRegularExpressionMatch m = it.next();
+                setFormat(m.capturedStart(), m.capturedLength(), rule.format);
+            }
+        }
+
+        // Apply operator/symbol/number rules
+        for (const HighlightingRule &rule : operatorRules) {
+            QRegularExpressionMatchIterator it = rule.pattern.globalMatch(text, pos);
+            while (it.hasNext()) {
+                QRegularExpressionMatch m = it.next();
+                setFormat(m.capturedStart(), m.capturedLength(), rule.format);
+            }
+        }
+
+        // Apply string rules
+        for (const HighlightingRule &rule : stringRules) {
+            QRegularExpressionMatchIterator it = rule.pattern.globalMatch(text, pos);
+            while (it.hasNext()) {
+                QRegularExpressionMatch m = it.next();
+                setFormat(m.capturedStart(), m.capturedLength(), rule.format);
+            }
         }
     }
 
-    // Apply operator/symbol/number rules
-    for (const HighlightingRule &rule : operatorRules) {
-        QRegularExpressionMatchIterator it = rule.pattern.globalMatch(trimmedText);
-        while (it.hasNext()) {
-            QRegularExpressionMatch m = it.next();
-            setFormat(m.capturedStart() + pos, m.capturedLength(), rule.format);
-        }
-    }
-
-    // Apply string rules
-    for (const HighlightingRule &rule : stringRules) {
-        QRegularExpressionMatchIterator it = rule.pattern.globalMatch(trimmedText);
-        while (it.hasNext()) {
-            QRegularExpressionMatch m = it.next();
-            setFormat(m.capturedStart() + pos, m.capturedLength(), rule.format);
-        }
-    }
-
-    // Multi-line comment logic
+    // Multi-line comment logic (runs even on extra long lines to propagate state correctly)
     setCurrentBlockState(0);
 
     int startIndex = 0;
