@@ -1,7 +1,7 @@
 # Helios
 
 <div align="center">
-  <img src="editor/helios-icon.svg" width="96" alt="Helios icon">
+  <img src="editor/assets/helios-icon.svg" width="96" alt="Helios icon">
 
   <p><strong>A desktop IDE for Zith projects, built with Qt 6.</strong></p>
 
@@ -23,6 +23,7 @@ Helios is a native editor focused on the Zith ecosystem. It currently ships with
 - [Project Layout](#project-layout)
 - [Requirements](#requirements)
 - [Quick Start](#quick-start)
+- [Themes](#themes)
 - [Zith Integration Notes](#zith-integration-notes)
 - [Build Artifacts](#build-artifacts)
 - [Roadmap](#roadmap)
@@ -78,20 +79,27 @@ The UI is built in Qt Widgets, so it stays fast, native and easy to iterate on w
 
 ```text
 .
-|-- editor/                 # Core UI, editor widgets, panels and services
+|-- editor/
+|   |-- core/               # App shell, configuration and core services
+|   |-- editor/             # Editor widget, Syntax and LSP integration
+|   |-- panels/             # Sidebar and auxiliary UI panels
+|   |-- widgets/            # Reusable UI components
+|   `-- assets/             # Static resources
 |-- docs/                   # Project notes and roadmap
+|-- tests/                  # Automated test suite
+|-- themes/                 # Editor themes
+|-- i18n/                   # Translations
 |-- main.cpp                # Qt application bootstrap
-|-- CMakeLists.txt          # Build definition
-`-- .github/workflows/      # CI and release automation
+`-- CMakeLists.txt          # Build definition
 ```
 
 Key modules inside `editor/`:
 
-- `MainWindow.*`: main shell, layout, commands and wiring
-- `Code.*`: editor widget, input behavior and LSP document sync
-- `LspClient.*`: JSON-RPC client for `zith-lsp`
-- `FileTreePanel.*`, `SearchPanel.*`, `GitPanel.*`, `SettingsPanel.*`: sidebar panels
-- `Syntax.*`: highlighting rules
+- `core/MainWindow.*`: main shell, layout, commands and wiring
+- `editor/Code.*`: editor widget, input behavior and LSP document sync
+- `editor/LspClient.*`: JSON-RPC client for `zith-lsp`
+- `panels/*Panel.*`: sidebar panels
+- `editor/Syntax.*`: highlighting rules
 
 ## Requirements
 
@@ -116,6 +124,23 @@ cmake --build build
 ```
 
 If `CMAKE_BUILD_TYPE` is not specified, the project currently defaults single-config generators such as Ninja to `Release`.
+
+## Themes
+
+Helios ships with ten low-light or accessible editor themes. Theme IDs are persisted in the user configuration, so the existing IDs remain stable:
+
+- `helios-dark` — Helios Dark
+- `helios-light` — Helios Light, the accessible light option
+- `colormind-midnight` — ColorMind Midnight
+- `colormind-desert` — ColorMind Desert
+- `helios-violet-dark` — Helios Violet
+- `helios-red-dark` — Helios Red
+- `helios-gold-dark` — Helios Gold
+- `helios-blue-dark` — Helios Blue
+- `helios-forest-dark` — Helios Forest
+- `helios-carbon-dark` — Helios Carbon
+
+Theme definitions live in `themes/` and are copied beside the executable during the CMake build.
 
 ## Zith Integration Notes
 

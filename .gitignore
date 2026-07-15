@@ -1,4 +1,12 @@
-.cache
-build
+build/
+.cache/
 build-byteask
 AGENTS.md
+venv/
+*.pyc
+__pycache__/
+*.swp
+*~
+.DS_Store
+patch_*.py
+fix_*.py

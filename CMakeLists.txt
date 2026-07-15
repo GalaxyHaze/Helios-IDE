@@ -15,7 +15,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network Test)
 
 if(APPLE)
     # Qt6 may hardcode linking to the deprecated AGL framework, which is missing in newer macOS SDKs.
@@ -25,44 +25,58 @@ if(APPLE)
     link_directories(BEFORE ${CMAKE_BINARY_DIR}/dummy_frameworks)
 endif()
 
-# Define o executável principal
+# Define o executavel principal
 add_executable(Helios
     main.cpp
-    editor/MainWindow.h
-    editor/MainWindow.cpp
-    editor/Code.h
-    editor/Code.cpp
-    editor/Syntax.h
-    editor/Syntax.cpp
-    editor/LspClient.h
-    editor/LspClient.cpp
-    editor/ZithToolchainManager.h
-    editor/ZithToolchainManager.cpp
-    editor/LspCompletionModel.h
-    editor/LspCompletionModel.cpp
-    editor/DiagnosticsPanel.h
-    editor/DiagnosticsPanel.cpp
-    editor/ActivityBar.h
-    editor/ActivityBar.cpp
-    editor/BreadcrumbsBar.h
-    editor/BreadcrumbsBar.cpp
-    editor/FileTreePanel.h
-    editor/FileTreePanel.cpp
-    editor/ContextManager.h
-    editor/ContextManager.cpp
-    editor/CompilerPanel.h
-    editor/CompilerPanel.cpp
-    editor/SnippetManager.h
-    editor/SnippetManager.cpp
-    editor/FindReplaceBar.h
-    editor/FindReplaceBar.cpp
-    editor/SearchPanel.h
-    editor/SearchPanel.cpp
-    editor/GitPanel.h
-    editor/GitPanel.cpp
-    editor/SettingsPanel.h
-    editor/SettingsPanel.cpp
-    editor/resources.qrc
+    editor/core/TomlSettingsStore.h
+    editor/core/TomlSettingsStore.cpp
+    editor/core/ThemeManager.h
+    editor/core/ThemeManager.cpp
+    editor/core/TranslationManager.h
+    editor/core/TranslationManager.cpp
+    editor/panels/WelcomeWidget.h
+    editor/panels/WelcomeWidget.cpp
+    editor/widgets/ProjectTreeModel.h
+    editor/widgets/ProjectTreeModel.cpp
+    editor/panels/OutlinePanel.h
+    editor/panels/OutlinePanel.cpp
+    editor/core/MainWindow.h
+    editor/core/MainWindow.cpp
+    editor/editor/Code.h
+    editor/editor/Code.cpp
+    editor/editor/Syntax.h
+    editor/editor/Syntax.cpp
+    editor/editor/LspClient.h
+    editor/editor/LspClient.cpp
+    editor/core/ZithToolchainManager.h
+    editor/core/ZithToolchainManager.cpp
+    editor/editor/LspCompletionModel.h
+    editor/editor/LspCompletionModel.cpp
+    editor/panels/DiagnosticsPanel.h
+    editor/panels/DiagnosticsPanel.cpp
+    editor/panels/ReferencesPanel.h
+    editor/panels/ReferencesPanel.cpp
+    editor/widgets/ActivityBar.h
+    editor/widgets/ActivityBar.cpp
+    editor/widgets/BreadcrumbsBar.h
+    editor/widgets/BreadcrumbsBar.cpp
+    editor/panels/FileTreePanel.h
+    editor/panels/FileTreePanel.cpp
+    editor/core/ContextManager.h
+    editor/core/ContextManager.cpp
+    editor/panels/CompilerPanel.h
+    editor/panels/CompilerPanel.cpp
+    editor/core/SnippetManager.h
+    editor/core/SnippetManager.cpp
+    editor/widgets/FindReplaceBar.h
+    editor/widgets/FindReplaceBar.cpp
+    editor/panels/SearchPanel.h
+    editor/panels/SearchPanel.cpp
+    editor/panels/GitPanel.h
+    editor/panels/GitPanel.cpp
+    editor/panels/SettingsPanel.h
+    editor/panels/SettingsPanel.cpp
+    editor/assets/resources.qrc
 )
 
 target_link_libraries(Helios PRIVATE
@@ -72,10 +86,32 @@ target_link_libraries(Helios PRIVATE
     Qt6::Widgets
 )
 
+# Copiar arquivos de temas e traducoes para o diretorio de build
+file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/themes" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
+file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/i18n" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
+
+# Testes automatizados
+add_executable(test_helios
+    tests/test_helios.cpp
+    editor/core/TomlSettingsStore.h
+    editor/core/TomlSettingsStore.cpp
+    editor/core/ThemeManager.h
+    editor/core/ThemeManager.cpp
+    editor/core/TranslationManager.h
+    editor/core/TranslationManager.cpp
+    editor/widgets/ProjectTreeModel.h
+    editor/widgets/ProjectTreeModel.cpp
+)
+target_link_libraries(test_helios PRIVATE
+    Qt6::Core
+    Qt6::Widgets
+    Qt6::Test
+)
+
 #Optmizations, clang, please use Clang to compile this
 if(CMAKE_BUILD_TYPE MATCHES "Release|RelWithDebInfo|MinSizeRel")
     if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-        message(STATUS "Helios: Aplicando otimizações agressivas para o compilador Clang.")
+        message(STATUS "Helios: Aplicando otimizacoes agressivas para o compilador Clang.")
 
         target_compile_options(Helios PRIVATE -O3 -march=native)
 
@@ -89,7 +125,11 @@ if(CMAKE_BUILD_TYPE MATCHES "Release|RelWithDebInfo|MinSizeRel")
             target_link_options(Helios PRIVATE -flto=thin)
             message(STATUS "Helios: ThinLTO ativo com sucesso!")
         else()
-            message(WARNING "Helios: LTO não suportado neste ambiente: ${ipo_error}")
+            message(WARNING "Helios: LTO nao suportado neste ambiente: ${ipo_error}")
         endif()
     endif()
+endif()
+
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    target_compile_definitions(Helios PRIVATE HELIOS_THEME_TIMING)
 endif()
