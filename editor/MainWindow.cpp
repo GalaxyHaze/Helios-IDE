@@ -568,6 +568,7 @@ void MainWindow::openFilePath(const QString &path)
 CodeEditor *MainWindow::createTab(bool makeCurrent)
 {
     auto *editor = new CodeEditor;
+    editor->setFrameShape(QFrame::NoFrame);
 
     QFont font("JetBrains Mono", 12);
     if (!QFontInfo(font).exactMatch())
