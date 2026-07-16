@@ -4,8 +4,8 @@
 #include <QSyntaxHighlighter>
 #include <QTextDocument>
 #include <QRegularExpression>
-#ifdef SyntaxHighlighterPerfCheck
-#include <chrono>
+#ifdef SYNTAX_HIGHLIGHTER_TIMING
+#include <QElapsedTimer>
 #endif
 
 class SyntaxHighlighter : public QSyntaxHighlighter
@@ -14,7 +14,7 @@ class SyntaxHighlighter : public QSyntaxHighlighter
 
 public:
     SyntaxHighlighter(QTextDocument *parent = nullptr);
-#ifdef SyntaxHighlighterPerfCheck
+#ifdef SYNTAX_HIGHLIGHTER_TIMING
     virtual ~SyntaxHighlighter() override;
 #endif
 
@@ -44,8 +44,8 @@ private:
     QRegularExpression commentEndExpression;
     QTextCharFormat multiLineCommentFormat;
 
-#ifdef SyntaxHighlighterPerfCheck
-    std::chrono::microseconds highlightDuration;
+#ifdef SYNTAX_HIGHLIGHTER_TIMING
+    qint64 highlightDuration = 0;
 #endif
 };
 
