@@ -395,6 +395,9 @@ MainWindow::MainWindow(QWidget *parent)
               m_settingsPanel->appendLspLog(msg);
           });
 
+  connect(m_lspClient, &LspClient::frontendStatusReceived, this, &MainWindow::onFrontendStatusReceived);
+  connect(m_lspClient, &LspClient::metricsReceived, this, &MainWindow::onMetricsReceived);
+
   connect(m_lspClient, &LspClient::serverError, this,
           [this](const QString &msg) {
             if (!lspEnabled())
@@ -1702,4 +1705,24 @@ void MainWindow::applyWorkspaceEdit(const QJsonObject &edit) {
       }
     }
   }
+}
+
+void MainWindow::onFrontendStatusReceived(const QJsonObject &status) {
+    QString state = status.value("state").toString();
+    QString msg = status.value("message").toString();
+    if (state == "warming") {
+        m_runtimeStatusText = "Frontend warming up...";
+        setLspStatus("LSP ◐", "#89b4fa");
+    } else if (state == "ready") {
+        m_runtimeStatusText = "Frontend ready";
+        setLspStatus("LSP ⬤", "#a6d189");
+    } else if (state == "error") {
+        m_runtimeStatusText = "Frontend error: " + msg;
+        setLspStatus("LSP !", "#e78284");
+    }
+    if (m_settingsPanel) m_settingsPanel->appendLspLog("Frontend status: " + state + (msg.isEmpty() ? "" : " - " + msg));
+}
+
+void MainWindow::onMetricsReceived(const QJsonObject &metrics) {
+    if (m_settingsPanel) m_settingsPanel->appendLspLog("Metrics: " + QString::fromUtf8(QJsonDocument(metrics).toJson(QJsonDocument::Compact)));
 }

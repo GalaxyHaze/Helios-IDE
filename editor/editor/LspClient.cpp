@@ -187,8 +187,18 @@ void LspClient::onProcessStarted() {
       m_workspaceRoot.isEmpty() ? QDir::currentPath() : m_workspaceRoot;
   params["rootUri"] = QUrl::fromLocalFile(root).toString();
   params["rootPath"] = root;
+  QJsonObject zithOpts = {
+      {"frontend", QJsonObject{
+          {"enabled", true},
+          {"warmupStdlib", true},
+          {"statusNotifications", true},
+          {"maxWorkers", 0}
+      }}
+  };
+  QJsonObject initOpts = {{"zith", zithOpts}};
   if (!m_stdlibPath.isEmpty())
-    params["initializationOptions"] = QJsonObject{{"stdlibPath", m_stdlibPath}};
+    initOpts["stdlibPath"] = m_stdlibPath;
+  params["initializationOptions"] = initOpts;
   sendRequest("initialize", params, {}, -1, false,
               [this](const QJsonObject &response) {
                 if (response.contains("error"))
@@ -741,6 +751,10 @@ void LspClient::handleNotification(const QJsonObject &message) {
     emit showMessage(p.value("message").toString());
   } else if (method == "zith/requestSaveAll")
     emit saveAllRequested();
+  else if (method == "zith/frontendStatus")
+    emit frontendStatusReceived(p);
+  else if (method == "zith/metrics")
+    emit metricsReceived(p);
 }
 
 void LspClient::onProcessError(QProcess::ProcessError) {

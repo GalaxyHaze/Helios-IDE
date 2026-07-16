@@ -105,6 +105,8 @@ signals:
     void saveAllRequested();
     void logMessage(const QString &message);
     void showMessage(const QString &message);
+    void frontendStatusReceived(const QJsonObject &status);
+    void metricsReceived(const QJsonObject &metrics);
 
 private slots:
     void onReadyRead();

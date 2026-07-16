@@ -67,6 +67,8 @@ private slots:
     void updateEditorChrome(CodeEditor *editor);
     void releaseEditor(CodeEditor *editor);
     void setLspStatus(const QString &text, const QString &color);
+    void onFrontendStatusReceived(const QJsonObject &status);
+    void onMetricsReceived(const QJsonObject &metrics);
     void ensureLspRuntime(bool preferCached);
     void startLspRuntime(const QString &lspPath,
                          const QString &stdlibPath,
