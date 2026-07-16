@@ -1,15 +1,15 @@
 {
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Helios IDE for Zith projects",
   "homepage": "https://github.com/GalaxyHaze/Helios-IDE",
   "architecture": {
     "64bit": {
-      "url": "https://github.com/GalaxyHaze/Helios-IDE/releases/download/v0.1.0/helios-windows-amd64.zip",
-      "hash": "skip"
+      "url": "https://github.com/GalaxyHaze/Helios-IDE/releases/download/v0.1.1/helios-windows-amd64.zip",
+      "hash": "3d836646585590efbff238052c44106895bac75aab98e78fcc7ed7cc3fb76d2d"
     },
     "arm64": {
-      "url": "https://github.com/GalaxyHaze/Helios-IDE/releases/download/v0.1.0/helios-windows-arm64.zip",
-      "hash": "skip"
+      "url": "https://github.com/GalaxyHaze/Helios-IDE/releases/download/v0.1.1/helios-windows-arm64.zip",
+      "hash": "ea96d1052ae66e83b98ee062d9efd6531070efadddf56e4c6df3acb9609f796a"
     }
   },
   "bin": [
