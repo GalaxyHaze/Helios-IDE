@@ -26,6 +26,7 @@ static const int MIN_FONT_SIZE = 6;
 static const int MAX_FONT_SIZE = 48;
 
 CodeEditor::CodeEditor(QWidget *parent) : QPlainTextEdit(parent) {
+  setFrameShape(QFrame::NoFrame);
   lineNumberArea = new LineNumberArea(this);
 
   connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this,

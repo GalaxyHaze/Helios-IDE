@@ -34,6 +34,7 @@
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QHeaderView>
+#include <QJsonDocument>
 #include <QLabel>
 #include <QMenu>
 #include <QMenuBar>
