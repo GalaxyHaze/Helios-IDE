@@ -6,10 +6,6 @@
 
 SyntaxHighlighter::SyntaxHighlighter(QTextDocument *parent)
     : QSyntaxHighlighter(parent)
-#ifdef SyntaxHighlighterPerfCheck
-	, highlightDuration(0)
-#endif
-
 {
     // Comments — muted purple, italic (#6A5A8A)
     QTextCharFormat commentFormat;
@@ -231,13 +227,6 @@ SyntaxHighlighter::SyntaxHighlighter(QTextDocument *parent)
     }
 }
 
-#ifdef SyntaxHighlighterPerfCheck
-SyntaxHighlighter::~SyntaxHighlighter()
-{
-    qDebug() << "--- SyntaxHighlighter total timing" <<  highlightDuration << "\n";
-}
-#endif
-
 void SyntaxHighlighter::addKeywords(const QStringList &keywordList, const QColor &color, bool bold)
 {
     QTextCharFormat format;
@@ -254,9 +243,6 @@ void SyntaxHighlighter::addKeywords(const QStringList &keywordList, const QColor
 
 void SyntaxHighlighter::highlightBlock(const QString &text)
 {
-#ifdef SyntaxHighlighterPerfCheck
-    std::chrono::time_point start = std::chrono::high_resolution_clock::now();
-#endif
     // Exclude leading whitespaces from block highlighting search start
     int pos = 0;
     int length = text.length();
@@ -324,8 +310,4 @@ void SyntaxHighlighter::highlightBlock(const QString &text)
         setFormat(startIndex, commentLength, multiLineCommentFormat);
         startIndex = text.indexOf(commentStartExpression, startIndex + commentLength);
     }
-#ifdef SyntaxHighlighterPerfCheck
-    std::chrono::time_point end = std::chrono::high_resolution_clock::now();
-    highlightDuration += std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-#endif
 }
