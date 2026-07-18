@@ -102,7 +102,7 @@ void BreadcrumbsBar::rebuild(const QStringList &dirs, const QString &file, const
         addLabel(dir, "#9ca0b0", hasCJK);
         addSep();
     }
-    addLabel(file, "#c6d0f5", hasCJK);
+    addLabel(file, "#c6d0f5", hasCJK, true);
 
     if (!func.isEmpty()) {
         addSep();
