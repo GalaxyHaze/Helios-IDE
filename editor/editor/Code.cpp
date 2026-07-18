@@ -3,6 +3,7 @@
 #include "../core/ThemeManager.h"
 #include "../core/TranslationManager.h"
 #include "LspCompletionModel.h"
+#include "VimMotionController.h"
 #include <QAbstractItemView>
 #include <QApplication>
 #include <QClipboard>
@@ -28,6 +29,16 @@ static const int MAX_FONT_SIZE = 48;
 CodeEditor::CodeEditor(QWidget *parent) : QPlainTextEdit(parent) {
   setFrameShape(QFrame::NoFrame);
   lineNumberArea = new LineNumberArea(this);
+  m_vimController = new VimMotionController(this);
+  connect(m_vimController, &VimMotionController::modeChanged, this,
+          [this](VimMotionController::Mode mode) {
+            QString label = "OFF";
+            if (mode == VimMotionController::Mode::Normal)
+              label = "NORMAL";
+            else if (mode == VimMotionController::Mode::Insert)
+              label = "INSERT";
+            emit vimModeChanged(label);
+          });
 
   connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this,
           [this]() { updateTheme(); });
@@ -76,6 +87,17 @@ CodeEditor::CodeEditor(QWidget *parent) : QPlainTextEdit(parent) {
 
   updateLineNumberAreaWidth(0);
   highlightCurrentLine();
+}
+
+void CodeEditor::setVimMotionsEnabled(bool enabled)
+{
+  m_vimController->setEnabled(enabled);
+  emit vimModeChanged(enabled ? "NORMAL" : "OFF");
+}
+
+bool CodeEditor::vimMotionsEnabled() const
+{
+  return m_vimController && m_vimController->isEnabled();
 }
 
 CodeEditor::~CodeEditor() {
@@ -131,6 +153,8 @@ void CodeEditor::updateTheme() {
   }
 
   highlightCurrentLine();
+  updateDiagnosticHighlights();
+  updateLineNumberAreaWidth(0);
   lineNumberArea->update();
   viewport()->update();
 }
@@ -543,6 +567,11 @@ void CodeEditor::keyPressEvent(QKeyEvent *e) {
       break;
     }
   }
+
+  // Global actions and completion handling deliberately precede Vim.  In
+  // Insert mode the controller returns false, preserving all editor behavior.
+  if (m_vimController && m_vimController->handleKeyPress(e))
+    return;
 
   // ── Smart backspace ────────────────────────────────────────
   if (e->key() == Qt::Key_Backspace) {

@@ -7,6 +7,13 @@
 #include <QJsonValue>
 #include <QDebug>
 
+namespace {
+bool isDarkPalette(const QPalette &palette)
+{
+    return palette.color(QPalette::Window).lightness() < 128;
+}
+}
+
 ThemeManager::ThemeManager(QObject *parent)
     : QObject(parent)
 {
@@ -36,6 +43,7 @@ void ThemeManager::setFallbackTheme(bool dark)
 {
     m_isDark = dark;
     m_customColors.clear();
+    setFallbackSyntaxStyles();
 
     if (dark) {
         m_palette.setColor(QPalette::Window, QColor("#11131a"));
@@ -132,18 +140,43 @@ void ThemeManager::setFallbackTheme(bool dark)
     }
 }
 
+void ThemeManager::setFallbackSyntaxStyles()
+{
+    m_syntaxStyles = {
+        {"comment", {QColor("#6A5A8A"), false, true}},
+        {"string", {QColor("#a6d189"), false, false}},
+        {"number", {QColor("#04a5e5"), true, false}},
+        {"type", {QColor("#ca9ee6"), true, false}},
+        {"control", {QColor("#e64553"), true, false}},
+        {"declaration", {QColor("#8839ef"), true, false}},
+        {"storage", {QColor("#81c8be"), false, false}},
+        {"async", {QColor("#a6d189"), true, false}},
+        {"exception", {QColor("#df8e1d"), true, false}},
+        {"keyword", {QColor("#eff1f5"), false, false}},
+        {"literal", {QColor("#dd7878"), true, false}},
+        {"logicalOperator", {QColor("#d20f39"), true, false}},
+        {"operator", {QColor("#7287fd"), false, false}},
+        {"otherOperator", {QColor("#179299"), false, false}},
+        {"bracket", {QColor("#ea999c"), false, false}},
+        {"punctuation", {QColor("#a5adce"), false, false}}
+    };
+}
+
 bool ThemeManager::loadTheme(const QString &themeName)
 {
     if (themeName == m_currentThemeName)
         return m_currentThemeWasLoaded;
 
-    QString path = findThemeFile(themeName);
+    const QString path = findThemeFile(themeName);
     QFile file(path);
     if (path.isEmpty() || !file.open(QIODevice::ReadOnly)) {
-        setFallbackTheme(themeName.contains("dark", Qt::CaseInsensitive));
-        m_currentThemeName = themeName;
-        m_currentThemeWasLoaded = false;
-        emit themeChanged();
+        // Keep the last known-good theme.  Falling back is reserved for the
+        // initial startup path, where no valid theme has been loaded yet.
+        if (!m_hasValidTheme) {
+            setFallbackTheme(themeName.contains("dark", Qt::CaseInsensitive));
+            m_currentThemeName = themeName;
+            m_currentThemeWasLoaded = false;
+        }
         return false;
     }
 
@@ -151,18 +184,53 @@ bool ThemeManager::loadTheme(const QString &themeName)
     QJsonParseError err;
     QJsonDocument doc = QJsonDocument::fromJson(data, &err);
     if (doc.isNull() || !doc.isObject()) {
-        setFallbackTheme(themeName.contains("dark", Qt::CaseInsensitive));
-        m_currentThemeName = themeName;
-        m_currentThemeWasLoaded = false;
-        emit themeChanged();
+        if (!m_hasValidTheme) {
+            setFallbackTheme(themeName.contains("dark", Qt::CaseInsensitive));
+            m_currentThemeName = themeName;
+            m_currentThemeWasLoaded = false;
+        }
         return false;
     }
 
-    QJsonObject obj = doc.object();
-    m_currentThemeName = themeName;
-    m_isDark = themeName.contains("dark", Qt::CaseInsensitive);
-    m_currentThemeWasLoaded = true;
+    return loadThemeDocument(doc, themeName,
+                             themeName.contains("dark", Qt::CaseInsensitive));
+}
 
+bool ThemeManager::loadThemeFile(const QString &path, const QString &displayName)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) {
+        if (!m_hasValidTheme) {
+            setFallbackTheme(true);
+            m_currentThemeName = displayName.isEmpty() ? QFileInfo(path).baseName()
+                                                       : displayName;
+            m_currentThemeWasLoaded = false;
+        }
+        return false;
+    }
+
+    QJsonParseError err;
+    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &err);
+    if (doc.isNull() || !doc.isObject()) {
+        if (!m_hasValidTheme) {
+            setFallbackTheme(true);
+            m_currentThemeName = displayName.isEmpty() ? QFileInfo(path).baseName()
+                                                       : displayName;
+            m_currentThemeWasLoaded = false;
+        }
+        return false;
+    }
+
+    const QString themeName =
+        displayName.isEmpty() ? QFileInfo(path).baseName() : displayName;
+    return loadThemeDocument(doc, themeName, true);
+}
+
+bool ThemeManager::loadThemeDocument(const QJsonDocument &doc,
+                                     const QString &themeName,
+                                     bool fallbackDark)
+{
+    QJsonObject obj = doc.object();
     QPalette pal;
     QJsonObject palObj = obj.value("palette").toObject();
 
@@ -171,26 +239,46 @@ bool ThemeManager::loadTheme(const QString &themeName)
         return QColor(hex);
     };
 
-    pal.setColor(QPalette::Window, parseColor(palObj, "window", m_isDark ? "#11131a" : "#e9edf2"));
-    pal.setColor(QPalette::WindowText, parseColor(palObj, "windowText", m_isDark ? "#e6e9f2" : "#263043"));
-    pal.setColor(QPalette::Base, parseColor(palObj, "base", m_isDark ? "#141720" : "#f3f5f7"));
-    pal.setColor(QPalette::AlternateBase, parseColor(palObj, "alternateBase", m_isDark ? "#1d2230" : "#e2e7ed"));
-    pal.setColor(QPalette::ToolTipBase, parseColor(palObj, "toolTipBase", m_isDark ? "#252b3a" : "#f7f8fa"));
-    pal.setColor(QPalette::ToolTipText, parseColor(palObj, "toolTipText", m_isDark ? "#edf0fa" : "#263043"));
-    pal.setColor(QPalette::Text, parseColor(palObj, "text", m_isDark ? "#d9deeb" : "#2f3a4d"));
-    pal.setColor(QPalette::Button, parseColor(palObj, "button", m_isDark ? "#202638" : "#dde4ec"));
-    pal.setColor(QPalette::ButtonText, parseColor(palObj, "buttonText", m_isDark ? "#e6e9f2" : "#283448"));
-    pal.setColor(QPalette::BrightText, parseColor(palObj, "brightText", m_isDark ? "#ff7a90" : "#c4495f"));
-    pal.setColor(QPalette::Link, parseColor(palObj, "link", m_isDark ? "#8fa2ff" : "#3f64bd"));
-    pal.setColor(QPalette::Highlight, parseColor(palObj, "highlight", m_isDark ? "#3b5ccc" : "#3f6fa3"));
+    pal.setColor(QPalette::Window, parseColor(palObj, "window", fallbackDark ? "#11131a" : "#e9edf2"));
+    pal.setColor(QPalette::WindowText, parseColor(palObj, "windowText", fallbackDark ? "#e6e9f2" : "#263043"));
+    pal.setColor(QPalette::Base, parseColor(palObj, "base", fallbackDark ? "#141720" : "#f3f5f7"));
+    pal.setColor(QPalette::AlternateBase, parseColor(palObj, "alternateBase", fallbackDark ? "#1d2230" : "#e2e7ed"));
+    pal.setColor(QPalette::ToolTipBase, parseColor(palObj, "toolTipBase", fallbackDark ? "#252b3a" : "#f7f8fa"));
+    pal.setColor(QPalette::ToolTipText, parseColor(palObj, "toolTipText", fallbackDark ? "#edf0fa" : "#263043"));
+    pal.setColor(QPalette::Text, parseColor(palObj, "text", fallbackDark ? "#d9deeb" : "#2f3a4d"));
+    pal.setColor(QPalette::Button, parseColor(palObj, "button", fallbackDark ? "#202638" : "#dde4ec"));
+    pal.setColor(QPalette::ButtonText, parseColor(palObj, "buttonText", fallbackDark ? "#e6e9f2" : "#283448"));
+    pal.setColor(QPalette::BrightText, parseColor(palObj, "brightText", fallbackDark ? "#ff7a90" : "#c4495f"));
+    pal.setColor(QPalette::Link, parseColor(palObj, "link", fallbackDark ? "#8fa2ff" : "#3f64bd"));
+    pal.setColor(QPalette::Highlight, parseColor(palObj, "highlight", fallbackDark ? "#3b5ccc" : "#3f6fa3"));
     pal.setColor(QPalette::HighlightedText, parseColor(palObj, "highlightedText", "#ffffff"));
-    m_palette = pal;
-
-    m_customColors.clear();
+    QMap<QString, QColor> customColors;
     QJsonObject custObj = obj.value("custom").toObject();
     for (auto it = custObj.begin(); it != custObj.end(); ++it) {
-        m_customColors.insert(it.key(), QColor(it.value().toString()));
+        const QColor color(it.value().toString());
+        if (color.isValid())
+            customColors.insert(it.key(), color);
     }
+
+    QMap<QString, SyntaxStyle> syntaxStyles;
+    const QJsonObject syntaxObj = obj.value("syntax").toObject();
+    for (auto it = syntaxObj.begin(); it != syntaxObj.end(); ++it) {
+        const QJsonObject styleObj = it.value().toObject();
+        const QColor color(styleObj.value("color").toString());
+        if (color.isValid())
+            syntaxStyles.insert(it.key(), {color, styleObj.value("bold").toBool(),
+                                            styleObj.value("italic").toBool()});
+    }
+
+    m_palette = pal;
+    m_customColors = customColors;
+    setFallbackSyntaxStyles();
+    for (auto it = syntaxStyles.cbegin(); it != syntaxStyles.cend(); ++it)
+        m_syntaxStyles.insert(it.key(), it.value());
+    m_currentThemeName = themeName;
+    m_isDark = isDarkPalette(pal);
+    m_currentThemeWasLoaded = true;
+    m_hasValidTheme = true;
 
     emit themeChanged();
     return true;
@@ -199,4 +287,9 @@ bool ThemeManager::loadTheme(const QString &themeName)
 QColor ThemeManager::customColor(const QString &key, const QColor &fallback) const
 {
     return m_customColors.value(key, fallback);
+}
+
+SyntaxStyle ThemeManager::syntaxStyle(const QString &key) const
+{
+    return m_syntaxStyles.value(key, {m_palette.color(QPalette::Text), false, false});
 }

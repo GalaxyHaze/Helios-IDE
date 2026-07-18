@@ -83,8 +83,7 @@ ActivityBar::ActivityBar(QWidget *parent)
     m_buttons.append(createButton(explorerIcon(), "Explorer (Ctrl+Shift+E)"));
     m_buttons.append(createButton(searchIcon(), "Search (Ctrl+Shift+F)"));
     m_buttons.append(createButton(gitIcon(), "Source Control (Ctrl+Shift+G)"));
-
-    m_buttons.append(createButton(settingsIcon(), "Settings (Ctrl+,)"));
+    m_buttons.append(createButton(settingsIcon(), "Preferences (Ctrl+,)", false));
 
     for (int i = 0; i < 3; ++i)
         layout->addWidget(m_buttons[i]);
@@ -100,7 +99,7 @@ ActivityBar::ActivityBar(QWidget *parent)
     );
 }
 
-QToolButton *ActivityBar::createButton(const QIcon &icon, const QString &tooltip)
+QToolButton *ActivityBar::createButton(const QIcon &icon, const QString &tooltip, bool checkable)
 {
     auto *btn = new QToolButton;
     btn->setIcon(icon);
@@ -109,26 +108,44 @@ QToolButton *ActivityBar::createButton(const QIcon &icon, const QString &tooltip
     btn->setToolTip(tooltip);
     btn->setFixedSize(40, 40);
     btn->setCursor(Qt::PointingHandCursor);
-    btn->setCheckable(true);
+    btn->setCheckable(checkable);
     btn->setStyleSheet(
         "QToolButton { background: transparent; border: 1px solid transparent; border-radius: 8px; }"
         "QToolButton:hover { background: #232634; border-color: #363a4f; }"
         "QToolButton:checked { background: #1e1e2e; border-color: #7287fd; }"
     );
 
-    connect(btn, &QToolButton::clicked, this, [this, btn]() {
+    connect(btn, &QToolButton::clicked, this, [this, btn, checkable]() {
+        if (!checkable) {
+            emit preferencesRequested();
+            return;
+        }
+
         int idx = m_buttons.indexOf(btn);
-        if (idx >= 0 && idx < 4)
-            setActiveMode(Mode(idx));
+        if (idx >= 0 && idx < 3)
+            // Always emit modeChanged so MainWindow can handle toggling off.
+            // We don't call setActiveMode directly because MainWindow will drive
+            // the visual checked state update via updateButtonCheckedStates.
+            emit modeChanged(Mode(idx));
     });
 
     return btn;
 }
 
-void ActivityBar::setActiveMode(Mode mode)
+void ActivityBar::setActiveMode(Mode mode, bool sidebarVisible)
 {
+    QSignalBlocker blocker(this); // Prevent modeChanged from triggering recursively
     m_activeMode = mode;
-    for (int i = 0; i < m_buttons.size(); ++i)
-        m_buttons[i]->setChecked(i == int(mode));
-    emit modeChanged(mode);
+    for (int i = 0; i < 3 && i < m_buttons.size(); ++i)
+        m_buttons[i]->setChecked(sidebarVisible && (i == int(mode)));
+    blocker.unblock();
+    // We intentionally do not emit modeChanged here, as MainWindow drives this.
+}
+
+void ActivityBar::setButtonToolTip(Mode mode, const QString &tooltip)
+{
+    const int index = int(mode);
+    if (index < 0 || index >= m_buttons.size())
+        return;
+    m_buttons[index]->setToolTip(tooltip);
 }

@@ -1,29 +1,21 @@
-#ifndef SETTINGSPANEL_H
-#define SETTINGSPANEL_H
+#ifndef LSPMANAGERDIALOG_H
+#define LSPMANAGERDIALOG_H
 
-#include <QWidget>
+#include <QDialog>
 
 class QCheckBox;
 class QLabel;
-class QPushButton;
 class QPlainTextEdit;
-class QTabWidget;
-class QTreeWidget;
+class QPushButton;
 
-class SettingsPanel : public QWidget
+class LspManagerDialog : public QDialog
 {
     Q_OBJECT
 
 public:
-    explicit SettingsPanel(QWidget *parent = nullptr);
+    explicit LspManagerDialog(QWidget *parent = nullptr);
 
-    void setFontFamily(const QString &family);
-    void setFontSize(int pointSize);
-    void setWordWrapEnabled(bool enabled);
-    void setTheme(const QString &themeName);
-    void setLocale(const QString &locale);
     void setLspEnabled(bool enabled);
-
     void setRuntimeInfo(const QString &status,
                         const QString &tag,
                         const QString &lspPath,
@@ -36,14 +28,6 @@ public:
     void clearLspLog();
 
 signals:
-    void fontFamilyChanged(const QString &family);
-    void fontSizeChanged(int pointSize);
-    void wordWrapChanged(bool enabled);
-    void themeChanged(const QString &themeName);
-    void localeChanged(const QString &locale);
-    void openPreferencesRequested();
-    void openShortcutsRequested();
-    void openLspManagerRequested();
     void lspEnabledChanged(bool enabled);
     void refreshRuntimeRequested();
     void clearRuntimeCacheRequested();
@@ -53,20 +37,24 @@ private slots:
     void applyTranslations();
 
 private:
-    void initializeShortcutTree();
-    void updateShortcutTexts();
+    void updateRuntimeInfoDisplay();
+    void updateDiagnosticsDisplay();
 
     QLabel *m_titleLabel = nullptr;
-    QWidget *m_preferencesCard = nullptr;
-    QLabel *m_preferencesTitleLabel = nullptr;
     QLabel *m_hintLabel = nullptr;
-    QPushButton *m_openPreferencesButton = nullptr;
-    QPushButton *m_openShortcutsButton = nullptr;
-    QPushButton *m_openLspManagerButton = nullptr;
     QLabel *m_runtimeTitleLabel = nullptr;
     QLabel *m_runtimeHintLabel = nullptr;
     QLabel *m_diagTitleLabel = nullptr;
     QLabel *m_logLabel = nullptr;
+
+    QLabel *m_labelStatus = nullptr;
+    QLabel *m_labelTag = nullptr;
+    QLabel *m_labelLsp = nullptr;
+    QLabel *m_labelStdlib = nullptr;
+    QLabel *m_labelCache = nullptr;
+    QLabel *m_labelConnection = nullptr;
+    QLabel *m_labelSyncMode = nullptr;
+    QLabel *m_labelLastError = nullptr;
 
     QLabel *m_runtimeStatusValue = nullptr;
     QLabel *m_runtimeTagValue = nullptr;
@@ -80,8 +68,15 @@ private:
     QPushButton *m_refreshRuntimeButton = nullptr;
     QPushButton *m_clearRuntimeCacheButton = nullptr;
     QCheckBox *m_lspEnabledCheck = nullptr;
-    QTabWidget *m_tabWidget = nullptr;
-    QTreeWidget *m_shortcutsTree = nullptr;
+
+    QString m_rawStatus;
+    QString m_rawTag;
+    QString m_rawLspPath;
+    QString m_rawStdlibPath;
+    QString m_rawCachePath;
+    QString m_rawConnection;
+    QString m_rawSyncMode;
+    QString m_rawLastError;
 };
 
 #endif

@@ -32,6 +32,10 @@ void TomlSettingsStore::load()
         return;
     }
 
+    bool legacyFontFamilySeen = false;
+    bool legacyFontSizeSeen = false;
+    bool editorFontFamilySeen = false;
+    bool editorFontSizeSeen = false;
     QTextStream in(&file);
     while (!in.atEnd()) {
         QString line = in.readLine().trimmed();
@@ -48,14 +52,38 @@ void TomlSettingsStore::load()
         if (key == "theme") {
             if (val.startsWith('"') && val.endsWith('"') && val.length() >= 2)
                 m_theme = val.mid(1, val.length() - 2);
+        } else if (key == "customThemePath") {
+            if (val.startsWith('"') && val.endsWith('"') && val.length() >= 2)
+                m_customThemePath = val.mid(1, val.length() - 2);
         } else if (key == "locale") {
             if (val.startsWith('"') && val.endsWith('"') && val.length() >= 2)
                 m_locale = val.mid(1, val.length() - 2);
         } else if (key == "fontFamily") {
-            if (val.startsWith('"') && val.endsWith('"') && val.length() >= 2) m_fontFamily = val.mid(1, val.length() - 2); else m_fontFamily = val.trimmed();
+            legacyFontFamilySeen = true;
+            if (val.startsWith('"') && val.endsWith('"') && val.length() >= 2) m_uiFontFamily = val.mid(1, val.length() - 2); else m_uiFontFamily = val.trimmed();
         } else if (key == "fontSize") {
-            m_fontSize = val.toInt();
-            if (m_fontSize < 6) m_fontSize = 13;
+            legacyFontSizeSeen = true;
+            m_uiFontSize = val.toInt();
+            if (m_uiFontSize < 6) m_uiFontSize = 13;
+        } else if (key == "uiFontFamily") {
+            if (val.startsWith('"') && val.endsWith('"') && val.length() >= 2) m_uiFontFamily = val.mid(1, val.length() - 2);
+        } else if (key == "uiFontSize") {
+            m_uiFontSize = val.toInt();
+            if (m_uiFontSize < 6) m_uiFontSize = 13;
+        } else if (key == "editorFontFamily") {
+            editorFontFamilySeen = true;
+            if (val.startsWith('"') && val.endsWith('"') && val.length() >= 2) m_editorFontFamily = val.mid(1, val.length() - 2);
+        } else if (key == "editorFontSize") {
+            editorFontSizeSeen = true;
+            m_editorFontSize = val.toInt();
+            if (m_editorFontSize < 6) m_editorFontSize = 13;
+        } else if (key == "renderingStrategy") {
+            if (val.startsWith('"') && val.endsWith('"') && val.length() >= 2) m_renderingStrategy = val.mid(1, val.length() - 2);
+        } else if (key == "uiScale") {
+            m_uiScale = val.toInt();
+            if (m_uiScale < 75 || m_uiScale > 200) m_uiScale = 100;
+        } else if (key == "vimMotionsEnabled") {
+            m_vimMotionsEnabled = (val == "true");
         } else if (key == "wordWrap") {
             m_wordWrap = (val == "true");
         } else if (key == "sidebarWidth") {
@@ -89,6 +117,10 @@ void TomlSettingsStore::load()
             }
         }
     }
+    if (legacyFontFamilySeen && !editorFontFamilySeen)
+        m_editorFontFamily = m_uiFontFamily;
+    if (legacyFontSizeSeen && !editorFontSizeSeen)
+        m_editorFontSize = m_uiFontSize;
 }
 
 void TomlSettingsStore::save()
@@ -106,13 +138,18 @@ void TomlSettingsStore::save()
     out << "# Helios configuration file\n\n";
 
     out << "[editor]\n";
-    out << "fontFamily = \"" << m_fontFamily << "\"\n";
-    out << "fontSize = " << m_fontSize << "\n";
+    out << "editorFontFamily = \"" << m_editorFontFamily << "\"\n";
+    out << "editorFontSize = " << m_editorFontSize << "\n";
+    out << "renderingStrategy = \"" << m_renderingStrategy << "\"\n";
     out << "wordWrap = " << (m_wordWrap ? "true" : "false") << "\n\n";
 
     out << "[ui]\n";
     out << "theme = \"" << m_theme << "\"\n";
+    out << "customThemePath = \"" << m_customThemePath << "\"\n";
     out << "locale = \"" << m_locale << "\"\n";
+    out << "uiFontFamily = \"" << m_uiFontFamily << "\"\n";
+    out << "uiFontSize = " << m_uiFontSize << "\n";
+    out << "uiScale = " << m_uiScale << "\n";
     out << "sidebarWidth = " << m_sidebarWidth << "\n";
     out << "sidebarVisible = " << (m_sidebarVisible ? "true" : "false") << "\n";
     out << "treeMaxDepth = " << m_treeMaxDepth << "\n";
@@ -120,6 +157,9 @@ void TomlSettingsStore::save()
 
     out << "[lsp]\n";
     out << "lspEnabled = " << (m_lspEnabled ? "true" : "false") << "\n\n";
+
+    out << "[vim]\n";
+    out << "vimMotionsEnabled = " << (m_vimMotionsEnabled ? "true" : "false") << "\n\n";
 
     out << "[projects]\n";
     out << "recentProjects = [";
@@ -129,6 +169,41 @@ void TomlSettingsStore::save()
             out << ", ";
     }
     out << "]\n";
+}
+
+void TomlSettingsStore::setUiFontFamily(const QString &family)
+{
+    if (m_uiFontFamily != family) { m_uiFontFamily = family; save(); }
+}
+
+void TomlSettingsStore::setUiFontSize(int size)
+{
+    if (size >= 6 && m_uiFontSize != size) { m_uiFontSize = size; save(); }
+}
+
+void TomlSettingsStore::setEditorFontFamily(const QString &family)
+{
+    if (m_editorFontFamily != family) { m_editorFontFamily = family; save(); }
+}
+
+void TomlSettingsStore::setEditorFontSize(int size)
+{
+    if (size >= 6 && m_editorFontSize != size) { m_editorFontSize = size; save(); }
+}
+
+void TomlSettingsStore::setRenderingStrategy(const QString &strategy)
+{
+    if ((strategy == "antialias" || strategy == "no-antialias" || strategy == "default") && m_renderingStrategy != strategy) { m_renderingStrategy = strategy; save(); }
+}
+
+void TomlSettingsStore::setUiScale(int percent)
+{
+    if (percent >= 75 && percent <= 200 && m_uiScale != percent) { m_uiScale = percent; save(); }
+}
+
+void TomlSettingsStore::setVimMotionsEnabled(bool enabled)
+{
+    if (m_vimMotionsEnabled != enabled) { m_vimMotionsEnabled = enabled; save(); }
 }
 
 void TomlSettingsStore::addRecentProject(const QString &project)

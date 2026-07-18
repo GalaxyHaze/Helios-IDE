@@ -30,6 +30,10 @@ class SnippetManager;
 class SearchPanel;
 class GitPanel;
 class SettingsPanel;
+class ShortcutsDialog;
+class PreferencesDialog;
+class VimHelpDialog;
+class LspManagerDialog;
 class ZithToolchainManager;
 class WelcomeWidget;
 class OutlinePanel;
@@ -82,6 +86,11 @@ private slots:
 
     void applyThemeAndLanguage();
     void updateCentralWidgetState();
+    void showPreferences();
+    void showSettingsPanel();
+    void showShortcutsDialog();
+    void showLspManagerDialog();
+    void showVimHelpDialog();
 
 private:
     void setWorkspaceRoot(const QString &path);
@@ -105,6 +114,10 @@ private:
     SearchPanel *m_searchPanel = nullptr;
     GitPanel *m_gitPanel = nullptr;
     SettingsPanel *m_settingsPanel = nullptr;
+    ShortcutsDialog *m_shortcutsDialog = nullptr;
+    PreferencesDialog *m_preferencesDialog = nullptr;
+    VimHelpDialog *m_vimHelpDialog = nullptr;
+    LspManagerDialog *m_lspManagerDialog = nullptr;
     ContextManager *m_contextManager = nullptr;
     SnippetManager *m_snippetManager = nullptr;
     ZithToolchainManager *m_zithToolchainManager = nullptr;
@@ -118,6 +131,7 @@ private:
     int m_appFontSize = 13;
     bool m_wordWrapEnabled = false;
     QLabel *m_lspLabel = nullptr;
+    QLabel *m_vimLabel = nullptr;
     QLabel *m_contextLabel = nullptr;
     QLabel *m_errorLabel = nullptr;
     QLabel *m_posLabel = nullptr;
@@ -154,6 +168,11 @@ private:
     QAction *m_runAct = nullptr;
     QAction *m_restartLspAct = nullptr;
     QAction *m_gettingStartedAct = nullptr;
+    QAction *m_preferencesAct = nullptr;
+    
+    QAction *m_shortcutsAct = nullptr;
+    QAction *m_lspManagerAct = nullptr;
+    QAction *m_vimHelpAct = nullptr;
 };
 
 #endif

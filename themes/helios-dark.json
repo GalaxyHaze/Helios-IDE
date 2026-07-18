@@ -47,5 +47,6 @@
     "diagnosticWarning": "#f1c77a",
     "diagnosticInfo": "#70c9f0",
     "diagnosticUnknown": "#aeb8ce"
-  }
+  },
+  "syntax": { "comment": { "color": "#6A5A8A", "italic": true }, "string": { "color": "#a6d189" }, "number": { "color": "#04a5e5", "bold": true }, "type": { "color": "#ca9ee6", "bold": true }, "control": { "color": "#e64553", "bold": true }, "declaration": { "color": "#8839ef", "bold": true }, "storage": { "color": "#81c8be" }, "async": { "color": "#a6d189", "bold": true }, "exception": { "color": "#df8e1d", "bold": true }, "keyword": { "color": "#eff1f5" }, "literal": { "color": "#dd7878", "bold": true }, "logicalOperator": { "color": "#d20f39", "bold": true }, "operator": { "color": "#7287fd" }, "otherOperator": { "color": "#179299" }, "bracket": { "color": "#ea999c" }, "punctuation": { "color": "#a5adce" } }
 }

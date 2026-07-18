@@ -1,7 +1,10 @@
 #include "MainWindow.h"
 #include "../panels/OutlinePanel.h"
 #include "../panels/WelcomeWidget.h"
+#include "../panels/ShortcutsDialog.h"
+#include "../panels/LspManagerDialog.h"
 #include "ThemeManager.h"
+#include "AppearanceController.h"
 #include "TomlSettingsStore.h"
 #include "TranslationManager.h"
 
@@ -16,6 +19,10 @@
 #include "../panels/ReferencesPanel.h"
 #include "../panels/SearchPanel.h"
 #include "../panels/SettingsPanel.h"
+#include "../panels/PreferencesDialog.h"
+#include "../panels/ShortcutsDialog.h"
+#include "../panels/LspManagerDialog.h"
+#include "../panels/VimHelpDialog.h"
 #include "../widgets/BreadcrumbsBar.h"
 #include "../widgets/FindReplaceBar.h"
 #include "ContextManager.h"
@@ -150,7 +157,8 @@ public:
     tgLayout->addWidget(
         new QLabel("• Double-click files in the Explorer to open them.", this));
     tgLayout->addWidget(new QLabel(
-        "• Switch theme or locale directly from the settings panel.", this));
+        "• " + TranslationManager::instance().translate("welcome.tip_theme"),
+        this));
     tgLayout->addWidget(new QLabel("• Right-click in the editor or file "
                                    "explorer to access rich context actions.",
                                    this));
@@ -232,19 +240,12 @@ MainWindow::MainWindow(QWidget *parent)
   setWindowIcon(createHeliosIcon());
   resize(1100, 750);
 
-  // Setup font from settings
-  auto &s = TomlSettingsStore::instance();
-  QFont appFont = QApplication::font();
-  if (s.fontFamily() != "System Default" && !s.fontFamily().isEmpty()) {
-    appFont.setFamily(s.fontFamily());
-  }
-  appFont.setPointSize(s.fontSize());
-  QApplication::setFont(appFont);
+  AppearanceController::instance().apply();
 
   // Initial load of external settings/themes/locales
   auto &settings = TomlSettingsStore::instance();
-  m_appFontFamily = settings.fontFamily();
-  m_appFontSize = settings.fontSize();
+  m_appFontFamily = settings.uiFontFamily();
+  m_appFontSize = settings.uiFontSize();
   m_wordWrapEnabled = settings.wordWrap();
 
   m_tabWidget = new QTabWidget;
@@ -273,6 +274,8 @@ MainWindow::MainWindow(QWidget *parent)
   m_searchPanel = new SearchPanel;
   m_gitPanel = new GitPanel;
   m_settingsPanel = new SettingsPanel;
+  m_shortcutsDialog = new ShortcutsDialog(this);
+  m_lspManagerDialog = new LspManagerDialog(this);
 
   m_sidePanel = new QStackedWidget;
   m_sidePanel->addWidget(m_fileTree);
@@ -394,6 +397,8 @@ MainWindow::MainWindow(QWidget *parent)
           [this](const QString &msg) {
             if (lspEnabled() && m_settingsPanel)
               m_settingsPanel->appendLspLog(msg);
+            if (lspEnabled() && m_lspManagerDialog)
+              m_lspManagerDialog->appendLspLog(msg);
           });
 
   connect(m_lspClient, &LspClient::frontendStatusReceived, this, &MainWindow::onFrontendStatusReceived);
@@ -411,6 +416,8 @@ MainWindow::MainWindow(QWidget *parent)
             updateLspDiagnostics();
             if (m_settingsPanel)
               m_settingsPanel->appendLspLog("[error] " + msg);
+            if (m_lspManagerDialog)
+              m_lspManagerDialog->appendLspLog("[error] " + msg);
             statusBar()->showMessage("LSP: " + msg, 5000);
           });
 
@@ -462,6 +469,9 @@ MainWindow::MainWindow(QWidget *parent)
 
   statusBar()->addWidget(m_contextLabel);
   statusBar()->addWidget(m_lspLabel);
+  m_vimLabel = new QLabel(settings.vimMotionsEnabled() ? "VIM: NORMAL" : "VIM: OFF");
+  m_vimLabel->setStyleSheet("padding: 0 4px;");
+  statusBar()->addPermanentWidget(m_vimLabel);
 
   statusBar()->addPermanentWidget(m_errorLabel);
   statusBar()->addPermanentWidget(m_posLabel);
@@ -522,23 +532,13 @@ MainWindow::MainWindow(QWidget *parent)
   connect(m_gitPanel, &GitPanel::fileActivated, this,
           [this](const QString &path) { openFilePath(path); });
 
-  // Settings adjustments
-  connect(m_settingsPanel, &SettingsPanel::fontFamilyChanged, this,
-          &MainWindow::setAppFontFamily);
-  connect(m_settingsPanel, &SettingsPanel::fontSizeChanged, this,
-          &MainWindow::setAppFontSize);
-  connect(m_settingsPanel, &SettingsPanel::wordWrapChanged, this,
-          &MainWindow::setWordWrapEnabled);
-  connect(m_settingsPanel, &SettingsPanel::themeChanged, this,
-          [this](const QString &theme) {
-            TomlSettingsStore::instance().setTheme(theme);
-            applyThemeAndLanguage();
-          });
-  connect(m_settingsPanel, &SettingsPanel::localeChanged, this,
-          [this](const QString &locale) {
-            TomlSettingsStore::instance().setLocale(locale);
-            applyThemeAndLanguage();
-          });
+  // The side settings panel contains runtime/LSP status and shortcut help.
+  connect(m_settingsPanel, &SettingsPanel::openPreferencesRequested, this,
+          &MainWindow::showPreferences);
+  connect(m_settingsPanel, &SettingsPanel::openShortcutsRequested, this,
+          &MainWindow::showShortcutsDialog);
+  connect(m_settingsPanel, &SettingsPanel::openLspManagerRequested, this,
+          &MainWindow::showLspManagerDialog);
   connect(m_settingsPanel, &SettingsPanel::lspEnabledChanged, this,
           &MainWindow::setLspEnabled);
   connect(m_settingsPanel, &SettingsPanel::refreshRuntimeRequested, this,
@@ -548,10 +548,16 @@ MainWindow::MainWindow(QWidget *parent)
           });
   connect(m_settingsPanel, &SettingsPanel::clearRuntimeCacheRequested, this,
           &MainWindow::clearRuntimeCache);
+  connect(m_lspManagerDialog, &LspManagerDialog::lspEnabledChanged, this,
+          &MainWindow::setLspEnabled);
+  connect(m_lspManagerDialog, &LspManagerDialog::refreshRuntimeRequested, this,
+          [this]() {
+            if (lspEnabled())
+              ensureLspRuntime(false);
+          });
+  connect(m_lspManagerDialog, &LspManagerDialog::clearRuntimeCacheRequested,
+          this, &MainWindow::clearRuntimeCache);
 
-  m_settingsPanel->setFontFamily(m_appFontFamily);
-  m_settingsPanel->setFontSize(m_appFontSize);
-  m_settingsPanel->setWordWrapEnabled(m_wordWrapEnabled);
   updateSettingsRuntimeInfo();
 
   // Context Navigation
@@ -633,38 +639,28 @@ MainWindow::MainWindow(QWidget *parent)
 
   auto *explorerShortcut = new QShortcut(QKeySequence("Ctrl+Shift+E"), this);
   connect(explorerShortcut, &QShortcut::activated, this, [this]() {
-    m_activityBar->setActiveMode(ActivityBar::Explorer);
-    m_sidePanel->show();
-    m_fileTree->setFocus();
-    TomlSettingsStore::instance().setSidebarVisible(true);
+    setSidebarMode(ActivityBar::Explorer);
+    if (m_sidePanel->isVisible()) m_fileTree->setFocus();
   });
 
   auto *workspaceSearchShortcut =
       new QShortcut(QKeySequence("Ctrl+Shift+F"), this);
   connect(workspaceSearchShortcut, &QShortcut::activated, this, [this]() {
-    m_activityBar->setActiveMode(ActivityBar::Search);
-    m_sidePanel->show();
-    TomlSettingsStore::instance().setSidebarVisible(true);
+    setSidebarMode(ActivityBar::Search);
   });
 
   auto *gitShortcut = new QShortcut(QKeySequence("Ctrl+Shift+G"), this);
   connect(gitShortcut, &QShortcut::activated, this, [this]() {
-    m_activityBar->setActiveMode(ActivityBar::Git);
-    m_sidePanel->show();
-    TomlSettingsStore::instance().setSidebarVisible(true);
+    setSidebarMode(ActivityBar::Git);
   });
 
   auto *settingsShortcut = new QShortcut(QKeySequence("Ctrl+,"), this);
-  connect(settingsShortcut, &QShortcut::activated, this, [this]() {
-    m_activityBar->setActiveMode(ActivityBar::Settings);
-    m_sidePanel->show();
-    TomlSettingsStore::instance().setSidebarVisible(true);
-  });
+  connect(settingsShortcut, &QShortcut::activated, this,
+          &MainWindow::showPreferences);
 
   auto *hideSidebarShortcut = new QShortcut(QKeySequence("Ctrl+Shift+X"), this);
   connect(hideSidebarShortcut, &QShortcut::activated, this, [this]() {
-    m_sidePanel->hide();
-    TomlSettingsStore::instance().setSidebarVisible(false);
+    toggleFileTree(false);
   });
 
   m_initialContextSetup = false;
@@ -809,6 +805,8 @@ MainWindow::MainWindow(QWidget *parent)
 
   connect(m_activityBar, &ActivityBar::modeChanged, this,
           [this](ActivityBar::Mode mode) { setSidebarMode(mode); });
+  connect(m_activityBar, &ActivityBar::preferencesRequested, this,
+          &MainWindow::showPreferences);
 
   // Menus
   m_fileMenu = menuBar()->addMenu("&File");
@@ -866,6 +864,17 @@ MainWindow::MainWindow(QWidget *parent)
   });
 
   m_viewMenu = menuBar()->addMenu("&View");
+  m_preferencesAct = m_viewMenu->addAction("&Preferences...", QKeySequence("Ctrl+,"));
+  connect(m_preferencesAct, &QAction::triggered, this, &MainWindow::showPreferences);
+  m_vimHelpAct = m_viewMenu->addAction("Vim Motions...");
+  connect(m_vimHelpAct, &QAction::triggered, this,
+          &MainWindow::showVimHelpDialog);
+  m_shortcutsAct = m_viewMenu->addAction("Shortcuts...");
+  connect(m_shortcutsAct, &QAction::triggered, this,
+          &MainWindow::showShortcutsDialog);
+  m_lspManagerAct = m_viewMenu->addAction("LSP Manager...");
+  connect(m_lspManagerAct, &QAction::triggered, this,
+          &MainWindow::showLspManagerDialog);
   m_viewMenu->addAction(m_diagnosticsPanel->toggleViewAction());
   m_viewMenu->addAction(m_referencesPanel->toggleViewAction());
   m_viewMenu->addAction(m_compilerPanel->toggleViewAction());
@@ -880,6 +889,19 @@ MainWindow::MainWindow(QWidget *parent)
 
   // Apply active theme/language and load last recent workspace on startup
   applyThemeAndLanguage();
+  connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this,
+          [this]() { applyTheme(); });
+  connect(&AppearanceController::instance(), &AppearanceController::appearanceChanged,
+          this, [this]() {
+            for (int i = 0; i < m_tabWidget->count(); ++i)
+              applyEditorPreferences(qobject_cast<CodeEditor *>(m_tabWidget->widget(i)));
+            applyTheme();
+          });
+  connect(&TranslationManager::instance(), &TranslationManager::localeChanged,
+          this, [this]() {
+            m_appliedLocale = TomlSettingsStore::instance().locale();
+            applyTranslations();
+          });
 
   QStringList recents = settings.recentProjects();
   QString lastProj;
@@ -986,13 +1008,7 @@ void MainWindow::openFilePath(const QString &path) {
 
 CodeEditor *MainWindow::createTab(bool makeCurrent) {
   auto *editor = new CodeEditor;
-
-  QFont font("JetBrains Mono", 12);
-  if (!QFontInfo(font).exactMatch())
-    font = QFont("Monospace", 12);
-  font.setStyleStrategy(QFont::PreferAntialias);
-  font.setPointSize(m_appFontSize);
-  editor->setFont(font);
+  editor->setFont(AppearanceController::instance().editorFont());
 
   auto *hl = new SyntaxHighlighter(editor->document());
   m_highlighters.insert(editor, hl);
@@ -1025,6 +1041,10 @@ void MainWindow::connectEditorSignals(CodeEditor *editor) {
   connect(editor, &CodeEditor::cursorPositionChanged, this, [this]() {
     if (auto *ed = currentEditor())
       updateEditorChrome(ed);
+  });
+  connect(editor, &CodeEditor::vimModeChanged, this, [this, editor](const QString &mode) {
+    if (editor == currentEditor() && m_vimLabel)
+      m_vimLabel->setText("VIM: " + mode);
   });
 
   connect(editor, &CodeEditor::navigateToLocation, this,
@@ -1137,6 +1157,7 @@ void MainWindow::saveFile() {
 void MainWindow::toggleFileTree(bool show) {
   m_sidePanel->setVisible(show);
   TomlSettingsStore::instance().setSidebarVisible(show);
+  m_activityBar->setActiveMode(ActivityBar::Mode(m_sidePanel->currentIndex()), show);
 }
 
 void MainWindow::saveContextState() {
@@ -1181,8 +1202,8 @@ CodeEditor *MainWindow::currentEditor() const {
 void MainWindow::setSidebarMode(ActivityBar::Mode mode) {
   bool visible = m_sidePanel->isVisible();
 
-  if (mode == ActivityBar::Explorer && visible &&
-      m_sidePanel->currentIndex() == int(ActivityBar::Explorer)) {
+  if (visible &&
+      m_sidePanel->currentIndex() == int(mode)) {
     toggleFileTree(false);
     return;
   }
@@ -1192,35 +1213,59 @@ void MainWindow::setSidebarMode(ActivityBar::Mode mode) {
   if (mode == ActivityBar::Git)
     m_gitPanel->refreshStatus();
 
-  if (!visible)
+  toggleFileTree(true);
+}
+
+void MainWindow::showSettingsPanel()
+{
+  m_sidePanel->setCurrentWidget(m_settingsPanel);
+  if (!m_sidePanel->isVisible())
     toggleFileTree(true);
+  TomlSettingsStore::instance().setSidebarVisible(true);
+}
+
+void MainWindow::showShortcutsDialog()
+{
+  if (!m_shortcutsDialog) return;
+  if (m_shortcutsDialog->isVisible()) {
+      m_shortcutsDialog->close();
+      return;
+  }
+  m_shortcutsDialog->show();
+  m_shortcutsDialog->raise();
+  m_shortcutsDialog->activateWindow();
+}
+
+void MainWindow::showLspManagerDialog()
+{
+  if (!m_lspManagerDialog) return;
+  if (m_lspManagerDialog->isVisible()) {
+      m_lspManagerDialog->close();
+      return;
+  }
+  m_lspManagerDialog->show();
+  m_lspManagerDialog->raise();
+  m_lspManagerDialog->activateWindow();
 }
 
 void MainWindow::applyEditorPreferences(CodeEditor *editor) {
   if (!editor)
     return;
 
-  QFont editorFont = editor->font();
-  editorFont.setPointSize(m_appFontSize);
-  editor->setFont(editorFont);
+  editor->setFont(AppearanceController::instance().editorFont());
   editor->setLineWrapMode(m_wordWrapEnabled ? QPlainTextEdit::WidgetWidth
                                             : QPlainTextEdit::NoWrap);
   editor->update();
+  editor->setVimMotionsEnabled(TomlSettingsStore::instance().vimMotionsEnabled());
 }
 
 void MainWindow::setAppFontFamily(const QString &family) {
   m_appFontFamily = family;
 
-  QFont font = QApplication::font();
-  font.setFamily(family == "System Default" || family.isEmpty()
-                     ? QGuiApplication::font().family()
-                     : family);
-  QApplication::setFont(font);
+  AppearanceController::instance().setUiFontFamily(family);
 
   for (int i = 0; i < m_tabWidget->count(); ++i) {
     if (auto *ed = qobject_cast<CodeEditor *>(m_tabWidget->widget(i))) {
-      ed->setFont(font); // keep the updated family but editor might have its
-                         // own preferences.
       applyEditorPreferences(ed);
     }
   }
@@ -1230,9 +1275,7 @@ void MainWindow::setAppFontFamily(const QString &family) {
 void MainWindow::setAppFontSize(int pointSize) {
   m_appFontSize = pointSize;
 
-  QFont font = QApplication::font();
-  font.setPointSize(pointSize);
-  QApplication::setFont(font);
+  AppearanceController::instance().setUiFontSize(pointSize);
 
   for (int i = 0; i < m_tabWidget->count(); ++i) {
     if (auto *ed = qobject_cast<CodeEditor *>(m_tabWidget->widget(i))) {
@@ -1307,7 +1350,10 @@ void MainWindow::applyThemeAndLanguage() {
     return;
 
   if (themeChanged) {
-    ThemeManager::instance().loadTheme(store.theme());
+    if (store.theme() == "custom" && !store.customThemePath().isEmpty())
+      ThemeManager::instance().loadThemeFile(store.customThemePath(), "Custom Theme");
+    else
+      ThemeManager::instance().loadTheme(store.theme());
     m_appliedTheme = store.theme();
     applyTheme();
     m_settingsPanel->setTheme(m_appliedTheme);
@@ -1357,6 +1403,35 @@ void MainWindow::applyTheme() {
 #endif
 }
 
+void MainWindow::showPreferences()
+{
+  if (!m_preferencesDialog) {
+      m_preferencesDialog = new PreferencesDialog(this);
+  }
+  if (m_preferencesDialog->isVisible()) {
+      m_preferencesDialog->close();
+      return;
+  }
+  m_preferencesDialog->show();
+  m_preferencesDialog->raise();
+  m_preferencesDialog->activateWindow();
+}
+
+
+void MainWindow::showVimHelpDialog()
+{
+  if (!m_vimHelpDialog) {
+      m_vimHelpDialog = new VimHelpDialog(this);
+  }
+  if (m_vimHelpDialog->isVisible()) {
+      m_vimHelpDialog->close();
+      return;
+  }
+  m_vimHelpDialog->show();
+  m_vimHelpDialog->raise();
+  m_vimHelpDialog->activateWindow();
+}
+
 void MainWindow::applyTranslations() {
   auto &tr = TranslationManager::instance();
 
@@ -1375,8 +1450,25 @@ void MainWindow::applyTranslations() {
   m_restartLspAct->setText(tr.translate("menu.restart_lsp"));
 
   m_viewMenu->setTitle(tr.translate("menu.view"));
+  m_preferencesAct->setText(tr.translate("menu.preferences"));
+  m_vimHelpAct->setText(tr.translate("menu.vim_motions"));
+  m_shortcutsAct->setText(tr.translate("menu.shortcuts"));
+  m_lspManagerAct->setText(tr.translate("menu.lsp_manager"));
   m_helpMenu->setTitle(tr.translate("menu.help"));
   m_gettingStartedAct->setText(tr.translate("welcome.getting_started"));
+
+  m_activityBar->setButtonToolTip(
+      ActivityBar::Explorer,
+      tr.translate("shortcut.explorer") + " (Ctrl+Shift+E)");
+  m_activityBar->setButtonToolTip(
+      ActivityBar::Search,
+      tr.translate("shortcut.global_search") + " (Ctrl+Shift+F)");
+  m_activityBar->setButtonToolTip(
+      ActivityBar::Git,
+      tr.translate("shortcut.git_panel") + " (Ctrl+Shift+G)");
+  m_activityBar->setButtonToolTip(
+      ActivityBar::Settings,
+      tr.translate("shortcut.settings") + " (Ctrl+,)");
 }
 
 bool MainWindow::lspEnabled() const {
@@ -1387,6 +1479,8 @@ void MainWindow::setLspEnabled(bool enabled) {
   TomlSettingsStore::instance().setLspEnabled(enabled);
   if (m_settingsPanel)
     m_settingsPanel->setLspEnabled(enabled);
+  if (m_lspManagerDialog)
+    m_lspManagerDialog->setLspEnabled(enabled);
 
   if (m_restartLspAct)
     m_restartLspAct->setEnabled(enabled);
@@ -1471,18 +1565,25 @@ void MainWindow::startLspRuntime(const QString &lspPath,
 }
 
 void MainWindow::updateSettingsRuntimeInfo() {
-  if (!m_settingsPanel || !m_zithToolchainManager)
+  if (!m_zithToolchainManager)
     return;
 
-  m_settingsPanel->setRuntimeInfo(
-      m_runtimeStatusText, m_runtimeTag, m_activeLspPath, m_activeStdlibPath,
-      m_zithToolchainManager->runtimeCacheRootPath());
+  if (m_settingsPanel) {
+    m_settingsPanel->setRuntimeInfo(
+        m_runtimeStatusText, m_runtimeTag, m_activeLspPath, m_activeStdlibPath,
+        m_zithToolchainManager->runtimeCacheRootPath());
+  }
+  if (m_lspManagerDialog) {
+    m_lspManagerDialog->setRuntimeInfo(
+        m_runtimeStatusText, m_runtimeTag, m_activeLspPath, m_activeStdlibPath,
+        m_zithToolchainManager->runtimeCacheRootPath());
+  }
 
   updateLspDiagnostics();
 }
 
 void MainWindow::updateLspDiagnostics() {
-  if (!m_settingsPanel)
+  if (!m_settingsPanel && !m_lspManagerDialog)
     return;
 
   QString connection = "Not started";
@@ -1513,7 +1614,10 @@ void MainWindow::updateLspDiagnostics() {
     }
   }
 
-  m_settingsPanel->setLspDiagnostics(connection, syncMode, m_lastLspError);
+  if (m_settingsPanel)
+    m_settingsPanel->setLspDiagnostics(connection, syncMode, m_lastLspError);
+  if (m_lspManagerDialog)
+    m_lspManagerDialog->setLspDiagnostics(connection, syncMode, m_lastLspError);
 }
 
 void MainWindow::clearRuntimeCache() {
@@ -1599,6 +1703,9 @@ void MainWindow::saveAllForLsp() {
       if (editor->document()->isModified() && m_settingsPanel)
         m_settingsPanel->appendLspLog(
             "Cannot save untitled document requested by zith/requestSaveAll.");
+      if (editor->document()->isModified() && m_lspManagerDialog)
+        m_lspManagerDialog->appendLspLog(
+            "Cannot save untitled document requested by zith/requestSaveAll.");
       continue;
     }
     if (!editor->document()->isModified())
@@ -1607,6 +1714,8 @@ void MainWindow::saveAllForLsp() {
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
       if (m_settingsPanel)
         m_settingsPanel->appendLspLog("Could not save " + editor->filePath());
+      if (m_lspManagerDialog)
+        m_lspManagerDialog->appendLspLog("Could not save " + editor->filePath());
       continue;
     }
     QTextStream stream(&file);
@@ -1722,8 +1831,10 @@ void MainWindow::onFrontendStatusReceived(const QJsonObject &status) {
         setLspStatus("LSP !", "#e78284");
     }
     if (m_settingsPanel) m_settingsPanel->appendLspLog("Frontend status: " + state + (msg.isEmpty() ? "" : " - " + msg));
+    if (m_lspManagerDialog) m_lspManagerDialog->appendLspLog("Frontend status: " + state + (msg.isEmpty() ? "" : " - " + msg));
 }
 
 void MainWindow::onMetricsReceived(const QJsonObject &metrics) {
     if (m_settingsPanel) m_settingsPanel->appendLspLog("Metrics: " + QString::fromUtf8(QJsonDocument(metrics).toJson(QJsonDocument::Compact)));
+    if (m_lspManagerDialog) m_lspManagerDialog->appendLspLog("Metrics: " + QString::fromUtf8(QJsonDocument(metrics).toJson(QJsonDocument::Compact)));
 }

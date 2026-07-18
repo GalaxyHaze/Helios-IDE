@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 project(Helios)
+include(CTest)
 
 # Ninja is a single-configuration generator. Default to an optimized build while
 # preserving an explicit choice such as -DCMAKE_BUILD_TYPE=Debug.
@@ -32,6 +33,8 @@ add_executable(Helios
     editor/core/TomlSettingsStore.cpp
     editor/core/ThemeManager.h
     editor/core/ThemeManager.cpp
+    editor/core/AppearanceController.h
+    editor/core/AppearanceController.cpp
     editor/core/TranslationManager.h
     editor/core/TranslationManager.cpp
     editor/panels/WelcomeWidget.h
@@ -46,6 +49,8 @@ add_executable(Helios
     editor/editor/Code.cpp
     editor/editor/Syntax.h
     editor/editor/Syntax.cpp
+    editor/editor/VimMotionController.h
+    editor/editor/VimMotionController.cpp
     editor/editor/LspClient.h
     editor/editor/LspClient.cpp
     editor/core/ZithToolchainManager.h
@@ -76,6 +81,14 @@ add_executable(Helios
     editor/panels/GitPanel.cpp
     editor/panels/SettingsPanel.h
     editor/panels/SettingsPanel.cpp
+    editor/panels/PreferencesDialog.h
+    editor/panels/PreferencesDialog.cpp
+    editor/panels/ShortcutsDialog.h
+    editor/panels/ShortcutsDialog.cpp
+    editor/panels/LspManagerDialog.h
+    editor/panels/LspManagerDialog.cpp
+    editor/panels/VimHelpDialog.h
+    editor/panels/VimHelpDialog.cpp
     editor/assets/resources.qrc
 )
 
@@ -97,16 +110,27 @@ add_executable(test_helios
     editor/core/TomlSettingsStore.cpp
     editor/core/ThemeManager.h
     editor/core/ThemeManager.cpp
+    editor/core/AppearanceController.h
+    editor/core/AppearanceController.cpp
+    editor/editor/Syntax.h
+    editor/editor/Syntax.cpp
+    editor/editor/VimMotionController.h
+    editor/editor/VimMotionController.cpp
     editor/core/TranslationManager.h
     editor/core/TranslationManager.cpp
+    editor/panels/SettingsPanel.h
+    editor/panels/SettingsPanel.cpp
     editor/widgets/ProjectTreeModel.h
     editor/widgets/ProjectTreeModel.cpp
 )
 target_link_libraries(test_helios PRIVATE
     Qt6::Core
     Qt6::Widgets
+    Qt6::Gui
     Qt6::Test
 )
+add_test(NAME HeliosTests COMMAND test_helios)
+set_tests_properties(HeliosTests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
 #Optmizations, clang, please use Clang to compile this
 if(CMAKE_BUILD_TYPE MATCHES "Release|RelWithDebInfo|MinSizeRel")

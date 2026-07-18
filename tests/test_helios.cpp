@@ -7,10 +7,17 @@
 #include <QTextStream>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QPlainTextEdit>
+#include <QKeyEvent>
+#include <QPushButton>
 
 #include "../editor/core/TomlSettingsStore.h"
+#include "../editor/core/AppearanceController.h"
 #include "../editor/core/ThemeManager.h"
 #include "../editor/core/TranslationManager.h"
+#include "../editor/panels/SettingsPanel.h"
+#include "../editor/editor/Syntax.h"
+#include "../editor/editor/VimMotionController.h"
 #include "../editor/widgets/ProjectTreeModel.h"
 
 class TestHelios : public QObject
@@ -29,19 +36,31 @@ private slots:
         store.setLocale("pt-BR");
         store.setSidebarVisible(false);
         store.setTreeMaxDepth(20);
+        store.setUiFontFamily("Sans Serif");
+        store.setUiFontSize(14);
+        store.setEditorFontFamily("Monospace");
+        store.setEditorFontSize(15);
+        store.setRenderingStrategy("no-antialias");
+        store.setUiScale(125);
+        store.setVimMotionsEnabled(true);
 
         QStringList projects = {"/path/to/a", "/path/to/b"};
         store.setRecentProjects(projects);
         store.save();
 
         store.load();
-        QCOMPARE(store.fontSize(), 15);
+        QCOMPARE(store.fontSize(), 14);
         QCOMPARE(store.theme(), QString("helios-dark"));
         QCOMPARE(store.locale(), QString("pt-BR"));
         QCOMPARE(store.sidebarVisible(), false);
         QCOMPARE(store.treeMaxDepth(), 20);
         QCOMPARE(store.recentProjects().size(), 2);
         QCOMPARE(store.recentProjects().first(), QString("/path/to/a"));
+        QCOMPARE(store.uiFontSize(), 14);
+        QCOMPARE(store.editorFontSize(), 15);
+        QCOMPARE(store.uiScale(), 125);
+        QVERIFY(store.vimMotionsEnabled());
+        QCOMPARE(store.customThemePath(), QString());
     }
 
     void testThemeManagerFallback() {
@@ -87,6 +106,11 @@ private slots:
             "bracketBg", "bracketFg", "diagnosticError", "diagnosticWarning",
             "diagnosticInfo", "diagnosticUnknown"
         };
+        const QStringList syntaxKeys = {
+            "comment", "string", "number", "type", "control", "declaration",
+            "storage", "async", "exception", "keyword", "literal",
+            "logicalOperator", "operator", "otherOperator", "bracket", "punctuation"
+        };
 
         auto &tm = ThemeManager::instance();
         for (const QString &themeId : themeIds) {
@@ -104,6 +128,7 @@ private slots:
             QVERIFY(root.value("name").isString());
             const QJsonObject palette = root.value("palette").toObject();
             const QJsonObject custom = root.value("custom").toObject();
+            const QJsonObject syntax = root.value("syntax").toObject();
             for (const QString &key : paletteKeys) {
                 QVERIFY2(palette.value(key).isString(), qPrintable(themeId + ":" + key));
                 QVERIFY(QColor(palette.value(key).toString()).isValid());
@@ -112,13 +137,110 @@ private slots:
                 QVERIFY2(custom.value(key).isString(), qPrintable(themeId + ":" + key));
                 QVERIFY(QColor(custom.value(key).toString()).isValid());
             }
+            for (const QString &key : syntaxKeys) {
+                const QJsonObject style = syntax.value(key).toObject();
+                QVERIFY2(style.value("color").isString(), qPrintable(themeId + ":syntax:" + key));
+                QVERIFY(QColor(style.value("color").toString()).isValid());
+            }
 
             QVERIFY2(tm.loadTheme(themeId), qPrintable(themeId));
             QCOMPARE(tm.currentThemeName(), themeId);
             QVERIFY(tm.palette().color(QPalette::Window).isValid());
             QVERIFY(tm.customColor("editorBg").isValid());
             QVERIFY(tm.customColor("diagnosticError").isValid());
+            QVERIFY(tm.syntaxStyle("comment").color.isValid());
         }
+    }
+
+    void testSyntaxThemeReload() {
+        auto &tm = ThemeManager::instance();
+        QVERIFY(tm.loadTheme("helios-dark"));
+        QTextDocument document;
+        SyntaxHighlighter highlighter(&document);
+        document.setPlainText("fn value = 42 // note");
+        highlighter.rehighlight();
+        QVERIFY(tm.loadTheme("helios-light"));
+        const QTextLayout::FormatRange range = document.firstBlock().layout()->formats().first();
+        QVERIFY(range.format.foreground().color().isValid());
+    }
+
+    void testCustomThemeFileAndScaleIsolation() {
+        auto &store = TomlSettingsStore::instance();
+        store.setEditorFontSize(17);
+        store.setUiFontSize(13);
+        store.setUiScale(175);
+
+        QTemporaryDir tempDir;
+        QVERIFY(tempDir.isValid());
+        QFile themeFile(QDir(tempDir.path()).filePath("custom-theme.json"));
+        QVERIFY(themeFile.open(QIODevice::WriteOnly | QIODevice::Text));
+        QTextStream out(&themeFile);
+        out << "{\n"
+            << "  \"name\": \"Custom Theme\",\n"
+            << "  \"palette\": {\n"
+            << "    \"window\": \"#1a1f2b\",\n"
+            << "    \"windowText\": \"#f0f3f8\",\n"
+            << "    \"base\": \"#131722\",\n"
+            << "    \"alternateBase\": \"#1e2431\",\n"
+            << "    \"toolTipBase\": \"#252b3a\",\n"
+            << "    \"toolTipText\": \"#edf0fa\",\n"
+            << "    \"text\": \"#d9deeb\",\n"
+            << "    \"button\": \"#202638\",\n"
+            << "    \"buttonText\": \"#e6e9f2\",\n"
+            << "    \"brightText\": \"#ff7a90\",\n"
+            << "    \"link\": \"#8fa2ff\",\n"
+            << "    \"highlight\": \"#3b5ccc\",\n"
+            << "    \"highlightedText\": \"#ffffff\"\n"
+            << "  },\n"
+            << "  \"custom\": { \"editorBg\": \"#10151f\" },\n"
+            << "  \"syntax\": {\n"
+            << "    \"comment\": { \"color\": \"#6A5A8A\" }\n"
+            << "  }\n"
+            << "}\n";
+        themeFile.close();
+
+        QVERIFY(AppearanceController::instance().setThemeFile(themeFile.fileName()));
+        QCOMPARE(TomlSettingsStore::instance().theme(), QString("custom"));
+        QCOMPARE(TomlSettingsStore::instance().customThemePath(), themeFile.fileName());
+        QCOMPARE(AppearanceController::instance().editorFont().pointSize(), 17);
+        QCOMPARE(AppearanceController::instance().uiFont().pointSize(),
+                 qRound(13 * 1.75));
+    }
+
+    void testVimMotions() {
+        QPlainTextEdit editor;
+        editor.setPlainText("alpha beta\ngamma delta");
+        VimMotionController controller(&editor);
+        controller.setEnabled(true);
+        auto press = [&controller](int key, const QString &text) {
+            QKeyEvent event(QEvent::KeyPress, key, Qt::NoModifier, text);
+            QVERIFY(controller.handleKeyPress(&event));
+        };
+        press(Qt::Key_2, "2");
+        press(Qt::Key_L, "l");
+        QCOMPARE(editor.textCursor().positionInBlock(), 2);
+        press(Qt::Key_W, "w");
+        QCOMPARE(editor.textCursor().positionInBlock(), 6);
+        press(Qt::Key_F, "f");
+        press(Qt::Key_A, "a");
+        QCOMPARE(editor.textCursor().positionInBlock(), 9);
+        press(Qt::Key_G, "g");
+        press(Qt::Key_G, "g");
+        QCOMPARE(editor.textCursor().blockNumber(), 0);
+        press(Qt::Key_Semicolon, ";");
+        QCOMPARE(editor.textCursor().positionInBlock(), 4);
+        press(Qt::Key_Semicolon, ";");
+        QCOMPARE(editor.textCursor().positionInBlock(), 9);
+        press(Qt::Key_Comma, ",");
+        QCOMPARE(editor.textCursor().positionInBlock(), 4);
+        press(Qt::Key_W, "w");
+        press(Qt::Key_E, "e");
+        QCOMPARE(editor.textCursor().positionInBlock(), 10);
+        press(Qt::Key_I, "i");
+        QCOMPARE(controller.mode(), VimMotionController::Mode::Insert);
+        QKeyEvent escape(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+        QVERIFY(controller.handleKeyPress(&escape));
+        QCOMPARE(controller.mode(), VimMotionController::Mode::Normal);
     }
 
     void testTranslationManagerFallback() {
@@ -129,6 +251,20 @@ private slots:
 
         QString validVal = tr.translate("menu.new_file");
         QCOMPARE(validVal, QString("Novo Arquivo"));
+    }
+
+    void testSettingsPanelPreferencesCta() {
+        TranslationManager::instance().loadLocale("en-US");
+
+        SettingsPanel panel;
+        QSignalSpy spy(&panel, &SettingsPanel::openPreferencesRequested);
+
+        auto *button = panel.findChild<QPushButton *>("openPreferencesButton");
+        QVERIFY(button);
+        QVERIFY(!button->text().isEmpty());
+
+        button->click();
+        QCOMPARE(spy.count(), 1);
     }
 
     void testProjectTreeModelLimitAndPagination() {

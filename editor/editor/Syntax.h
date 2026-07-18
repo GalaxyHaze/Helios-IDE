@@ -29,6 +29,7 @@ private:
 
     // Maps your ZithTokenType enums (simulated here by strings/groups) to Colors
     void initializeHighlightingRules();
+    QTextCharFormat formatFor(const QString &token) const;
 
     // Helper to add a list of keywords to a specific rule group
     void addKeywords(const QStringList &keywordList, const QColor &color, bool bold = false);

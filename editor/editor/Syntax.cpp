@@ -1,4 +1,5 @@
 #include "Syntax.h"
+#include "../core/ThemeManager.h"
 
 
 // ── Zith Dark theme token colors ─────────────────────────────────────
@@ -11,82 +12,78 @@ SyntaxHighlighter::SyntaxHighlighter(QTextDocument *parent)
 #endif
 
 {
+    initializeHighlightingRules();
+    connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this,
+            [this]() { initializeHighlightingRules(); rehighlight(); });
+}
+
+QTextCharFormat SyntaxHighlighter::formatFor(const QString &token) const
+{
+    const SyntaxStyle style = ThemeManager::instance().syntaxStyle(token);
+    QTextCharFormat format;
+    format.setForeground(style.color);
+    format.setFontWeight(style.bold ? QFont::Bold : QFont::Normal);
+    format.setFontItalic(style.italic);
+    return format;
+}
+
+void SyntaxHighlighter::initializeHighlightingRules()
+{
+    typeRules.clear();
+    controlFlowRules.clear();
+    keywordRules.clear();
+    operatorRules.clear();
+    stringRules.clear();
     // Comments — muted purple, italic (#6A5A8A)
-    QTextCharFormat commentFormat;
-    commentFormat.setForeground(QColor("#6A5A8A"));
-    commentFormat.setFontItalic(true);
+    const QTextCharFormat commentFormat = formatFor("comment");
 
     // Strings — green (#a6d189)
-    QTextCharFormat stringFormat;
-    stringFormat.setForeground(QColor("#a6d189"));
+    const QTextCharFormat stringFormat = formatFor("string");
 
     // Numbers — blue bold (#04a5e5)
-    QTextCharFormat numberFormat;
-    numberFormat.setForeground(QColor("#04a5e5"));
-    numberFormat.setFontWeight(QFont::Bold);
+    const QTextCharFormat numberFormat = formatFor("number");
 
     // Primitive types — purple bold (#ca9ee6)
-    QTextCharFormat typeFormat;
-    typeFormat.setForeground(QColor("#ca9ee6"));
-    typeFormat.setFontWeight(QFont::Bold);
+    const QTextCharFormat typeFormat = formatFor("type");
 
     // Control flow — red bold (#e64553)
-    QTextCharFormat controlFlowFormat;
-    controlFlowFormat.setForeground(QColor("#e64553"));
-    controlFlowFormat.setFontWeight(QFont::Bold);
+    const QTextCharFormat controlFlowFormat = formatFor("control");
 
     // Declaration keywords (struct, fn, import, etc.) — purple bold (#8839ef)
-    QTextCharFormat declFormat;
-    declFormat.setForeground(QColor("#8839ef"));
-    declFormat.setFontWeight(QFont::Bold);
+    const QTextCharFormat declFormat = formatFor("declaration");
 
     // Storage modifiers (let, var, const, mut) — teal (#81c8be)
-    QTextCharFormat storageFormat;
-    storageFormat.setForeground(QColor("#81c8be"));
+    const QTextCharFormat storageFormat = formatFor("storage");
 
     // Async keywords (spawn, await, join) — green bold (#a6d189)
-    QTextCharFormat asyncFormat;
-    asyncFormat.setForeground(QColor("#a6d189"));
-    asyncFormat.setFontWeight(QFont::Bold);
+    const QTextCharFormat asyncFormat = formatFor("async");
 
     // Exception keywords (try, catch, throw) — orange bold (#df8e1d)
-    QTextCharFormat exceptionFormat;
-    exceptionFormat.setForeground(QColor("#df8e1d"));
-    exceptionFormat.setFontWeight(QFont::Bold);
+    const QTextCharFormat exceptionFormat = formatFor("exception");
 
     // Other keywords (require, is, prefix, etc.) — white (#eff1f5)
-    QTextCharFormat otherKeywordFormat;
-    otherKeywordFormat.setForeground(QColor("#eff1f5"));
+    const QTextCharFormat otherKeywordFormat = formatFor("keyword");
 
     // Boolean/null — red-orange bold (#dd7878)
-    QTextCharFormat literalFormat;
-    literalFormat.setForeground(QColor("#dd7878"));
-    literalFormat.setFontWeight(QFont::Bold);
+    const QTextCharFormat literalFormat = formatFor("literal");
 
     // Logical operators (and, or, not) — red bold (#d20f39)
-    QTextCharFormat logicalOpFormat;
-    logicalOpFormat.setForeground(QColor("#d20f39"));
-    logicalOpFormat.setFontWeight(QFont::Bold);
+    const QTextCharFormat logicalOpFormat = formatFor("logicalOperator");
 
     // Comparison/assignment/arithmetic operators — blue (#7287fd)
-    QTextCharFormat operatorFormat;
-    operatorFormat.setForeground(QColor("#7287fd"));
+    const QTextCharFormat operatorFormat = formatFor("operator");
 
     // Other operators (->, ?) — teal (#179299)
-    QTextCharFormat otherOpFormat;
-    otherOpFormat.setForeground(QColor("#179299"));
+    const QTextCharFormat otherOpFormat = formatFor("otherOperator");
 
     // Punctuation (brackets) — pink (#ea999c)
-    QTextCharFormat bracketFormat;
-    bracketFormat.setForeground(QColor("#ea999c"));
+    const QTextCharFormat bracketFormat = formatFor("bracket");
 
     // Punctuation (., ; ,) — gray (#a5adce)
-    QTextCharFormat punctFormat;
-    punctFormat.setForeground(QColor("#a5adce"));
+    const QTextCharFormat punctFormat = formatFor("punctuation");
 
     // Multi-line comments — same as single-line
-    multiLineCommentFormat.setForeground(QColor("#6A5A8A"));
-    multiLineCommentFormat.setFontItalic(true);
+    multiLineCommentFormat = commentFormat;
 
     // ── Regex patterns ─────────────────────────────────────────
     commentStartExpression = QRegularExpression("/\\*");

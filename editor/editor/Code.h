@@ -11,6 +11,7 @@
 class LspCompleter;
 class SnippetManager;
 class LineNumberArea;
+class VimMotionController;
 
 class CodeEditor : public QPlainTextEdit {
   Q_OBJECT
@@ -43,6 +44,8 @@ public:
   int offsetForLspPosition(const LspPosition &pos) const;
   void applyEdits(const QList<QPair<LspRange, QString>> &edits);
   void setFindSelections(const QList<QTextEdit::ExtraSelection> &selections);
+  void setVimMotionsEnabled(bool enabled);
+  bool vimMotionsEnabled() const;
 
   friend class LineNumberArea;
 
@@ -53,6 +56,7 @@ signals:
   void codeActionsRequested(const QString &uri, int version,
                             const LspRange &range);
   void zoomChanged(double scaleFactor);
+  void vimModeChanged(const QString &mode);
 
 public slots:
   void onCompletionSelected(const QString &insertText,
@@ -131,6 +135,7 @@ private:
   QColor m_border;
   QColor m_bracketBg;
   QColor m_bracketFg;
+  VimMotionController *m_vimController = nullptr;
 };
 
 class LineNumberArea : public QWidget {

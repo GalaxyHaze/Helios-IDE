@@ -7,10 +7,6 @@
 #include <QLabel>
 #include <QPlainTextEdit>
 #include <QPushButton>
-#include <QSpinBox>
-#include <QFontComboBox>
-#include <QApplication>
-#include <QComboBox>
 #include <QVBoxLayout>
 #include <QSignalBlocker>
 #include <QTabWidget>
@@ -21,8 +17,6 @@
 namespace {
 constexpr int kPanelMargin = 8;
 constexpr int kPanelSpacing = 8;
-constexpr int kFontSizeMin = 8;
-constexpr int kFontSizeMax = 32;
 
 void setStyleSheetIfChanged(QWidget *widget, const QString &styleSheet)
 {
@@ -42,58 +36,41 @@ SettingsPanel::SettingsPanel(QWidget *parent)
     m_titleLabel->setStyleSheet("font-weight: bold; font-size: 13px;");
     layout->addWidget(m_titleLabel);
 
+    m_preferencesCard = new QWidget(this);
+    m_preferencesCard->setObjectName("preferencesCard");
+    auto *preferencesLayout = new QVBoxLayout(m_preferencesCard);
+    preferencesLayout->setContentsMargins(kPanelMargin, kPanelMargin, kPanelMargin, kPanelMargin);
+    preferencesLayout->setSpacing(6);
+
+    m_preferencesTitleLabel = new QLabel("Appearance");
+    m_preferencesTitleLabel->setStyleSheet("font-weight: bold; font-size: 13px;");
+    preferencesLayout->addWidget(m_preferencesTitleLabel);
+
+    m_hintLabel = new QLabel(
+        "Theme, fonts, scale, and Vim are configured in Preferences.");
+    m_hintLabel->setWordWrap(true);
+    m_hintLabel->setStyleSheet("font-size: 12px;");
+    preferencesLayout->addWidget(m_hintLabel);
+
+    m_openPreferencesButton = new QPushButton("Open Preferences...");
+    m_openPreferencesButton->setObjectName("openPreferencesButton");
+    preferencesLayout->addWidget(m_openPreferencesButton, 0, Qt::AlignLeft);
+
+    m_openShortcutsButton = new QPushButton("Open Shortcuts Window...");
+    m_openShortcutsButton->setObjectName("openShortcutsButton");
+    preferencesLayout->addWidget(m_openShortcutsButton, 0, Qt::AlignLeft);
+
+    m_openLspManagerButton = new QPushButton("Open LSP Manager...");
+    m_openLspManagerButton->setObjectName("openLspManagerButton");
+    preferencesLayout->addWidget(m_openLspManagerButton, 0, Qt::AlignLeft);
+    layout->addWidget(m_preferencesCard);
+
     m_tabWidget = new QTabWidget(this);
     m_tabWidget->setDocumentMode(true);
     layout->addWidget(m_tabWidget, 1);
 
-    // ──────────────── TAB 1: EDITOR ────────────────
-    auto *editorTab = new QWidget(this);
-    auto *editorLayout = new QVBoxLayout(editorTab);
-    editorLayout->setContentsMargins(kPanelMargin, kPanelMargin, kPanelMargin, kPanelMargin);
-    editorLayout->setSpacing(kPanelSpacing);
-
-    m_hintLabel = new QLabel("These options apply to the open editors in this window.");
-    m_hintLabel->setWordWrap(true);
-    m_hintLabel->setStyleSheet("font-size: 12px;");
-    editorLayout->addWidget(m_hintLabel);
-
-    auto *form = new QFormLayout;
-    form->setContentsMargins(0, 4, 0, 0);
-    form->setSpacing(kPanelSpacing);
-
-    m_fontFamilyCombo = new QFontComboBox;
-    form->addRow("Font Family", m_fontFamilyCombo);
-    
-    m_fontSizeSpin = new QSpinBox;
-    m_fontSizeSpin->setRange(kFontSizeMin, kFontSizeMax);
-    form->addRow("Font size", m_fontSizeSpin);
-
-    m_wordWrapCheck = new QCheckBox("Wrap long lines");
-    form->addRow(QString(), m_wordWrapCheck);
-
-    m_themeCombo = new QComboBox;
-    m_themeCombo->addItem("Helios Dark", "helios-dark");
-    m_themeCombo->addItem("Helios Light", "helios-light");
-    m_themeCombo->addItem("ColorMind Midnight", "colormind-midnight");
-    m_themeCombo->addItem("ColorMind Desert", "colormind-desert");
-    m_themeCombo->addItem("Helios Violet", "helios-violet-dark");
-    m_themeCombo->addItem("Helios Red", "helios-red-dark");
-    m_themeCombo->addItem("Helios Gold", "helios-gold-dark");
-    m_themeCombo->addItem("Helios Blue", "helios-blue-dark");
-    m_themeCombo->addItem("Helios Forest", "helios-forest-dark");
-    m_themeCombo->addItem("Helios Carbon", "helios-carbon-dark");
-    form->addRow("Theme", m_themeCombo);
-
-    m_localeCombo = new QComboBox;
-    m_localeCombo->addItem("English (US)", "en-US");
-    m_localeCombo->addItem("Português (BR)", "pt-BR");
-    form->addRow("Language", m_localeCombo);
-
-    editorLayout->addLayout(form);
-    editorLayout->addStretch();
-    m_tabWidget->addTab(editorTab, "Editor");
-
-    // ──────────────── TAB 2: SHORTCUTS ────────────────
+    // Appearance lives in the modal Preferences dialog.  The side panel is
+    // intentionally reserved for shortcuts and runtime/LSP state.
     auto *shortcutsTab = new QWidget(this);
     auto *shortcutsLayout = new QVBoxLayout(shortcutsTab);
     shortcutsLayout->setContentsMargins(kPanelMargin, kPanelMargin, kPanelMargin, kPanelMargin);
@@ -112,7 +89,7 @@ SettingsPanel::SettingsPanel(QWidget *parent)
     m_tabWidget->addTab(shortcutsTab, "Shortcuts");
     initializeShortcutTree();
 
-    // ──────────────── TAB 3: LSP & RUNTIME ────────────────
+    // ──────────────── TAB 2: LSP & RUNTIME ────────────────
     auto *lspTab = new QWidget(this);
     auto *lspLayout = new QVBoxLayout(lspTab);
     lspLayout->setContentsMargins(kPanelMargin, kPanelMargin, kPanelMargin, kPanelMargin);
@@ -198,12 +175,12 @@ SettingsPanel::SettingsPanel(QWidget *parent)
     lspLayout->addStretch();
     m_tabWidget->addTab(lspTab, "LSP");
 
-    connect(m_fontFamilyCombo, &QFontComboBox::currentFontChanged,
-            this, [this](const QFont &font) { emit fontFamilyChanged(font.family()); });
-    connect(m_fontSizeSpin, QOverload<int>::of(&QSpinBox::valueChanged),
-            this, &SettingsPanel::fontSizeChanged);
-    connect(m_wordWrapCheck, &QCheckBox::toggled,
-            this, &SettingsPanel::wordWrapChanged);
+    connect(m_openPreferencesButton, &QPushButton::clicked,
+            this, &SettingsPanel::openPreferencesRequested);
+    connect(m_openShortcutsButton, &QPushButton::clicked,
+            this, &SettingsPanel::openShortcutsRequested);
+    connect(m_openLspManagerButton, &QPushButton::clicked,
+            this, &SettingsPanel::openLspManagerRequested);
     connect(m_lspEnabledCheck, &QCheckBox::toggled,
             this, &SettingsPanel::lspEnabledChanged);
     connect(m_refreshRuntimeButton, &QPushButton::clicked,
@@ -211,12 +188,6 @@ SettingsPanel::SettingsPanel(QWidget *parent)
     connect(m_clearRuntimeCacheButton, &QPushButton::clicked,
             this, &SettingsPanel::clearRuntimeCacheRequested);
 
-    connect(m_themeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int idx) {
-        emit themeChanged(m_themeCombo->itemData(idx).toString());
-    });
-    connect(m_localeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int idx) {
-        emit localeChanged(m_localeCombo->itemData(idx).toString());
-    });
 
     connect(&ThemeManager::instance(), &ThemeManager::themeChanged,
             this, &SettingsPanel::applyTheme);
@@ -229,42 +200,27 @@ SettingsPanel::SettingsPanel(QWidget *parent)
 
 void SettingsPanel::setFontFamily(const QString &family)
 {
-    QSignalBlocker blocker(m_fontFamilyCombo);
-    if (family == "System Default" || family.isEmpty()) {
-        m_fontFamilyCombo->setCurrentFont(QApplication::font());
-    } else {
-        m_fontFamilyCombo->setCurrentFont(QFont(family));
-    }
+    Q_UNUSED(family);
 }
 
 void SettingsPanel::setFontSize(int pointSize)
 {
-    QSignalBlocker blocker(m_fontSizeSpin);
-    m_fontSizeSpin->setValue(pointSize);
+    Q_UNUSED(pointSize);
 }
 
 void SettingsPanel::setWordWrapEnabled(bool enabled)
 {
-    QSignalBlocker blocker(m_wordWrapCheck);
-    m_wordWrapCheck->setChecked(enabled);
+    Q_UNUSED(enabled);
 }
 
 void SettingsPanel::setTheme(const QString &themeName)
 {
-    int idx = m_themeCombo->findData(themeName);
-    if (idx != -1) {
-        QSignalBlocker blocker(m_themeCombo);
-        m_themeCombo->setCurrentIndex(idx);
-    }
+    Q_UNUSED(themeName);
 }
 
 void SettingsPanel::setLocale(const QString &locale)
 {
-    int idx = m_localeCombo->findData(locale);
-    if (idx != -1) {
-        QSignalBlocker blocker(m_localeCombo);
-        m_localeCombo->setCurrentIndex(idx);
-    }
+    Q_UNUSED(locale);
 }
 
 void SettingsPanel::setLspEnabled(bool enabled)
@@ -399,9 +355,14 @@ void SettingsPanel::applyTranslations()
 {
     auto &tr = TranslationManager::instance();
 
-    m_tabWidget->setTabText(0, tr.translate("settings.tab_editor"));
-    m_tabWidget->setTabText(1, tr.translate("settings.tab_shortcuts"));
-    m_tabWidget->setTabText(2, tr.translate("settings.tab_lsp"));
+    m_titleLabel->setText(tr.translate("settings.title"));
+    m_preferencesTitleLabel->setText(tr.translate("settings.preferences_title"));
+    m_hintLabel->setText(tr.translate("settings.preferences_hint"));
+    m_openPreferencesButton->setText(tr.translate("settings.preferences_button"));
+    m_openShortcutsButton->setText(tr.translate("settings.shortcuts_button"));
+    m_openLspManagerButton->setText(tr.translate("settings.lsp_button"));
+    m_tabWidget->setTabText(0, tr.translate("settings.tab_shortcuts"));
+    m_tabWidget->setTabText(1, tr.translate("settings.tab_lsp"));
     updateShortcutTexts();
 }
 
@@ -428,10 +389,20 @@ void SettingsPanel::applyTheme()
     QString itemHoverHex = tm.customColor("treeHover", QColor("#363a4f")).name();
 
     setStyleSheetIfChanged(
+        m_preferencesCard,
+        QString("#preferencesCard { background: %1; border: 1px solid %2; border-radius: 6px; }")
+            .arg(altBaseHex, borderHex));
+
+    setStyleSheetIfChanged(
+        m_preferencesTitleLabel,
+        QString("color: %1; font-weight: bold; font-size: 13px;").arg(windowTextHex));
+    setStyleSheetIfChanged(
         m_titleLabel,
         QString("color: %1; font-weight: bold; font-size: 13px;").arg(windowTextHex));
-    setStyleSheetIfChanged(m_hintLabel,
-                           QString("color: %1; font-size: 12px;").arg(textHex));
+    if (m_hintLabel) {
+        setStyleSheetIfChanged(m_hintLabel,
+                               QString("color: %1; font-size: 12px;").arg(textHex));
+    }
     setStyleSheetIfChanged(
         m_runtimeTitleLabel,
         QString("color: %1; font-weight: bold; font-size: 13px;").arg(windowTextHex));
