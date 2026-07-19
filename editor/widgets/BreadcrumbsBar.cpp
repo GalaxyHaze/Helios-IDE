@@ -69,9 +69,14 @@ void BreadcrumbsBar::rebuild(const QStringList &dirs, const QString &file, const
         delete item;
     }
 
-    auto addSep = [this]() {
+    auto addSep = [this](bool useLargeFont) {
         auto *sep = new QLabel("›");
-        sep->setStyleSheet("color: #6c7086; padding: 0 4px; font-size: 11px;");
+        constexpr int fontDecrement = 3;
+        int fontSize = useLargeFont ?
+                           AppearanceController::instance().uiLargeFont().pointSize() - fontDecrement:
+                           AppearanceController::instance().uiFont().pointSize() - fontDecrement;
+        sep->setStyleSheet(QString("color: #6c7086; padding: 0 4px; font-size: %1;")
+                                .arg(QString::number(fontSize)));
         m_layout->addWidget(sep);
     };
 
@@ -98,14 +103,14 @@ void BreadcrumbsBar::rebuild(const QStringList &dirs, const QString &file, const
 
     for (const QString &dir : dirs) {
         addLabel(dir, "#9ca0b0", useLargeFont);
-        addSep();
+        addSep(useLargeFont);
     }
     addLabel(file, "#c6d0f5", useLargeFont, true);
     QFontMetrics metrics(font);
     setFixedHeight(metrics.height() + 5);
 
     if (!func.isEmpty()) {
-        addSep();
+        addSep(useLargeFont);
         addLabel(func, "#e5c890", useLargeFont);
     }
     m_layout->addStretch();
