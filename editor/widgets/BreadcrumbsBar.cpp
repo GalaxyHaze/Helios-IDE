@@ -1,9 +1,11 @@
 #include "BreadcrumbsBar.h"
+
+#include "../core/AppearanceController.h"
+
 #include <QLabel>
 #include <QHBoxLayout>
 #include <QFileInfo>
 #include <QDir>
-#include <QRegularExpression>
 
 BreadcrumbsBar::BreadcrumbsBar(QWidget *parent)
     : QWidget(parent)
@@ -67,8 +69,6 @@ void BreadcrumbsBar::rebuild(const QStringList &dirs, const QString &file, const
         delete item;
     }
 
-    const int cjkExtraHeight = 7;
-
     auto addSep = [this]() {
         auto *sep = new QLabel("›");
         sep->setStyleSheet("color: #6c7086; padding: 0 4px; font-size: 11px;");
@@ -77,7 +77,9 @@ void BreadcrumbsBar::rebuild(const QStringList &dirs, const QString &file, const
 
     auto addLabel = [this](const QString &text, const QString &color, bool useLargeFont, bool bold = false) {
         auto *label = new QLabel(text);
-        int fontSize = 11 + (useLargeFont ? cjkExtraHeight : 0);
+        int fontSize = useLargeFont ?
+            AppearanceController::instance().uiLargeFont().pointSize() :
+            AppearanceController::instance().uiFont().pointSize();
         QString style = QString("color: %1; font-size: %2px; padding: 0 2px;").arg(color, QString::number(fontSize));
         if (bold)
             style += " font-weight: bold;";
@@ -85,29 +87,26 @@ void BreadcrumbsBar::rebuild(const QStringList &dirs, const QString &file, const
         m_layout->addWidget(label);
     };
 
-    bool hasCJK = false;
-    QRegularExpression cjkRegex("[\u4E00-\u9FFF\u3400-\u4DBF\u3000-\u303F\uFF00-\uFFEF]");
+    bool useLargeFont = AppearanceController::instance().needsUiLargeFont(file);
     for (const QString &dir : dirs) {
-        if (dir.contains(cjkRegex)) {
-            hasCJK = true;
-        }
-    }
-    if(file.contains(cjkRegex)) {
-        hasCJK = true;
+        useLargeFont |= AppearanceController::instance().needsUiLargeFont(dir);
     }
 
-    setFixedHeight(22 + (hasCJK ? cjkExtraHeight : 0));
+    QFont font = useLargeFont ?
+        AppearanceController::instance().uiLargeFont() :
+        AppearanceController::instance().uiFont();
 
     for (const QString &dir : dirs) {
-        addLabel(dir, "#9ca0b0", hasCJK);
+        addLabel(dir, "#9ca0b0", useLargeFont);
         addSep();
     }
-    addLabel(file, "#c6d0f5", hasCJK, true);
+    addLabel(file, "#c6d0f5", useLargeFont, true);
+    QFontMetrics metrics(font);
+    setFixedHeight(metrics.height() + 5);
 
     if (!func.isEmpty()) {
         addSep();
-        addLabel(func, "#e5c890", hasCJK);
+        addLabel(func, "#e5c890", useLargeFont);
     }
-
     m_layout->addStretch();
 }

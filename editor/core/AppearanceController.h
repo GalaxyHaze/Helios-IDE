@@ -13,6 +13,9 @@ public:
 
   void apply();
   QFont uiFont() const;
+  // Font with larger min size to ensure complicated CJK characters readability in certain UI elenments like file name
+  QFont uiLargeFont() const;
+  bool needsUiLargeFont(const QString &text) const;
   QFont editorFont() const;
 
   bool setTheme(const QString &themeName);

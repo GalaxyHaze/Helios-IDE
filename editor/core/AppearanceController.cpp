@@ -5,6 +5,7 @@
 
 #include <QApplication>
 #include <QFontDatabase>
+#include <QRegularExpression>
 
 AppearanceController::AppearanceController(QObject *parent)
     : QObject(parent), m_defaultUiFont(QApplication::font()) {
@@ -45,6 +46,20 @@ QFont AppearanceController::fontFor(const QString &family, int pointSize,
 QFont AppearanceController::uiFont() const {
   const auto &settings = TomlSettingsStore::instance();
   return fontFor(settings.uiFontFamily(), settings.uiFontSize(), false);
+}
+
+QFont AppearanceController::uiLargeFont() const
+{
+  const auto &settings = TomlSettingsStore::instance();
+  const int minFontsize = 18;
+  int fontSize = qMax(minFontsize, settings.uiFontSize());
+  return fontFor(settings.uiFontFamily(), fontSize, false);
+}
+
+bool AppearanceController::needsUiLargeFont(const QString &text) const
+{
+  static QRegularExpression cjkRegex("[\u4E00-\u9FFF\u3400-\u4DBF\u3000-\u303F\uFF00-\uFFEF]");
+  return text.contains(cjkRegex);
 }
 
 QFont AppearanceController::editorFont() const {
