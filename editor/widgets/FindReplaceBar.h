@@ -42,6 +42,7 @@ private:
     void doFind(bool forward);
     void highlightAllMatches();
     void clearHighlights();
+    void updateHeight();
 
     CodeEditor *m_editor = nullptr;
     QLineEdit *m_findInput;
