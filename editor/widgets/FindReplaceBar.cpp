@@ -43,22 +43,12 @@ FindReplaceBar::FindReplaceBar(QWidget *parent)
     m_findInput->setClearButtonEnabled(true);
     findRow->addWidget(m_findInput, 1);
 
-    QFontMetrics metrics(AppearanceController::instance().uiFont());
-    const QChar prevArrowChar = QChar(0x25B2);
-    QRect arrowBoundingBox = metrics.boundingRect(prevArrowChar);
-
-    constexpr int minButtonWidth = 24;
-    constexpr int arrowButtonPadding = 12;
-    int buttonWidth = qMax(minButtonWidth, arrowBoundingBox.width() + 2 * arrowButtonPadding);
-
     m_prevBtn = new QPushButton(prevArrowChar);
     m_prevBtn->setToolTip("Previous (Shift+Enter)");
-    m_prevBtn->setFixedWidth(buttonWidth);
     findRow->addWidget(m_prevBtn);
 
     m_nextBtn = new QPushButton(QChar(0x25BC));
     m_nextBtn->setToolTip("Next (Enter)");
-    m_nextBtn->setFixedWidth(buttonWidth);
     findRow->addWidget(m_nextBtn);
 
     m_caseCheck = new QCheckBox("Aa");
@@ -72,7 +62,6 @@ FindReplaceBar::FindReplaceBar(QWidget *parent)
 
     m_closeBtn = new QPushButton(QChar(0x2716));
     m_closeBtn->setToolTip("Close (Esc)");
-    m_closeBtn->setFixedWidth(buttonWidth);
     findRow->addWidget(m_closeBtn);
 
     mainLayout->addLayout(findRow);
@@ -102,6 +91,8 @@ FindReplaceBar::FindReplaceBar(QWidget *parent)
     mainLayout->addWidget(m_replaceRow);
     m_replaceRow->hide();
 
+    updateButtonSize();
+
     // Connections
     connect(m_findInput, &QLineEdit::textChanged, this, &FindReplaceBar::onTextChanged);
     connect(m_findInput, &QLineEdit::returnPressed, this, &FindReplaceBar::findNext);
@@ -111,6 +102,10 @@ FindReplaceBar::FindReplaceBar(QWidget *parent)
     connect(m_closeBtn, &QPushButton::clicked, this, &FindReplaceBar::hide);
     connect(m_replaceBtn, &QPushButton::clicked, this, &FindReplaceBar::replace);
     connect(m_replaceAllBtn, &QPushButton::clicked, this, &FindReplaceBar::replaceAll);
+
+    const auto &contoller = AppearanceController::instance();
+    connect(&contoller, &AppearanceController::appearanceChanged, this, &FindReplaceBar::updateHeight);
+    connect(&contoller, &AppearanceController::appearanceChanged, this, &FindReplaceBar::updateButtonSize);
 
     m_findInput->installEventFilter(this);
     m_replaceInput->installEventFilter(this);
@@ -270,6 +265,20 @@ void FindReplaceBar::updateHeight()
   QFontMetrics metrics(AppearanceController::instance().uiFont());
   constexpr int baseBarHeight = 67;
   setFixedHeight(baseBarHeight + metrics.height());
+}
+
+void FindReplaceBar::updateButtonSize()
+{
+  QFontMetrics metrics(AppearanceController::instance().uiFont());
+  QRect arrowBoundingBox = metrics.boundingRect(prevArrowChar);
+
+  constexpr int minButtonWidth = 24;
+  constexpr int arrowButtonPadding = 12;
+  int buttonWidth = qMax(minButtonWidth, arrowBoundingBox.width() + 2 * arrowButtonPadding);
+
+  m_prevBtn->setFixedWidth(buttonWidth);
+  m_nextBtn->setFixedWidth(buttonWidth);
+  m_closeBtn->setFixedWidth(buttonWidth);
 }
 
 void FindReplaceBar::replace()

@@ -1399,6 +1399,8 @@ void MainWindow::applyTheme() {
       QString("QSplitter::handle { background: %1; }")
           .arg(tm.customColor("sidebarBorder", QColor("#1e1e2e")).name()));
 
+  menuBar()->setFont(AppearanceController::instance().uiFont());
+
 #ifdef HELIOS_THEME_TIMING
   qDebug() << "Theme application completed in" << timer.elapsed() << "ms";
 #endif
