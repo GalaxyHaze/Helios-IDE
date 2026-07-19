@@ -103,9 +103,9 @@ FindReplaceBar::FindReplaceBar(QWidget *parent)
     connect(m_replaceBtn, &QPushButton::clicked, this, &FindReplaceBar::replace);
     connect(m_replaceAllBtn, &QPushButton::clicked, this, &FindReplaceBar::replaceAll);
 
-    const auto &contoller = AppearanceController::instance();
-    connect(&contoller, &AppearanceController::appearanceChanged, this, &FindReplaceBar::updateHeight);
-    connect(&contoller, &AppearanceController::appearanceChanged, this, &FindReplaceBar::updateButtonSize);
+    const auto &controller = AppearanceController::instance();
+    connect(&controller, &AppearanceController::appearanceChanged, this, &FindReplaceBar::updateHeight);
+    connect(&controller, &AppearanceController::appearanceChanged, this, &FindReplaceBar::updateButtonSize);
 
     m_findInput->installEventFilter(this);
     m_replaceInput->installEventFilter(this);
