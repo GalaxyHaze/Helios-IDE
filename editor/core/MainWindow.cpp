@@ -238,6 +238,7 @@ MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), m_initialContextSetup(true) {
   setWindowTitle("Helios");
   setWindowIcon(createHeliosIcon());
+  setMinimumHeight(600);
   resize(1100, 750);
 
   AppearanceController::instance().apply();
