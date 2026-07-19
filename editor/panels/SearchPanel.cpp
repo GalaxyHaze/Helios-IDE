@@ -1,5 +1,7 @@
 #include "SearchPanel.h"
 
+#include "../core/AppearanceController.h"
+
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
@@ -30,7 +32,8 @@ SearchPanel::SearchPanel(QWidget *parent)
     layout->setSpacing(kPanelSpacing);
 
     auto *title = new QLabel("Search");
-    title->setStyleSheet("color: #c6d0f5; font-weight: bold; font-size: 13px;");
+    title->setStyleSheet(QString("color: #c6d0f5; font-weight: bold; font-size: %1;")
+        .arg(AppearanceController::instance().uiFont().pointSize() - 2));
     layout->addWidget(title);
 
     auto *row = new QHBoxLayout;

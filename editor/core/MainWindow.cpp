@@ -238,6 +238,7 @@ MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), m_initialContextSetup(true) {
   setWindowTitle("Helios");
   setWindowIcon(createHeliosIcon());
+  setMinimumHeight(600);
   resize(1100, 750);
 
   AppearanceController::instance().apply();
@@ -1397,6 +1398,8 @@ void MainWindow::applyTheme() {
       m_splitter,
       QString("QSplitter::handle { background: %1; }")
           .arg(tm.customColor("sidebarBorder", QColor("#1e1e2e")).name()));
+
+  menuBar()->setFont(AppearanceController::instance().uiFont());
 
 #ifdef HELIOS_THEME_TIMING
   qDebug() << "Theme application completed in" << timer.elapsed() << "ms";

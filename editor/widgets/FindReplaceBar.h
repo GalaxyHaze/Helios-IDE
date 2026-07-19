@@ -42,6 +42,8 @@ private:
     void doFind(bool forward);
     void highlightAllMatches();
     void clearHighlights();
+    void updateHeight();
+    void updateButtonSize();
 
     CodeEditor *m_editor = nullptr;
     QLineEdit *m_findInput;
@@ -55,6 +57,7 @@ private:
     QCheckBox *m_caseCheck;
     QWidget *m_replaceRow;
     bool m_finding = false;
+    const QChar prevArrowChar = QChar(0x25B2);
 };
 
 #endif
