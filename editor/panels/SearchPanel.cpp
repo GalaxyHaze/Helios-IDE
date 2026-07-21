@@ -32,8 +32,9 @@ SearchPanel::SearchPanel(QWidget *parent)
     layout->setSpacing(kPanelSpacing);
 
     auto *title = new QLabel("Search");
+    const auto& appearance = AppearanceController::instance();
     title->setStyleSheet(QString("color: #c6d0f5; font-weight: bold; font-size: %1;")
-        .arg(AppearanceController::instance().uiFont().pointSize() - 2));
+        .arg(qMax(appearance.uiFont().pointSize() - 2, appearance.minFontSize())));
     layout->addWidget(title);
 
     auto *row = new QHBoxLayout;
