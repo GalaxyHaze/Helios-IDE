@@ -17,6 +17,7 @@ public:
   QFont uiLargeFont() const;
   bool needsUiLargeFont(const QString &text) const;
   QFont editorFont() const;
+  const int minFontSize() const;
 
   bool setTheme(const QString &themeName);
   bool setThemeFile(const QString &path);

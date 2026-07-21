@@ -309,6 +309,8 @@ MainWindow::MainWindow(QWidget *parent)
   m_lspClient = new LspClient(this);
   m_zithToolchainManager = new ZithToolchainManager(this);
 
+  applyAppearanceChange();
+
   connect(
       m_lspClient, &LspClient::completionResults, this,
       [this](const QString &uri, int, const QList<LspCompletionItem> &items) {
@@ -893,11 +895,7 @@ MainWindow::MainWindow(QWidget *parent)
   connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this,
           [this]() { applyTheme(); });
   connect(&AppearanceController::instance(), &AppearanceController::appearanceChanged,
-          this, [this]() {
-            for (int i = 0; i < m_tabWidget->count(); ++i)
-              applyEditorPreferences(qobject_cast<CodeEditor *>(m_tabWidget->widget(i)));
-            applyTheme();
-          });
+          this, &MainWindow::applyAppearanceChange);
   connect(&TranslationManager::instance(), &TranslationManager::localeChanged,
           this, [this]() {
             m_appliedLocale = TomlSettingsStore::instance().locale();
@@ -1375,6 +1373,7 @@ void MainWindow::applyTheme() {
 #endif
 
   auto &tm = ThemeManager::instance();
+  auto &appearance = AppearanceController::instance();
   QPalette pal = tm.palette();
   QApplication::setPalette(pal);
   setStyleSheetIfChanged(this, baseStyle());
@@ -1384,7 +1383,7 @@ void MainWindow::applyTheme() {
       QString("QTabWidget::pane { border: none; background: %1; }"
               "QTabBar { background: %1; }"
               "QTabBar::tab { background: %1; color: %2; padding: 4px 14px;"
-              "  border-right: 1px solid %3; font-size: 12px; }"
+              "  border-right: 1px solid %3; font-size: %7; }"
               "QTabBar::tab:selected { color: %4; background: %5; }"
               "QTabBar::tab:hover:!selected { background: %6; }")
           .arg(tm.customColor("tabBarBg", QColor("#11111b")).name(),
@@ -1392,14 +1391,13 @@ void MainWindow::applyTheme() {
                tm.customColor("tabBorder", QColor("#1e1e2e")).name(),
                tm.customColor("tabSelectedFg", QColor("#c6d0f5")).name(),
                tm.customColor("editorBg", QColor("#1e1e2e")).name(),
-               tm.customColor("tabHoverBg", QColor("#181825")).name()));
+               tm.customColor("tabHoverBg", QColor("#181825")).name(),
+               QString::number(qMax(appearance.uiFont().pointSize() - 2, appearance.minFontSize()))));
 
   setStyleSheetIfChanged(
       m_splitter,
       QString("QSplitter::handle { background: %1; }")
           .arg(tm.customColor("sidebarBorder", QColor("#1e1e2e")).name()));
-
-  menuBar()->setFont(AppearanceController::instance().uiFont());
 
 #ifdef HELIOS_THEME_TIMING
   qDebug() << "Theme application completed in" << timer.elapsed() << "ms";
@@ -1472,6 +1470,14 @@ void MainWindow::applyTranslations() {
   m_activityBar->setButtonToolTip(
       ActivityBar::Settings,
       tr.translate("shortcut.settings") + " (Ctrl+,)");
+}
+
+void MainWindow::applyAppearanceChange()
+{
+  for (int i = 0; i < m_tabWidget->count(); ++i)
+    applyEditorPreferences(qobject_cast<CodeEditor *>(m_tabWidget->widget(i)));
+  menuBar()->setFont(AppearanceController::instance().uiFont());
+  applyTheme();
 }
 
 bool MainWindow::lspEnabled() const {

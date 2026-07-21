@@ -97,6 +97,7 @@ private:
     bool lspEnabled() const;
     void applyTheme();
     void applyTranslations();
+    void applyAppearanceChange();
 
     QTabWidget *m_tabWidget = nullptr;
     QMap<CodeEditor*, SyntaxHighlighter*> m_highlighters;
