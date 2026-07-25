@@ -67,6 +67,11 @@ QFont AppearanceController::editorFont() const {
   return fontFor(settings.editorFontFamily(), settings.editorFontSize(), true);
 }
 
+const int AppearanceController::minFontSize() const
+{
+  return 8;
+}
+
 void AppearanceController::apply() {
   QApplication::setPalette(ThemeManager::instance().palette());
   QApplication::setFont(uiFont());
