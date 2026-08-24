@@ -1,6 +1,9 @@
 <RCC>
     <qresource prefix="/icons">
         <file>helios-icon.svg</file>
+        <file>file-zith.svg</file>
+        <file>file-c.svg</file>
+        <file>file-h.svg</file>
     </qresource>
     <qresource prefix="/snippets">
         <file>zith-snippets.json</file>

@@ -161,6 +161,8 @@ void ThemeManager::setFallbackSyntaxStyles()
         {"async", {QColor("#a6d189"), true, false}},
         {"exception", {QColor("#df8e1d"), true, false}},
         {"keyword", {QColor("#eff1f5"), false, false}},
+        {"jump", {QColor("#f38ba8"), true, false}},
+        {"preprocessor", {QColor("#c9cbff"), false, false}},
         {"literal", {QColor("#dd7878"), true, false}},
         {"logicalOperator", {QColor("#d20f39"), true, false}},
         {"operator", {QColor("#7287fd"), false, false}},

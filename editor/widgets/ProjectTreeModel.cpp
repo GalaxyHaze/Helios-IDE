@@ -1,4 +1,5 @@
 #include "ProjectTreeModel.h"
+#include "../core/FileIcons.h"
 #include <QIcon>
 #include <QDir>
 #include <QThreadPool>
@@ -164,7 +165,7 @@ QVariant ProjectTreeModel::data(const QModelIndex &index, int role) const
         if (node->isDir) {
             return QIcon::fromTheme("folder");
         } else {
-            return QIcon::fromTheme("text-x-generic");
+            return fileIconForPath(node->path);
         }
     }
     return {};

@@ -6,6 +6,7 @@
 #include <QList>
 #include <QIcon>
 #include <QJsonObject>
+#include <QSyntaxHighlighter>
 #include "../widgets/ActivityBar.h"
 
 class QTabWidget;
@@ -15,7 +16,6 @@ class QStackedWidget;
 class QMenu;
 class QAction;
 class CodeEditor;
-class SyntaxHighlighter;
 class LspClient;
 class LspCompletionModel;
 class LspCompleter;
@@ -98,9 +98,10 @@ private:
     void applyTheme();
     void applyTranslations();
     void applyAppearanceChange();
+    void applyLanguageForEditor(CodeEditor *editor, const QString &path);
 
     QTabWidget *m_tabWidget = nullptr;
-    QMap<CodeEditor*, SyntaxHighlighter*> m_highlighters;
+    QMap<CodeEditor*, QSyntaxHighlighter*> m_highlighters;
     LspClient *m_lspClient = nullptr;
     LspCompletionModel *m_completionModel = nullptr;
     LspCompleter *m_completer = nullptr;

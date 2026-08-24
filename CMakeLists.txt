@@ -45,10 +45,14 @@ add_executable(Helios
     editor/panels/OutlinePanel.cpp
     editor/core/MainWindow.h
     editor/core/MainWindow.cpp
+    editor/core/FileIcons.h
+    editor/core/FileIcons.cpp
     editor/editor/Code.h
     editor/editor/Code.cpp
     editor/editor/Syntax.h
     editor/editor/Syntax.cpp
+    editor/editor/CHighlighter.h
+    editor/editor/CHighlighter.cpp
     editor/editor/VimMotionController.h
     editor/editor/VimMotionController.cpp
     editor/editor/LspClient.h
@@ -110,10 +114,14 @@ add_executable(test_helios
     editor/core/TomlSettingsStore.cpp
     editor/core/ThemeManager.h
     editor/core/ThemeManager.cpp
+    editor/core/FileIcons.h
+    editor/core/FileIcons.cpp
     editor/core/AppearanceController.h
     editor/core/AppearanceController.cpp
     editor/editor/Syntax.h
     editor/editor/Syntax.cpp
+    editor/editor/CHighlighter.h
+    editor/editor/CHighlighter.cpp
     editor/editor/VimMotionController.h
     editor/editor/VimMotionController.cpp
     editor/core/TranslationManager.h

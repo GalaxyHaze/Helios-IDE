@@ -10,6 +10,8 @@
 #include <QPlainTextEdit>
 #include <QKeyEvent>
 #include <QPushButton>
+#include <QSyntaxHighlighter>
+#include <QModelIndex>
 
 #include "../editor/core/TomlSettingsStore.h"
 #include "../editor/core/AppearanceController.h"
@@ -18,6 +20,8 @@
 #include "../editor/panels/SettingsPanel.h"
 #include "../editor/editor/Syntax.h"
 #include "../editor/editor/VimMotionController.h"
+#include "../editor/editor/CHighlighter.h"
+#include "../editor/core/FileIcons.h"
 #include "../editor/widgets/ProjectTreeModel.h"
 
 class TestHelios : public QObject
@@ -111,7 +115,8 @@ private slots:
         const QStringList syntaxKeys = {
             "comment", "string", "number", "type", "control", "declaration",
             "storage", "async", "exception", "keyword", "literal",
-            "logicalOperator", "operator", "otherOperator", "bracket", "punctuation"
+            "jump", "preprocessor", "logicalOperator", "operator",
+            "otherOperator", "bracket", "punctuation"
         };
 
         auto &tm = ThemeManager::instance();
@@ -227,6 +232,117 @@ private slots:
         QVERIFY(tm.loadTheme("helios-light"));
         const QTextLayout::FormatRange range = document.firstBlock().layout()->formats().first();
         QVERIFY(range.format.foreground().color().isValid());
+    }
+
+    void testFileIconResolver() {
+        QCOMPARE(fileIconResourceForSuffix("zith"),
+                 QStringLiteral(":/icons/file-zith.svg"));
+        QCOMPARE(fileIconResourceForSuffix("c"),
+                 QStringLiteral(":/icons/file-c.svg"));
+        QCOMPARE(fileIconResourceForSuffix("h"),
+                 QStringLiteral(":/icons/file-h.svg"));
+        QCOMPARE(fileIconResourceForSuffix("H"),
+                 QStringLiteral(":/icons/file-h.svg"));
+        QVERIFY(fileIconResourceForSuffix("cpp").isEmpty());
+        QVERIFY(fileIconResourceForSuffix("").isEmpty());
+        QVERIFY(!fileIconForSuffix("zith").isNull());
+        QVERIFY(!fileIconForPath("/tmp/sample.c").isNull());
+        QVERIFY(!fileIconForPath("/tmp/SAMPLE.H").isNull());
+        QFile zithIcon(QStringLiteral(":/icons/file-zith.svg"));
+        QFile cIcon(QStringLiteral(":/icons/file-c.svg"));
+        QFile hIcon(QStringLiteral(":/icons/file-h.svg"));
+        QVERIFY(zithIcon.open(QIODevice::ReadOnly));
+        QVERIFY(cIcon.open(QIODevice::ReadOnly));
+        QVERIFY(hIcon.open(QIODevice::ReadOnly));
+        QVERIFY(zithIcon.size() > 0);
+        QVERIFY(cIcon.size() > 0);
+        QVERIFY(hIcon.size() > 0);
+    }
+
+    void testCHighlighterFormatsCSample() {
+        auto &tm = ThemeManager::instance();
+        QVERIFY(tm.loadTheme("helios-dark"));
+
+        QTextDocument document;
+        CHighlighter highlighter(&document);
+        document.setPlainText(
+            "#include <stdio.h>\n"
+            "int main(void) { const char *msg = \"hello\"; return 0; }");
+        highlighter.rehighlight();
+
+        const QList<QTextLayout::FormatRange> formats =
+            document.firstBlock().layout()->formats();
+        QVERIFY(!formats.isEmpty());
+        for (const QTextLayout::FormatRange &range : formats) {
+            QVERIFY(range.format.foreground().color().isValid());
+        }
+
+        QTextDocument secondDoc;
+        highlighter.setDocument(&secondDoc);
+        secondDoc.setPlainText("// comment\n\"string\" 42");
+        highlighter.rehighlight();
+
+        const QColor commentColor = tm.syntaxStyle("comment").color;
+        bool hasComment = false;
+        for (const QTextLayout::FormatRange &range :
+             secondDoc.firstBlock().layout()->formats()) {
+            if (range.format.foreground().color() == commentColor)
+                hasComment = true;
+        }
+        QVERIFY(hasComment);
+
+        const QTextBlock stringBlock = secondDoc.findBlockByNumber(1);
+        const QColor stringColor = tm.syntaxStyle("string").color;
+        bool hasString = false;
+        bool hasNumber = false;
+        for (const QTextLayout::FormatRange &range :
+             stringBlock.layout()->formats()) {
+            if (range.format.foreground().color() == stringColor)
+                hasString = true;
+            if (range.format.foreground().color() ==
+                tm.syntaxStyle("number").color)
+                hasNumber = true;
+        }
+        QVERIFY(hasString);
+        QVERIFY(hasNumber);
+
+        QTextDocument thirdDoc;
+        highlighter.setDocument(&thirdDoc);
+        thirdDoc.setPlainText(
+            "#include <stdio.h>\n"
+            "void loop(void) { return; }\n"
+            "int main(void) { goto done; break; continue; done: return 0; }");
+        highlighter.rehighlight();
+
+        const QColor jumpColor = tm.syntaxStyle("jump").color;
+        const QColor preprocessorColor = tm.syntaxStyle("preprocessor").color;
+        bool hasJump = false;
+        bool hasPreprocessor = false;
+        for (int block = 0; block < thirdDoc.blockCount(); ++block) {
+            const QTextBlock textBlock = thirdDoc.findBlockByNumber(block);
+            for (const QTextLayout::FormatRange &range :
+                 textBlock.layout()->formats()) {
+                if (range.format.foreground().color() == jumpColor)
+                    hasJump = true;
+                if (range.format.foreground().color() == preprocessorColor)
+                    hasPreprocessor = true;
+            }
+        }
+        QVERIFY(hasJump);
+        QVERIFY(hasPreprocessor);
+    }
+
+    void testZithHighlighterStillHighlightsSample() {
+        auto &tm = ThemeManager::instance();
+        QVERIFY(tm.loadTheme("helios-dark"));
+
+        QTextDocument document;
+        SyntaxHighlighter highlighter(&document);
+        document.setPlainText("#include <stdio.h>\nint main(void) { return 0; }");
+        highlighter.rehighlight();
+        const QList<QTextLayout::FormatRange> formats =
+            document.firstBlock().layout()->formats();
+        QVERIFY(!formats.isEmpty());
     }
 
     void testCustomThemeFileAndScaleIsolation() {
@@ -398,6 +514,45 @@ private slots:
         // Remaining 20 should be loaded, no "Load more..." node left
         int pagCountAfter = model.rowCount(pagIdx);
         QCOMPARE(pagCountAfter, 120);
+    }
+
+    void testProjectTreeFileIcons() {
+        QTemporaryDir tempDir;
+        QVERIFY(tempDir.isValid());
+
+        const QStringList names = {"sample.zith", "sample.c", "sample.h"};
+        for (const QString &name : names) {
+            QFile file(QDir(tempDir.path()).filePath(name));
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            file.close();
+        }
+
+        ProjectTreeModel model;
+        QSignalSpy spy(&model, &ProjectTreeModel::loadingFinished);
+        model.setRootPath(tempDir.path());
+        model.rowCount(QModelIndex());
+        QVERIFY(spy.wait(2000));
+
+        bool foundZith = false;
+        bool foundC = false;
+        bool foundH = false;
+        for (int i = 0; i < model.rowCount(QModelIndex()); ++i) {
+            const QModelIndex index = model.index(i, 0, QModelIndex());
+            const QVariant icon = model.data(index, Qt::DecorationRole);
+            QVERIFY(icon.canConvert<QIcon>());
+            QVERIFY(!icon.value<QIcon>().isNull());
+            const QString suffix =
+                QFileInfo(model.filePath(index)).suffix().toLower();
+            if (suffix == "zith")
+                foundZith = true;
+            else if (suffix == "c")
+                foundC = true;
+            else if (suffix == "h")
+                foundH = true;
+        }
+        QVERIFY(foundZith);
+        QVERIFY(foundC);
+        QVERIFY(foundH);
     }
 };
 

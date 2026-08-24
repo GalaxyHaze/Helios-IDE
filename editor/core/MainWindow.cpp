@@ -7,11 +7,13 @@
 #include "AppearanceController.h"
 #include "TomlSettingsStore.h"
 #include "TranslationManager.h"
+#include "FileIcons.h"
 
 #include "../editor/Code.h"
 #include "../editor/LspClient.h"
 #include "../editor/LspCompletionModel.h"
 #include "../editor/Syntax.h"
+#include "../editor/CHighlighter.h"
 #include "../panels/CompilerPanel.h"
 #include "../panels/DiagnosticsPanel.h"
 #include "../panels/FileTreePanel.h"
@@ -1001,6 +1003,7 @@ void MainWindow::openFilePath(const QString &path) {
 
   auto *editor = createTab(false);
   editor->setFilePath(path);
+  applyLanguageForEditor(editor, path);
   editor->setInitialDocumentText(content);
   editor->document()->setModified(false);
   editor->clearDiagnostics();
@@ -1008,6 +1011,7 @@ void MainWindow::openFilePath(const QString &path) {
   const int idx = m_tabWidget->indexOf(editor);
   m_tabWidget->setTabText(idx, QFileInfo(path).fileName());
   m_tabWidget->setTabToolTip(idx, path);
+  m_tabWidget->setTabIcon(idx, fileIconForPath(path));
 
   if (m_diagnosticsPanel)
     m_diagnosticsPanel->clearDiagnostics(editor->fileUri());
@@ -1019,9 +1023,15 @@ void MainWindow::openFilePath(const QString &path) {
   updateCentralWidgetState();
 
   QTimer::singleShot(0, editor, [this, editor, content]() {
-    if (lspEnabled() && m_lspClient && m_lspClient->isReady())
-      m_lspClient->openDocument(editor->fileUri(), "zith", content,
+    if (lspEnabled() && m_lspClient && m_lspClient->isReady()) {
+      const QString languageId =
+          QFileInfo(editor->filePath()).suffix().toLower() == "c" ||
+                  QFileInfo(editor->filePath()).suffix().toLower() == "h"
+              ? QStringLiteral("c")
+              : QStringLiteral("zith");
+      m_lspClient->openDocument(editor->fileUri(), languageId, content,
                                 editor->documentVersion());
+    }
   });
 }
 
@@ -1048,9 +1058,39 @@ CodeEditor *MainWindow::createTab(bool makeCurrent) {
     idx = m_tabWidget->addTab(editor, "Untitled");
   }
   m_tabWidget->setTabToolTip(idx, {});
+  m_tabWidget->setTabIcon(idx, fileIconForSuffix({}));
 
   updateCentralWidgetState();
   return editor;
+}
+
+void MainWindow::applyLanguageForEditor(CodeEditor *editor, const QString &path) {
+  if (!editor)
+    return;
+
+  const QString suffix = QFileInfo(path).suffix().toLower();
+  const bool isCFile =
+      suffix == QStringLiteral("c") || suffix == QStringLiteral("h");
+  auto *current = m_highlighters.value(editor, nullptr);
+
+  if (isCFile) {
+    if (qobject_cast<CHighlighter *>(current))
+      return;
+    if (current) {
+      current->setDocument(nullptr);
+      delete current;
+    }
+    m_highlighters.insert(editor, new CHighlighter(editor->document()));
+    return;
+  }
+
+  if (qobject_cast<SyntaxHighlighter *>(current))
+    return;
+  if (current) {
+    current->setDocument(nullptr);
+    delete current;
+  }
+  m_highlighters.insert(editor, new SyntaxHighlighter(editor->document()));
 }
 
 void MainWindow::connectEditorSignals(CodeEditor *editor) {
@@ -1158,9 +1198,11 @@ void MainWindow::saveFile() {
     if (path.isEmpty())
       return;
     ed->setFilePath(path);
+    applyLanguageForEditor(ed, path);
     const int idx = m_tabWidget->currentIndex();
     m_tabWidget->setTabText(idx, QFileInfo(path).fileName());
     m_tabWidget->setTabToolTip(idx, path);
+    m_tabWidget->setTabIcon(idx, fileIconForPath(path));
   }
 
   QFile file(ed->filePath());
@@ -1339,6 +1381,13 @@ void MainWindow::updateEditorChrome(CodeEditor *editor) {
   }
 
   m_findReplaceBar->setEditor(editor);
+  if (m_langLabel) {
+    if (QFileInfo(editor->filePath()).suffix().toLower() == "c" ||
+        QFileInfo(editor->filePath()).suffix().toLower() == "h")
+      m_langLabel->setText("C");
+    else
+      m_langLabel->setText("Zith");
+  }
   if (editor->filePath().isEmpty())
     m_breadcrumbs->clear();
   else
