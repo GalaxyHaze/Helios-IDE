@@ -22,6 +22,9 @@ constexpr auto kLatestReleaseUrl =
     "https://api.github.com/repos/GalaxyHaze/Zith-Lang/releases/latest";
 constexpr auto kLspOverrideEnv = "HELIOS_ZITH_LSP_PATH";
 constexpr auto kStdlibOverrideEnv = "HELIOS_ZITH_STDLIB_PATH";
+// Local development checkouts used by the compiler and language server.
+constexpr auto kLocalLspPath = "/home/diogo/zith-lsp/build/zith-lsp";
+constexpr auto kLocalStdlibPath = "/home/diogo/Zith/stdlib";
 
 QVersionNumber releaseVersion(const QString &tag)
 {
@@ -44,6 +47,14 @@ void ZithToolchainManager::ensureLatest(bool preferCached)
 
     if (tryUseEnvironmentOverrides())
         return;
+
+    const QFileInfo localLsp(kLocalLspPath);
+    const QFileInfo localStdlib(kLocalStdlibPath);
+    if (localLsp.isExecutable() && localStdlib.isDir()) {
+        emit statusChanged(QStringLiteral("Using local Zith development runtime."));
+        finishWithResolvedRuntime(kLocalLspPath, kLocalStdlibPath, QStringLiteral("local"));
+        return;
+    }
 
     if (preferCached) {
         QString lspPath;
