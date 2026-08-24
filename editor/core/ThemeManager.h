@@ -18,6 +18,35 @@ class ThemeManager : public QObject
 {
     Q_OBJECT
 public:
+    enum class SemanticRole
+    {
+        Canvas,
+        Surface,
+        SurfaceAlt,
+        SurfaceMuted,
+        Border,
+        BorderStrong,
+        Text,
+        TextMuted,
+        TextFaint,
+        Hover,
+        Selected,
+        SelectedText,
+        InputBg,
+        InputText,
+        ButtonBg,
+        ButtonText,
+        ButtonHover,
+        Accent,
+        AccentHover,
+        OnAccent,
+        Error,
+        Warning,
+        Info,
+        Success
+    };
+    Q_ENUM(SemanticRole)
+
     explicit ThemeManager(QObject *parent = nullptr);
     static ThemeManager &instance();
 
@@ -27,6 +56,7 @@ public:
 
     QPalette palette() const { return m_palette; }
     QColor customColor(const QString &key, const QColor &fallback = QColor()) const;
+    QColor semanticColor(SemanticRole role, const QColor &fallback = QColor()) const;
     SyntaxStyle syntaxStyle(const QString &key) const;
 
     bool isDark() const { return m_isDark; }

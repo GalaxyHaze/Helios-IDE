@@ -1,4 +1,5 @@
 #include "CompilerPanel.h"
+#include "../core/ThemeManager.h"
 #include <QFont>
 #include <QVBoxLayout>
 
@@ -11,9 +12,7 @@ CompilerPanel::CompilerPanel(QWidget *parent)
     m_output = new QPlainTextEdit;
     m_output->setReadOnly(true);
     m_output->setFont(QFont("monospace", 10));
-    m_output->setStyleSheet(
-        "QPlainTextEdit { background: #11111b; color: #c6d0f5; border: none; }"
-    );
+    applyTheme();
 
     setWidget(m_output);
 
@@ -25,6 +24,9 @@ CompilerPanel::CompilerPanel(QWidget *parent)
             this, &CompilerPanel::onProcessOutput);
     connect(m_process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
             this, &CompilerPanel::onProcessFinished);
+
+    connect(&ThemeManager::instance(), &ThemeManager::themeChanged,
+            this, &CompilerPanel::applyTheme);
 }
 
 CompilerPanel::~CompilerPanel()
@@ -38,6 +40,15 @@ CompilerPanel::~CompilerPanel()
 bool CompilerPanel::isRunning() const
 {
     return m_process->state() != QProcess::NotRunning;
+}
+
+void CompilerPanel::applyTheme()
+{
+    auto &tm = ThemeManager::instance();
+    m_output->setStyleSheet(
+        QString("QPlainTextEdit { background: %1; color: %2; border: none; }")
+            .arg(tm.semanticColor(ThemeManager::SemanticRole::Canvas).name(),
+                 tm.semanticColor(ThemeManager::SemanticRole::Text).name()));
 }
 
 void CompilerPanel::runCommand(const QString &workingDir, const QString &command, const QStringList &args)

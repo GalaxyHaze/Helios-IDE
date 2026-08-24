@@ -44,6 +44,7 @@ private:
     void clearHighlights();
     void updateHeight();
     void updateButtonSize();
+    void applyTheme();
 
     CodeEditor *m_editor = nullptr;
     QLineEdit *m_findInput;

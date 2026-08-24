@@ -5,4 +5,20 @@
     <qresource prefix="/snippets">
         <file>zith-snippets.json</file>
     </qresource>
+    <qresource prefix="/appdata/themes">
+        <file alias="helios-dark.json">../../themes/helios-dark.json</file>
+        <file alias="helios-light.json">../../themes/helios-light.json</file>
+        <file alias="colormind-midnight.json">../../themes/colormind-midnight.json</file>
+        <file alias="colormind-desert.json">../../themes/colormind-desert.json</file>
+        <file alias="helios-violet-dark.json">../../themes/helios-violet-dark.json</file>
+        <file alias="helios-red-dark.json">../../themes/helios-red-dark.json</file>
+        <file alias="helios-gold-dark.json">../../themes/helios-gold-dark.json</file>
+        <file alias="helios-blue-dark.json">../../themes/helios-blue-dark.json</file>
+        <file alias="helios-forest-dark.json">../../themes/helios-forest-dark.json</file>
+        <file alias="helios-carbon-dark.json">../../themes/helios-carbon-dark.json</file>
+    </qresource>
+    <qresource prefix="/appdata/i18n">
+        <file alias="en-US.json">../../i18n/en-US.json</file>
+        <file alias="pt-BR.json">../../i18n/pt-BR.json</file>
+    </qresource>
 </RCC>

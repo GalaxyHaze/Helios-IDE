@@ -16,7 +16,7 @@ OutlinePanel::OutlinePanel(QWidget *parent)
     layout->setSpacing(0);
 
     m_titleLabel = new QLabel("Structure");
-    m_titleLabel->setStyleSheet("font-weight: bold; padding: 6px 10px; font-size: 12px; border-bottom: 1px solid #1e1e2e;");
+    m_titleLabel->setStyleSheet("font-weight: bold; padding: 6px 10px; font-size: 12px;");
     layout->addWidget(m_titleLabel);
 
     m_treeWidget = new QTreeWidget;
@@ -24,12 +24,7 @@ OutlinePanel::OutlinePanel(QWidget *parent)
     m_treeWidget->setIndentation(12);
     m_treeWidget->setAnimated(true);
     m_treeWidget->setUniformRowHeights(true);
-    m_treeWidget->setStyleSheet(
-        "QTreeWidget { background: #11111b; color: #a5adce; border: none; font-size: 12px; }"
-        "QTreeWidget::item { padding: 4px 6px; }"
-        "QTreeWidget::item:hover { background: #363a4f; }"
-        "QTreeWidget::item:selected { background: #363a4f; color: #c6d0f5; }"
-    );
+    m_treeWidget->setStyleSheet({});
     layout->addWidget(m_treeWidget);
 
     connect(m_treeWidget, &QTreeWidget::itemDoubleClicked, this, &OutlinePanel::handleItemActivated);
@@ -110,18 +105,15 @@ void OutlinePanel::updateThemeAndLanguage()
 {
     auto &tm = ThemeManager::instance();
     
-    QPalette pal = tm.palette();
-    setPalette(pal);
+    setPalette(tm.palette());
 
-    QColor base = pal.color(QPalette::Base);
-    QColor text = pal.color(QPalette::Text);
-    QColor windowText = pal.color(QPalette::WindowText);
-
-    QString textHex = text.name();
-    QString bgHex = base.name();
-    QString windowTextHex = windowText.name();
-    QString borderHex = tm.customColor("sidebarBorder", QColor("#363a4f")).name();
-    QString itemHoverHex = tm.customColor("treeHover", QColor("#363a4f")).name();
+    const QString textHex = tm.semanticColor(ThemeManager::SemanticRole::Text).name();
+    const QString bgHex = tm.semanticColor(ThemeManager::SemanticRole::Surface).name();
+    const QString windowTextHex = tm.semanticColor(ThemeManager::SemanticRole::Text).name();
+    const QString borderHex = tm.semanticColor(ThemeManager::SemanticRole::Border).name();
+    const QString itemHoverHex = tm.semanticColor(ThemeManager::SemanticRole::Hover).name();
+    const QString itemSelectedHex = tm.semanticColor(ThemeManager::SemanticRole::Selected).name();
+    const QString itemSelectedTextHex = tm.semanticColor(ThemeManager::SemanticRole::SelectedText).name();
 
     m_titleLabel->setText("Structure");
     m_titleLabel->setStyleSheet(
@@ -134,7 +126,7 @@ void OutlinePanel::updateThemeAndLanguage()
             "QTreeWidget { background: %1; color: %2; border: none; font-size: 12px; }"
             "QTreeWidget::item { padding: 4px 6px; color: %2; }"
             "QTreeWidget::item:hover { background: %3; }"
-            "QTreeWidget::item:selected { background: %3; color: %4; }"
-        ).arg(bgHex, textHex, itemHoverHex, windowTextHex)
+            "QTreeWidget::item:selected { background: %5; color: %6; }"
+        ).arg(bgHex, textHex, itemHoverHex, windowTextHex, itemSelectedHex, itemSelectedTextHex)
     );
 }

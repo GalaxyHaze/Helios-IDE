@@ -52,7 +52,6 @@ private:
     };
 
     bool tryUseEnvironmentOverrides();
-    bool tryUseLocalDevelopmentOverrides();
     void requestLatestRelease();
     void startNextDownload();
     void queueDownload(DownloadKind kind, const ReleaseAsset &asset);

@@ -1,6 +1,7 @@
 #include "FindReplaceBar.h"
 #include "../editor/Code.h"
 #include "../core/AppearanceController.h"
+#include "../core/ThemeManager.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -13,21 +14,6 @@ FindReplaceBar::FindReplaceBar(QWidget *parent)
     : QWidget(parent)
 {
     updateHeight();
-    setStyleSheet(QString(
-        "FindReplaceBar { background: #1e1e2e; border-bottom: 1px solid #363a4f; }"
-        "QLineEdit { background: #11111b; color: #c6d0f5; border: 1px solid #363a4f; "
-        "  border-radius: 4px; padding: 6px 10px; font-size: %2; }"
-        "QLineEdit:focus { border-color: #7287fd; }"
-        "QPushButton { background: #363a4f; color: #c6d0f5; border: none; "
-        "  border-radius: 4px; padding: 4px 12px; font-size: %1; }"
-        "QPushButton:hover { background: #45475a; }"
-        "QPushButton:pressed { background: #209fb5; }"
-        "QPushButton:disabled { color: #585b70; }"
-        "QCheckBox { color: #a5adce; font-size: %1; }"
-        "QLabel { color: #a5adce; font-size: %1; }").arg(
-                           QString::number(AppearanceController::instance().uiFont().pointSize()),
-                           QString::number(AppearanceController::instance().uiFont().pointSize() + 1))
-    );
 
     auto *mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(10, 4, 10, 4);
@@ -92,6 +78,7 @@ FindReplaceBar::FindReplaceBar(QWidget *parent)
     m_replaceRow->hide();
 
     updateButtonSize();
+    applyTheme();
 
     // Connections
     connect(m_findInput, &QLineEdit::textChanged, this, &FindReplaceBar::onTextChanged);
@@ -106,6 +93,9 @@ FindReplaceBar::FindReplaceBar(QWidget *parent)
     const auto &controller = AppearanceController::instance();
     connect(&controller, &AppearanceController::appearanceChanged, this, &FindReplaceBar::updateHeight);
     connect(&controller, &AppearanceController::appearanceChanged, this, &FindReplaceBar::updateButtonSize);
+    connect(&controller, &AppearanceController::appearanceChanged, this, &FindReplaceBar::applyTheme);
+    connect(&ThemeManager::instance(), &ThemeManager::themeChanged,
+            this, &FindReplaceBar::applyTheme);
 
     m_findInput->installEventFilter(this);
     m_replaceInput->installEventFilter(this);
@@ -239,7 +229,8 @@ void FindReplaceBar::highlightAllMatches()
     while (!found.isNull()) {
         QTextEdit::ExtraSelection sel;
         sel.cursor = found;
-        QColor bg("#209fb5");
+        QColor bg = ThemeManager::instance()
+                        .semanticColor(ThemeManager::SemanticRole::Accent);
         bg.setAlpha(60);
         sel.format.setBackground(bg);
         selections.append(sel);
@@ -279,6 +270,57 @@ void FindReplaceBar::updateButtonSize()
   m_prevBtn->setFixedWidth(buttonWidth);
   m_nextBtn->setFixedWidth(buttonWidth);
   m_closeBtn->setFixedWidth(buttonWidth);
+}
+
+void FindReplaceBar::applyTheme()
+{
+    auto &tm = ThemeManager::instance();
+    const QString surface = tm.semanticColor(ThemeManager::SemanticRole::SurfaceMuted).name();
+    const QString surfaceAlt = tm.semanticColor(ThemeManager::SemanticRole::Surface).name();
+    const QString border = tm.semanticColor(ThemeManager::SemanticRole::Border).name();
+    const QString borderStrong = tm.semanticColor(ThemeManager::SemanticRole::BorderStrong).name();
+    const QString text = tm.semanticColor(ThemeManager::SemanticRole::Text).name();
+    const QString textMuted = tm.semanticColor(ThemeManager::SemanticRole::TextMuted).name();
+    const QString inputBg = tm.semanticColor(ThemeManager::SemanticRole::InputBg).name();
+    const QString inputText = tm.semanticColor(ThemeManager::SemanticRole::InputText).name();
+    const QString buttonBg = tm.semanticColor(ThemeManager::SemanticRole::ButtonBg).name();
+    const QString buttonText = tm.semanticColor(ThemeManager::SemanticRole::ButtonText).name();
+    const QString buttonHover = tm.semanticColor(ThemeManager::SemanticRole::ButtonHover).name();
+    const QString accent = tm.semanticColor(ThemeManager::SemanticRole::Accent).name();
+    const QString disabledText = tm.semanticColor(ThemeManager::SemanticRole::TextFaint).name();
+
+    const int baseSize = AppearanceController::instance().uiFont().pointSize();
+    setStyleSheet(QString(
+        "FindReplaceBar { background: %1; border-bottom: 1px solid %3; }"
+        "QLineEdit { background: %8; color: %9; border: 1px solid %3; "
+        "  border-radius: 4px; padding: 6px 10px; font-size: %13; }"
+        "QLineEdit:focus { border-color: %12; }"
+        "QPushButton { background: %10; color: %11; border: none; "
+        "  border-radius: 4px; padding: 4px 12px; font-size: %13; }"
+        "QPushButton:hover { background: %14; }"
+        "QPushButton:pressed { background: %12; }"
+        "QPushButton:disabled { color: %15; }"
+        "QCheckBox { color: %6; font-size: %13; }"
+        "QLabel { color: %6; font-size: %13; }"
+        "QLabel#matchLabel { color: %7; }")
+        .arg(surface,
+             surfaceAlt,
+             border,
+             borderStrong,
+             text,
+             textMuted,
+             textMuted,
+             inputBg,
+             inputText,
+             buttonBg,
+             buttonText,
+             accent,
+             QString::number(baseSize + 1),
+             buttonHover,
+             disabledText)
+    );
+
+    m_matchLabel->setObjectName("matchLabel");
 }
 
 void FindReplaceBar::replace()

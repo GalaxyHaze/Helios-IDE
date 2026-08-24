@@ -4,6 +4,7 @@
 #include <QDockWidget>
 #include <QToolButton>
 #include <QList>
+#include <QIcon>
 
 class ActivityBar : public QDockWidget
 {
@@ -18,6 +19,7 @@ public:
     void setActiveMode(Mode mode, bool sidebarVisible = true);
     Mode activeMode() const { return m_activeMode; }
     void setButtonToolTip(Mode mode, const QString &tooltip);
+    void applyTheme();
 
 signals:
     void modeChanged(ActivityBar::Mode mode);
@@ -25,8 +27,11 @@ signals:
 
 private:
     QToolButton *createButton(const QIcon &icon, const QString &tooltip, bool checkable = true);
+    QString buttonStyleSheet();
+    void rebuildIcons();
 
     QList<QToolButton *> m_buttons;
+    QList<QIcon> m_icons;
     Mode m_activeMode = Explorer;
 };
 

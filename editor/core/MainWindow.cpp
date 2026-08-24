@@ -136,7 +136,11 @@ public:
     auto addShortcut = [&](const QString &desc, const QString &keys) {
       auto *descLbl = new QLabel(desc, this);
       auto *keyLbl = new QLabel(keys, this);
-      keyLbl->setStyleSheet("font-weight: bold; color: #7287fd;");
+      keyLbl->setStyleSheet(
+          QString("font-weight: bold; color: %1;")
+              .arg(ThemeManager::instance()
+                       .semanticColor(ThemeManager::SemanticRole::Accent)
+                       .name()));
       sgLayout->addWidget(descLbl, row, 0);
       sgLayout->addWidget(keyLbl, row, 1);
       row++;
@@ -173,8 +177,14 @@ public:
     bottomLayout->addStretch();
     auto *closeBtn = new QPushButton("Close", this);
     closeBtn->setStyleSheet(
-        "background: #7287fd; color: white; padding: 6px 15px; border: none; "
-        "border-radius: 4px; font-weight: bold;");
+        QString("background: %1; color: %2; padding: 6px 15px; border: none; "
+                "border-radius: 4px; font-weight: bold;")
+            .arg(ThemeManager::instance()
+                     .semanticColor(ThemeManager::SemanticRole::Accent)
+                     .name(),
+                 ThemeManager::instance()
+                     .semanticColor(ThemeManager::SemanticRole::OnAccent)
+                     .name()));
     connect(closeBtn, &QPushButton::clicked, this, &QDialog::accept);
     bottomLayout->addWidget(closeBtn);
 
@@ -190,9 +200,9 @@ public:
                 "padding: 0 3px; color: %2; }"
                 "QLabel { color: %2; }"
                 "QCheckBox { color: %2; }")
-            .arg(tm.palette().color(QPalette::Window).name(),
-                 tm.palette().color(QPalette::WindowText).name(),
-                 tm.customColor("sidebarBorder", QColor("#363a4f")).name()));
+            .arg(tm.semanticColor(ThemeManager::SemanticRole::Canvas).name(),
+                 tm.semanticColor(ThemeManager::SemanticRole::Text).name(),
+                 tm.semanticColor(ThemeManager::SemanticRole::Border).name()));
 
     connect(dontShowAgain, &QCheckBox::checkStateChanged, this, [](int state) {
       TomlSettingsStore::instance().setOnboardingDismissed(state ==
@@ -203,14 +213,13 @@ public:
 
 static QString baseStyle() {
   auto &tm = ThemeManager::instance();
-  QPalette pal = tm.palette();
-  QString bg = pal.color(QPalette::Window).name();
-  QString text = pal.color(QPalette::WindowText).name();
-  QString base = pal.color(QPalette::Base).name();
-  QString altBase = pal.color(QPalette::AlternateBase).name();
-  QString highlight = pal.color(QPalette::Highlight).name();
-  QString border = tm.customColor("sidebarBorder", QColor("#363a4f")).name();
-  QString hover = tm.customColor("treeHover", QColor("#363a4f")).name();
+  QString bg = tm.semanticColor(ThemeManager::SemanticRole::Canvas).name();
+  QString text = tm.semanticColor(ThemeManager::SemanticRole::Text).name();
+  QString base = tm.semanticColor(ThemeManager::SemanticRole::SurfaceAlt).name();
+  QString altBase = tm.palette().color(QPalette::AlternateBase).name();
+  QString highlight = tm.semanticColor(ThemeManager::SemanticRole::Selected).name();
+  QString border = tm.semanticColor(ThemeManager::SemanticRole::Border).name();
+  QString hover = tm.semanticColor(ThemeManager::SemanticRole::Hover).name();
 
   return QString(
              "QMainWindow, QWidget { background: %1; color: %2; }"
@@ -297,6 +306,9 @@ MainWindow::MainWindow(QWidget *parent)
   m_splitter->setStretchFactor(2, 0);
   m_splitter->setSizes({settings.sidebarWidth(), 700, 220});
   m_splitter->setChildrenCollapsible(false);
+  connect(m_splitter, &QSplitter::splitterMoved, this, [](int pos, int) {
+      TomlSettingsStore::instance().setSidebarWidth(pos);
+  });
 
   setCentralWidget(m_splitter);
 
@@ -336,7 +348,8 @@ MainWindow::MainWindow(QWidget *parent)
       return;
     }
 
-    setLspStatus("LSP ⬤", "#a6d189");
+    setLspStatus("LSP ⬤",
+                 ThemeManager::instance().semanticColor(ThemeManager::SemanticRole::Success).name());
     m_runtimeStatusText =
         m_runtimeTag.isEmpty()
             ? "LSP connected."
@@ -357,13 +370,15 @@ MainWindow::MainWindow(QWidget *parent)
   connect(m_lspClient, &LspClient::serverStopped, this, [this]() {
     if (!lspEnabled()) {
       m_runtimeStatusText = "Disabled";
-      setLspStatus("LSP Disabled", "#6c7086");
+      setLspStatus("LSP Disabled",
+                   ThemeManager::instance().semanticColor(ThemeManager::SemanticRole::TextFaint).name());
       updateSettingsRuntimeInfo();
       updateLspDiagnostics();
       return;
     }
 
-    setLspStatus("LSP ○", "#f9e2af");
+    setLspStatus("LSP ○",
+                 ThemeManager::instance().semanticColor(ThemeManager::SemanticRole::Warning).name());
     m_runtimeStatusText = "LSP server stopped.";
     updateSettingsRuntimeInfo();
     updateLspDiagnostics();
@@ -379,7 +394,8 @@ MainWindow::MainWindow(QWidget *parent)
     if (m_lspRestartTimes.size() >= 3) {
       m_runtimeStatusText =
           "LSP crashed repeatedly; automatic restart stopped.";
-      setLspStatus("LSP !", "#e78284");
+      setLspStatus("LSP !",
+                   ThemeManager::instance().semanticColor(ThemeManager::SemanticRole::Error).name());
       updateSettingsRuntimeInfo();
       return;
     }
@@ -387,7 +403,8 @@ MainWindow::MainWindow(QWidget *parent)
     const int delaySeconds = 1 << (m_lspRestartTimes.size() - 1);
     m_runtimeStatusText =
         QString("LSP stopped; restarting in %1 second(s)...").arg(delaySeconds);
-    setLspStatus("LSP ○", "#f9e2af");
+    setLspStatus("LSP ○",
+                 ThemeManager::instance().semanticColor(ThemeManager::SemanticRole::Warning).name());
     updateSettingsRuntimeInfo();
     QTimer::singleShot(delaySeconds * 1000, this, [this]() {
       if (lspEnabled() && m_lspClient && !m_lspClient->isRunning())
@@ -412,7 +429,8 @@ MainWindow::MainWindow(QWidget *parent)
             if (!lspEnabled())
               return;
 
-            setLspStatus("LSP !", "#e78284");
+            setLspStatus("LSP !",
+                         ThemeManager::instance().semanticColor(ThemeManager::SemanticRole::Error).name());
             m_runtimeStatusText = "LSP error: " + msg;
             m_lastLspError = msg;
             updateSettingsRuntimeInfo();
@@ -449,26 +467,25 @@ MainWindow::MainWindow(QWidget *parent)
           });
 
   m_contextLabel = new QLabel("◀ 1/1 ▶");
-  m_contextLabel->setStyleSheet("color: #7287fd; padding: 0 4px;");
+  m_contextLabel->setStyleSheet("");
 
   m_lspLabel = new QLabel("LSP ⬤");
-  m_lspLabel->setStyleSheet("color: #a6d189; padding: 0 4px;");
+  m_lspLabel->setStyleSheet("");
 
   m_errorLabel = new QLabel("✕0  ⚠0");
-  m_errorLabel->setStyleSheet("color: #a5adce; padding: 0 4px;");
+  m_errorLabel->setStyleSheet("");
 
   m_posLabel = new QLabel("Ln 1, Col 1");
-  m_posLabel->setStyleSheet("color: #a5adce; padding: 0 4px;");
+  m_posLabel->setStyleSheet("");
 
   m_indentLabel = new QLabel("Spaces: 4");
-  m_indentLabel->setStyleSheet("color: #6c7086; padding: 0 4px;");
+  m_indentLabel->setStyleSheet("");
 
   m_encodingLabel = new QLabel("UTF-8");
-  m_encodingLabel->setStyleSheet("color: #6c7086; padding: 0 4px;");
+  m_encodingLabel->setStyleSheet("");
 
   m_langLabel = new QLabel("Zith");
-  m_langLabel->setStyleSheet(
-      "color: #8839ef; padding: 0 4px; font-weight: bold;");
+  m_langLabel->setStyleSheet("");
 
   statusBar()->addWidget(m_contextLabel);
   statusBar()->addWidget(m_lspLabel);
@@ -496,7 +513,8 @@ MainWindow::MainWindow(QWidget *parent)
             if (!lspEnabled())
               return;
 
-            setLspStatus("LSP !", "#e78284");
+            setLspStatus("LSP !",
+                         ThemeManager::instance().semanticColor(ThemeManager::SemanticRole::Error).name());
             m_runtimeStatusText = message;
             updateSettingsRuntimeInfo();
             statusBar()->showMessage(message, 8000);
@@ -925,12 +943,14 @@ MainWindow::MainWindow(QWidget *parent)
 
   if (lspEnabled()) {
     m_runtimeStatusText = "Resolving latest Zith runtime...";
-    setLspStatus("LSP ○", "#f9e2af");
+    setLspStatus("LSP ○",
+                 ThemeManager::instance().semanticColor(ThemeManager::SemanticRole::Warning).name());
     updateSettingsRuntimeInfo();
     ensureLspRuntime(true);
   } else {
     m_runtimeStatusText = "Disabled";
-    setLspStatus("LSP Disabled", "#6c7086");
+    setLspStatus("LSP Disabled",
+                 ThemeManager::instance().semanticColor(ThemeManager::SemanticRole::TextFaint).name());
     updateSettingsRuntimeInfo();
     updateLspDiagnostics();
   }
@@ -1035,7 +1055,10 @@ CodeEditor *MainWindow::createTab(bool makeCurrent) {
 
 void MainWindow::connectEditorSignals(CodeEditor *editor) {
   connect(editor, &CodeEditor::zoomChanged, this,
-          [this](double scale) { setAppFontSize(qRound(12 * scale)); });
+          [](double scale) {
+            AppearanceController::instance().setEditorFontSize(
+                qRound(12 * scale));
+          });
 
   connect(editor, &CodeEditor::cursorPositionChanged, this, [this]() {
     if (auto *ed = currentEditor())
@@ -1378,6 +1401,55 @@ void MainWindow::applyTheme() {
   QApplication::setPalette(pal);
   setStyleSheetIfChanged(this, baseStyle());
 
+  const QString text = tm.semanticColor(ThemeManager::SemanticRole::Text).name();
+  const QString muted = tm.semanticColor(ThemeManager::SemanticRole::TextMuted).name();
+  const QString faint = tm.semanticColor(ThemeManager::SemanticRole::TextFaint).name();
+  const QString accent = tm.semanticColor(ThemeManager::SemanticRole::Accent).name();
+  const QString success = tm.semanticColor(ThemeManager::SemanticRole::Success).name();
+
+  if (m_contextLabel) {
+    m_contextLabel->setStyleSheet(
+        QString("color: %1; padding: 0 4px;").arg(accent));
+  }
+  if (m_errorLabel) {
+    m_errorLabel->setStyleSheet(
+        QString("color: %1; padding: 0 4px;").arg(muted));
+  }
+  if (m_posLabel) {
+    m_posLabel->setStyleSheet(
+        QString("color: %1; padding: 0 4px;").arg(muted));
+  }
+  if (m_indentLabel) {
+    m_indentLabel->setStyleSheet(
+        QString("color: %1; padding: 0 4px;").arg(faint));
+  }
+  if (m_encodingLabel) {
+    m_encodingLabel->setStyleSheet(
+        QString("color: %1; padding: 0 4px;").arg(faint));
+  }
+  if (m_langLabel) {
+    m_langLabel->setStyleSheet(
+        QString("color: %1; padding: 0 4px; font-weight: bold;").arg(accent));
+  }
+  if (m_vimLabel)
+    m_vimLabel->setStyleSheet(QString("color: %1; padding: 0 4px;").arg(text));
+
+  if (m_lspLabel) {
+    const QString lspText = m_lspLabel->text();
+    if (lspText.contains("!"))
+      setLspStatus(lspText,
+                   tm.semanticColor(ThemeManager::SemanticRole::Error).name());
+    else if (lspText.contains("○") || lspText.contains("◐"))
+      setLspStatus(lspText,
+                   tm.semanticColor(ThemeManager::SemanticRole::Warning).name());
+    else if (lspText.contains("Disabled"))
+      setLspStatus(lspText,
+                   tm.semanticColor(ThemeManager::SemanticRole::TextFaint).name());
+    else
+      setLspStatus(lspText,
+                   tm.semanticColor(ThemeManager::SemanticRole::Success).name());
+  }
+
   setStyleSheetIfChanged(
       m_tabWidget,
       QString("QTabWidget::pane { border: none; background: %1; }"
@@ -1386,18 +1458,18 @@ void MainWindow::applyTheme() {
               "  border-right: 1px solid %3; font-size: %7; }"
               "QTabBar::tab:selected { color: %4; background: %5; }"
               "QTabBar::tab:hover:!selected { background: %6; }")
-          .arg(tm.customColor("tabBarBg", QColor("#11111b")).name(),
-               tm.customColor("tabFg", QColor("#9ca0b0")).name(),
-               tm.customColor("tabBorder", QColor("#1e1e2e")).name(),
-               tm.customColor("tabSelectedFg", QColor("#c6d0f5")).name(),
-               tm.customColor("editorBg", QColor("#1e1e2e")).name(),
-               tm.customColor("tabHoverBg", QColor("#181825")).name(),
+          .arg(tm.semanticColor(ThemeManager::SemanticRole::SurfaceMuted).name(),
+               tm.semanticColor(ThemeManager::SemanticRole::TextMuted).name(),
+               tm.semanticColor(ThemeManager::SemanticRole::BorderStrong).name(),
+               tm.semanticColor(ThemeManager::SemanticRole::SelectedText).name(),
+               tm.semanticColor(ThemeManager::SemanticRole::SurfaceAlt).name(),
+               tm.semanticColor(ThemeManager::SemanticRole::Hover).name(),
                QString::number(qMax(appearance.uiFont().pointSize() - 2, appearance.minFontSize()))));
 
   setStyleSheetIfChanged(
       m_splitter,
       QString("QSplitter::handle { background: %1; }")
-          .arg(tm.customColor("sidebarBorder", QColor("#1e1e2e")).name()));
+          .arg(tm.semanticColor(ThemeManager::SemanticRole::Border).name()));
 
 #ifdef HELIOS_THEME_TIMING
   qDebug() << "Theme application completed in" << timer.elapsed() << "ms";
@@ -1511,7 +1583,8 @@ void MainWindow::setLspEnabled(bool enabled) {
     m_activeStdlibPath.clear();
 
     m_runtimeStatusText = "Disabled";
-    setLspStatus("LSP Disabled", "#6c7086");
+    setLspStatus("LSP Disabled",
+                 ThemeManager::instance().semanticColor(ThemeManager::SemanticRole::TextFaint).name());
     updateSettingsRuntimeInfo();
     updateLspDiagnostics();
   } else {
@@ -1526,7 +1599,8 @@ void MainWindow::ensureLspRuntime(bool preferCached) {
 
   m_runtimeStatusText = preferCached ? "Resolving latest Zith runtime..."
                                      : "Refreshing Zith runtime...";
-  setLspStatus("LSP ○", "#f9e2af");
+  setLspStatus("LSP ○",
+               ThemeManager::instance().semanticColor(ThemeManager::SemanticRole::Warning).name());
   updateSettingsRuntimeInfo();
   m_zithToolchainManager->ensureLatest(preferCached);
 }
@@ -1560,13 +1634,15 @@ void MainWindow::startLspRuntime(const QString &lspPath,
   m_activeWorkspaceRoot = currentWorkspace;
   m_runtimeStatusText = QString("Starting runtime %1...").arg(tag);
 
-  setLspStatus("LSP ○", "#f9e2af");
+  setLspStatus("LSP ○",
+               ThemeManager::instance().semanticColor(ThemeManager::SemanticRole::Warning).name());
   updateSettingsRuntimeInfo();
   if (m_lspClient->start(lspPath, stdlibPath, currentWorkspace)) {
     statusBar()->showMessage(QString("Starting Zith runtime %1...").arg(tag),
                              3000);
   } else {
-    setLspStatus("LSP !", "#e78284");
+    setLspStatus("LSP !",
+                 ThemeManager::instance().semanticColor(ThemeManager::SemanticRole::Error).name());
     m_runtimeStatusText = "Failed to start the resolved Zith runtime.";
     updateSettingsRuntimeInfo();
     statusBar()->showMessage("Failed to start LSP server", 5000);
@@ -1648,7 +1724,8 @@ void MainWindow::clearRuntimeCache() {
   QString errorMessage;
   if (!m_zithToolchainManager->clearCachedRuntime(&errorMessage)) {
     m_runtimeStatusText = errorMessage;
-    setLspStatus("LSP !", "#e78284");
+    setLspStatus("LSP !",
+                 ThemeManager::instance().semanticColor(ThemeManager::SemanticRole::Error).name());
     updateSettingsRuntimeInfo();
     statusBar()->showMessage(errorMessage, 8000);
     return;
@@ -1660,7 +1737,8 @@ void MainWindow::clearRuntimeCache() {
   m_activeStdlibPath.clear();
   m_runtimeStatusText =
       "Runtime cache cleared. Resolving latest Zith runtime...";
-  setLspStatus("LSP ○", "#f9e2af");
+  setLspStatus("LSP ○",
+               ThemeManager::instance().semanticColor(ThemeManager::SemanticRole::Warning).name());
   updateSettingsRuntimeInfo();
   statusBar()->showMessage("Zith runtime cache cleared.", 4000);
   if (lspEnabled())
@@ -1699,7 +1777,16 @@ void MainWindow::setLspStatus(const QString &text, const QString &color) {
     return;
 
   m_lspLabel->setText(text);
-  m_lspLabel->setStyleSheet(QString("color: %1; padding: 0 4px;").arg(color));
+  const QString resolved =
+      color.isEmpty() ? m_lspLabelColor
+                      : color;
+  if (!color.isEmpty())
+    m_lspLabelColor = color;
+  const QString finalColor =
+      resolved.isEmpty() ? ThemeManager::instance().semanticColor(ThemeManager::SemanticRole::Success).name()
+                         : resolved;
+  m_lspLabel->setStyleSheet(
+      QString("color: %1; padding: 0 4px;").arg(finalColor));
 }
 
 void MainWindow::saveAllForLsp() {
@@ -1831,13 +1918,16 @@ void MainWindow::onFrontendStatusReceived(const QJsonObject &status) {
     QString msg = status.value("message").toString();
     if (state == "warming") {
         m_runtimeStatusText = "Frontend warming up...";
-        setLspStatus("LSP ◐", "#89b4fa");
+        setLspStatus("LSP ◐",
+                     ThemeManager::instance().semanticColor(ThemeManager::SemanticRole::Info).name());
     } else if (state == "ready") {
         m_runtimeStatusText = "Frontend ready";
-        setLspStatus("LSP ⬤", "#a6d189");
+        setLspStatus("LSP ⬤",
+                     ThemeManager::instance().semanticColor(ThemeManager::SemanticRole::Success).name());
     } else if (state == "error") {
         m_runtimeStatusText = "Frontend error: " + msg;
-        setLspStatus("LSP !", "#e78284");
+        setLspStatus("LSP !",
+                     ThemeManager::instance().semanticColor(ThemeManager::SemanticRole::Error).name());
     }
     if (m_settingsPanel) m_settingsPanel->appendLspLog("Frontend status: " + state + (msg.isEmpty() ? "" : " - " + msg));
     if (m_lspManagerDialog) m_lspManagerDialog->appendLspLog("Frontend status: " + state + (msg.isEmpty() ? "" : " - " + msg));

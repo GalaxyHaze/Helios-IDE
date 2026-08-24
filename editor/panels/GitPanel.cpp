@@ -1,4 +1,5 @@
 #include "GitPanel.h"
+#include "../core/ThemeManager.h"
 
 #include <QAbstractItemView>
 #include <QColor>
@@ -12,11 +13,12 @@
 #include <QPushButton>
 #include <QVBoxLayout>
 #include <QInputDialog>
+#include <QTimer>
 
 namespace {
 constexpr int kPanelMargin = 8;
 constexpr int kPanelSpacing = 8;
-constexpr int kGitTimeoutMs = 3000;
+constexpr int kGitTimeoutMs = 10000;
 }
 
 
@@ -32,27 +34,22 @@ GitPanel::GitPanel(QWidget *parent)
     headerRow->setContentsMargins(0, 0, 0, 0);
 
     auto *title = new QLabel("Source Control");
-    title->setStyleSheet("color: #c6d0f5; font-weight: bold; font-size: 13px;");
     headerRow->addWidget(title);
     
     m_branchLabel = new QLabel("...");
-    m_branchLabel->setStyleSheet("color: #8caaee; border: 1px solid #363a4f; border-radius: 4px; padding: 2px 6px; font-size: 11px; font-weight: bold; background: #181825;");
     headerRow->addWidget(m_branchLabel);
     headerRow->addStretch();
 
-    auto *refreshButton = new QPushButton("Refresh");
-    refreshButton->setStyleSheet("background: transparent; color: #8caaee; border: none; font-size: 11px;");
-    refreshButton->setCursor(Qt::PointingHandCursor);
-    headerRow->addWidget(refreshButton);
+    m_refreshButton = new QPushButton("Refresh");
+    m_refreshButton->setCursor(Qt::PointingHandCursor);
+    headerRow->addWidget(m_refreshButton);
     layout->addLayout(headerRow);
 
     // Initializer buttons
     m_initButton = new QPushButton("Initialize Git Repository");
-    m_initButton->setStyleSheet("background: #a6d189; color: #11111b; font-weight: bold; padding: 6px; border-radius: 4px;");
     layout->addWidget(m_initButton);
     
     m_connectGithubButton = new QPushButton("Connect to GitHub");
-    m_connectGithubButton->setStyleSheet("background: #8caaee; color: #11111b; font-weight: bold; padding: 6px; border-radius: 4px;");
     layout->addWidget(m_connectGithubButton);
     m_initButton->hide();
     m_connectGithubButton->hide();
@@ -65,11 +62,9 @@ GitPanel::GitPanel(QWidget *parent)
     
     m_commitInput = new QLineEdit;
     m_commitInput->setPlaceholderText("Message (Enter to commit)");
-    m_commitInput->setStyleSheet("QLineEdit { background: #1e1e2e; color: #c6d0f5; border: 1px solid #363a4f; border-radius: 4px; padding: 6px 8px; font-size: 12px; }");
     commitLayout->addWidget(m_commitInput);
     
     m_commitButton = new QPushButton("Commit");
-    m_commitButton->setStyleSheet("QPushButton { background: #7287fd; color: #11111b; font-weight: bold; border: none; border-radius: 4px; padding: 6px 10px; font-size: 12px; } QPushButton:hover { background: #8caaee; }");
     m_commitButton->setCursor(Qt::PointingHandCursor);
     commitLayout->addWidget(m_commitButton);
     layout->addWidget(commitGroup);
@@ -77,7 +72,6 @@ GitPanel::GitPanel(QWidget *parent)
     // 3. Actions / Summary
     m_summaryLabel = new QLabel("Open a project inside a Git repository.");
     m_summaryLabel->setWordWrap(true);
-    m_summaryLabel->setStyleSheet("color: #8c8fa1; font-size: 11px;");
     layout->addWidget(m_summaryLabel);
 
     auto *actionRow = new QHBoxLayout;
@@ -88,11 +82,6 @@ GitPanel::GitPanel(QWidget *parent)
     m_stageSelectionButton = new QPushButton("Stage");
     m_unstageSelectionButton = new QPushButton("Unstage");
     
-    QString actionStyle = "QPushButton { background: #363a4f; color: #c6d0f5; border: none; border-radius: 4px; padding: 4px 8px; font-size: 11px; } QPushButton:hover { background: #45475a; }";
-    m_stageAllButton->setStyleSheet(actionStyle);
-    m_stageSelectionButton->setStyleSheet(actionStyle);
-    m_unstageSelectionButton->setStyleSheet(actionStyle);
-    
     actionRow->addWidget(m_stageAllButton);
     actionRow->addWidget(m_stageSelectionButton);
     actionRow->addWidget(m_unstageSelectionButton);
@@ -102,17 +91,9 @@ GitPanel::GitPanel(QWidget *parent)
     // 4. File List
     m_statusList = new QListWidget;
     m_statusList->setSelectionMode(QAbstractItemView::ExtendedSelection);
-    m_statusList->setStyleSheet(
-        "QListWidget { background: #11111b; color: #c6d0f5; border: 1px solid #363a4f; border-radius: 4px; outline: none; }"
-        "QListWidget::item { border-bottom: 1px solid transparent; }"
-        "QListWidget::item:selected { background: #363a4f; }"
-        "QListWidget::item:hover { background: #1e1e2e; }"
-    );
     layout->addWidget(m_statusList, 1);
 
-    setStyleSheet("GitPanel { background: #11111b; }");
-
-    connect(refreshButton, &QPushButton::clicked, this, &GitPanel::refreshStatus);
+    connect(m_refreshButton, &QPushButton::clicked, this, &GitPanel::refreshStatus);
     connect(m_initButton, &QPushButton::clicked, this, &GitPanel::initRepository);
     connect(m_connectGithubButton, &QPushButton::clicked, this, &GitPanel::connectToGithub);
     connect(m_stageAllButton, &QPushButton::clicked, this, &GitPanel::stageAll);
@@ -122,6 +103,30 @@ GitPanel::GitPanel(QWidget *parent)
     connect(m_commitInput, &QLineEdit::returnPressed, this, &GitPanel::commitChanges);
     connect(m_statusList, &QListWidget::itemActivated, this, &GitPanel::onItemActivated);
     connect(m_statusList, &QListWidget::itemClicked, this, &GitPanel::onItemActivated);
+
+    m_gitProcess = new QProcess(this);
+    m_gitProcess->setProcessChannelMode(QProcess::SeparateChannels);
+    connect(m_gitProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+            this, &GitPanel::onGitProcessFinished);
+    connect(m_gitProcess, &QProcess::errorOccurred,
+            this, &GitPanel::onGitProcessError);
+
+    m_gitTimeoutTimer = new QTimer(this);
+    m_gitTimeoutTimer->setSingleShot(true);
+    m_gitTimeoutTimer->setInterval(kGitTimeoutMs);
+    connect(m_gitTimeoutTimer, &QTimer::timeout, this, [this]() {
+        if (!m_gitProcess || m_gitProcess->state() == QProcess::NotRunning)
+            return;
+
+        m_gitProcess->kill();
+        m_pendingOperation = GitOperation::Status;
+        setBusy(false);
+        setSummaryMessage("Timed out while running Git.", true);
+    });
+
+    connect(&ThemeManager::instance(), &ThemeManager::themeChanged,
+            this, &GitPanel::applyTheme);
+    applyTheme();
 }
 
 void GitPanel::setRootPath(const QString &path)
@@ -130,9 +135,107 @@ void GitPanel::setRootPath(const QString &path)
     refreshStatus();
 }
 
+void GitPanel::applyTheme()
+{
+    auto &tm = ThemeManager::instance();
+    const QString bg = tm.semanticColor(ThemeManager::SemanticRole::Surface).name();
+    const QString border = tm.semanticColor(ThemeManager::SemanticRole::Border).name();
+    const QString text = tm.semanticColor(ThemeManager::SemanticRole::Text).name();
+    const QString muted = tm.semanticColor(ThemeManager::SemanticRole::TextMuted).name();
+    const QString faint = tm.semanticColor(ThemeManager::SemanticRole::TextFaint).name();
+    const QString inputBg = tm.semanticColor(ThemeManager::SemanticRole::InputBg).name();
+    const QString buttonBg = tm.semanticColor(ThemeManager::SemanticRole::ButtonBg).name();
+    const QString buttonHover = tm.semanticColor(ThemeManager::SemanticRole::ButtonHover).name();
+    const QString accent = tm.semanticColor(ThemeManager::SemanticRole::Accent).name();
+    const QString accentHover = tm.semanticColor(ThemeManager::SemanticRole::AccentHover).name();
+    const QString onAccent = tm.semanticColor(ThemeManager::SemanticRole::OnAccent).name();
+    const QString hover = tm.semanticColor(ThemeManager::SemanticRole::Hover).name();
+    const QString selected = tm.semanticColor(ThemeManager::SemanticRole::Selected).name();
+    const QString selectedText =
+        tm.semanticColor(ThemeManager::SemanticRole::SelectedText).name();
+    const QString success = tm.semanticColor(ThemeManager::SemanticRole::Success).name();
+    const QString info = tm.semanticColor(ThemeManager::SemanticRole::Info).name();
+
+    for (QWidget *child : findChildren<QWidget *>())
+        child->setStyleSheet({});
+
+    setStyleSheet(QString("GitPanel { background: %1; }").arg(bg));
+
+    m_summaryLabel->setStyleSheet(QString("color: %1; font-size: 12px;")
+                                      .arg(tm.semanticColor(ThemeManager::SemanticRole::TextMuted).name()));
+
+    m_branchLabel->setStyleSheet(
+        QString("color: %1; border: 1px solid %2; border-radius: 4px; padding: 2px 6px; "
+                "font-size: 11px; font-weight: bold; background: %3;")
+            .arg(accent, border, inputBg));
+
+    m_refreshButton->setStyleSheet(
+        QString("background: transparent; color: %1; border: none; font-size: 11px;")
+            .arg(accent));
+
+    m_initButton->setStyleSheet(
+        QString("background: %1; color: %2; font-weight: bold; padding: 6px; border-radius: 4px;")
+            .arg(success, onAccent));
+
+    m_connectGithubButton->setStyleSheet(
+        QString("background: %1; color: %2; font-weight: bold; padding: 6px; border-radius: 4px;")
+            .arg(info, onAccent));
+
+    m_commitInput->setStyleSheet(
+        QString("QLineEdit { background: %1; color: %2; border: 1px solid %3; "
+                "border-radius: 4px; padding: 6px 8px; font-size: 12px; }")
+            .arg(inputBg, text, border));
+
+    m_commitButton->setStyleSheet(
+        QString("QPushButton { background: %1; color: %2; font-weight: bold; border: none; "
+                "border-radius: 4px; padding: 6px 10px; font-size: 12px; } "
+                "QPushButton:hover { background: %3; }")
+            .arg(accent, onAccent, accentHover));
+
+    const QString actionStyle =
+        QString("QPushButton { background: %1; color: %2; border: none; border-radius: 4px; "
+                "padding: 4px 8px; font-size: 11px; } QPushButton:hover { background: %3; }")
+            .arg(buttonBg, text, buttonHover);
+    m_stageAllButton->setStyleSheet(actionStyle);
+    m_stageSelectionButton->setStyleSheet(actionStyle);
+    m_unstageSelectionButton->setStyleSheet(actionStyle);
+
+    m_statusList->setStyleSheet(
+        QString("QListWidget { background: %1; color: %2; border: 1px solid %3; "
+                "border-radius: 4px; outline: none; }"
+                "QListWidget::item { border-bottom: 1px solid transparent; }"
+                "QListWidget::item:selected { background: %4; }"
+                "QListWidget::item:hover { background: %5; }")
+            .arg(bg, text, border, selected, hover));
+
+    for (int i = 0; i < m_statusList->count(); ++i) {
+        QWidget *rowWidget = m_statusList->itemWidget(m_statusList->item(i));
+        if (!rowWidget)
+            continue;
+
+        const QList<QLabel *> labels = rowWidget->findChildren<QLabel *>();
+        for (QLabel *label : labels) {
+            if (label->objectName() == QStringLiteral("gitStatusName")) {
+                label->setStyleSheet(
+                    QString("font-size: 12px; color: %1;").arg(text));
+            } else if (label->objectName() == QStringLiteral("gitStatusPath")) {
+                label->setStyleSheet(
+                    QString("font-size: 11px; color: %1;").arg(faint));
+            } else {
+                label->setStyleSheet({});
+            }
+        }
+    }
+}
+
 
 void GitPanel::refreshStatus()
 {
+    if (m_activeOperation != GitOperation::None) {
+        m_pendingOperation = GitOperation::Status;
+        return;
+    }
+
     m_statusList->clear();
     m_initButton->hide();
     m_connectGithubButton->hide();
@@ -143,28 +246,211 @@ void GitPanel::refreshStatus()
         return;
     }
 
-    QString output;
-    QString error;
-    if (!runGit({"status", "--short", "--branch"}, &output, &error)) {
-        m_branchLabel->setText("No Repo");
-        setSummaryMessage(error.isEmpty()
-            ? "Current workspace is not a Git repository."
-            : error,
-            true);
-        m_initButton->show();
+    m_branchLabel->setText("...");
+    startGitOperation(GitOperation::Status, {"status", "--short", "--branch"});
+}
+
+void GitPanel::stageAll()
+{
+    m_pendingFileCount = m_statusList->count();
+    startGitOperation(GitOperation::Stage, {"add", "--all"});
+}
+
+void GitPanel::stageSelected()
+{
+    const QStringList relativePaths = selectedRelativePaths();
+    if (relativePaths.isEmpty()) {
+        setSummaryMessage("Select one or more files to stage.", true);
         return;
     }
 
-    m_branchLabel->setText("...");
-    
-    // Check if origin exists
-    QString remotes;
-    if (runGit({"remote"}, &remotes, nullptr)) {
-        if (!remotes.contains("origin")) {
-            m_connectGithubButton->show();
-        }
+    m_pendingFileCount = relativePaths.size();
+    QStringList args = {"add", "--"};
+    args.append(relativePaths);
+    startGitOperation(GitOperation::Stage, args);
+}
+
+void GitPanel::unstageSelected()
+{
+    const QStringList relativePaths = selectedRelativePaths();
+    if (relativePaths.isEmpty()) {
+        setSummaryMessage("Select one or more files to unstage.", true);
+        return;
     }
 
+    m_pendingFileCount = relativePaths.size();
+    QStringList args = {"restore", "--staged", "--"};
+    args.append(relativePaths);
+    startGitOperation(GitOperation::Unstage, args);
+}
+
+void GitPanel::commitChanges()
+{
+    const QString message = m_commitInput->text().trimmed();
+    if (message.isEmpty()) {
+        setSummaryMessage("Enter a commit message before committing.", true);
+        return;
+    }
+
+    startGitOperation(GitOperation::Commit, {"commit", "-m", message});
+}
+
+void GitPanel::onItemActivated(QListWidgetItem *item)
+{
+    if (!item)
+        return;
+
+    const QString path = item->data(Qt::UserRole).toString();
+    if (!path.isEmpty())
+        emit fileActivated(path);
+}
+
+void GitPanel::startGitOperation(GitOperation operation, const QStringList &args)
+{
+    if (m_rootPath.isEmpty()) {
+        setSummaryMessage("Open a project inside a Git repository.", true);
+        return;
+    }
+
+    if (m_activeOperation != GitOperation::None) {
+        m_pendingOperation = GitOperation::Status;
+        return;
+    }
+
+    if (!m_gitProcess || !m_gitTimeoutTimer)
+        return;
+
+    m_activeOperation = operation;
+    m_gitProcess->setWorkingDirectory(m_rootPath);
+    m_gitProcess->start("git", args);
+
+    setBusy(true);
+    m_gitTimeoutTimer->start();
+}
+
+void GitPanel::onGitProcessError(QProcess::ProcessError error)
+{
+    if (error != QProcess::FailedToStart)
+        return;
+
+    m_gitTimeoutTimer->stop();
+    const GitOperation failedOperation = m_activeOperation;
+    m_activeOperation = GitOperation::None;
+    setSummaryMessage("Failed to start Git.", true);
+    setBusy(false);
+    if (failedOperation != GitOperation::None)
+        QTimer::singleShot(0, this, &GitPanel::refreshStatus);
+}
+
+void GitPanel::onGitProcessFinished(int exitCode, QProcess::ExitStatus exitStatus)
+{
+    if (!m_gitProcess || m_activeOperation == GitOperation::None)
+        return;
+
+    m_gitTimeoutTimer->stop();
+    const QString stdOut = QString::fromUtf8(m_gitProcess->readAllStandardOutput()).trimmed();
+    const QString stdErr = QString::fromUtf8(m_gitProcess->readAllStandardError()).trimmed();
+    const GitOperation finishedOperation = m_activeOperation;
+    m_activeOperation = GitOperation::None;
+
+    const bool success = exitStatus == QProcess::NormalExit && exitCode == 0;
+    handleOperationFinished(finishedOperation, stdOut, stdErr, success);
+
+    if (m_pendingOperation != GitOperation::None) {
+        const GitOperation pending = m_pendingOperation;
+        m_pendingOperation = GitOperation::None;
+        if (pending == GitOperation::Status) {
+            refreshStatus();
+        }
+    } else if (finishedOperation != GitOperation::Status
+               && finishedOperation != GitOperation::Remote) {
+        QTimer::singleShot(0, this, &GitPanel::refreshStatus);
+    }
+}
+
+void GitPanel::handleOperationFinished(GitOperation operation,
+                                       const QString &stdOut,
+                                       const QString &stdErr,
+                                       bool success)
+{
+    switch (operation) {
+    case GitOperation::Status:
+        m_branchLabel->setText("No Repo");
+        if (!success) {
+            setSummaryMessage(stdErr.isEmpty()
+                ? "Current workspace is not a Git repository."
+                : stdErr,
+                true);
+            m_initButton->show();
+            break;
+        }
+
+        loadStatusOutput(stdOut);
+        startGitOperation(GitOperation::Remote, {"remote"});
+        break;
+
+    case GitOperation::Remote:
+        if (success && stdOut.contains("origin"))
+            m_connectGithubButton->hide();
+        else
+            m_connectGithubButton->show();
+        break;
+
+    case GitOperation::Stage:
+        if (success) {
+            const int count = m_pendingFileCount > 0 ? m_pendingFileCount
+                                                     : m_statusList->count();
+            setSummaryMessage(QString("Staged %1 file(s).").arg(count));
+        } else {
+            setSummaryMessage(stdErr.isEmpty() ? "Failed to stage files." : stdErr, true);
+        }
+        m_pendingFileCount = 0;
+        break;
+
+    case GitOperation::Unstage:
+        if (success) {
+            setSummaryMessage(QString("Unstaged %1 file(s).").arg(m_pendingFileCount));
+        } else {
+            setSummaryMessage(stdErr.isEmpty() ? "Failed to unstage selected files." : stdErr,
+                              true);
+        }
+        m_pendingFileCount = 0;
+        break;
+
+    case GitOperation::Commit:
+        if (success) {
+            m_commitInput->clear();
+            setSummaryMessage(stdOut.simplified().isEmpty()
+                ? "Commit created successfully."
+                : stdOut.simplified());
+        } else {
+            setSummaryMessage(stdErr.isEmpty() ? "Commit failed." : stdErr, true);
+        }
+        break;
+
+    case GitOperation::Init:
+        setSummaryMessage(!success && !stdErr.isEmpty() ? stdErr
+                                                        : "Repository initialized.",
+                          !success);
+        break;
+
+    case GitOperation::ConnectToGithub:
+        setSummaryMessage(!success && !stdErr.isEmpty() ? stdErr
+                                                        : "Remote 'origin' added.",
+                          !success);
+        break;
+
+    case GitOperation::None:
+        break;
+    }
+
+    if (m_activeOperation == GitOperation::None)
+        setBusy(false);
+}
+
+void GitPanel::loadStatusOutput(const QString &output)
+{
+    auto &tm = ThemeManager::instance();
     const QStringList lines = output.split('\n', Qt::SkipEmptyParts);
     if (lines.isEmpty()) {
         setSummaryMessage("Repository is clean.");
@@ -179,7 +465,7 @@ void GitPanel::refreshStatus()
             continue;
         }
 
-        QString statusStr = line.left(2);
+        const QString statusStr = line.left(2);
         QString relativePath = line.mid(3).trimmed();
         const qsizetype renameArrow = relativePath.indexOf(" -> ");
         if (renameArrow >= 0)
@@ -190,47 +476,48 @@ void GitPanel::refreshStatus()
         if (QFileInfo::exists(absolutePath))
             item->setData(Qt::UserRole, absolutePath);
         item->setData(Qt::UserRole + 1, relativePath);
-        item->setSizeHint(QSize(0, 26)); // Give some height for the custom widget
+        item->setSizeHint(QSize(0, 26));
         m_statusList->addItem(item);
-        
-        // Build custom widget
+
         QWidget *rowWidget = new QWidget;
         QHBoxLayout *rowLayout = new QHBoxLayout(rowWidget);
         rowLayout->setContentsMargins(6, 2, 6, 2);
         rowLayout->setSpacing(8);
-        
+
         QLabel *badge = new QLabel(statusStr.trimmed());
+        badge->setObjectName(QStringLiteral("gitStatusBadge"));
         badge->setAlignment(Qt::AlignCenter);
         badge->setFixedSize(20, 16);
-        
-        // Colors based on status
-        QString badgeBg = "#363a4f";
-        QString badgeFg = "#c6d0f5";
+
+        QString badgeBg = tm.semanticColor(ThemeManager::SemanticRole::ButtonBg).name();
+        QString badgeFg = tm.semanticColor(ThemeManager::SemanticRole::ButtonText).name();
         if (statusStr.contains("M")) {
-            badgeBg = "#fab387"; // Peach
-            badgeFg = "#11111b";
+            badgeBg = tm.semanticColor(ThemeManager::SemanticRole::Warning).name();
+            badgeFg = tm.semanticColor(ThemeManager::SemanticRole::OnAccent).name();
         } else if (statusStr.contains("A")) {
-            badgeBg = "#a6d189"; // Green
-            badgeFg = "#11111b";
+            badgeBg = tm.semanticColor(ThemeManager::SemanticRole::Success).name();
+            badgeFg = tm.semanticColor(ThemeManager::SemanticRole::OnAccent).name();
         } else if (statusStr.contains("D")) {
-            badgeBg = "#e82424"; // Red
-            badgeFg = "#11111b";
+            badgeBg = tm.semanticColor(ThemeManager::SemanticRole::Error).name();
+            badgeFg = tm.semanticColor(ThemeManager::SemanticRole::OnAccent).name();
         } else if (statusStr.contains("?")) {
-            badgeBg = "#8caaee"; // Blue
-            badgeFg = "#11111b";
+            badgeBg = tm.semanticColor(ThemeManager::SemanticRole::Info).name();
+            badgeFg = tm.semanticColor(ThemeManager::SemanticRole::OnAccent).name();
         }
-        
+
         badge->setStyleSheet(QString("background: %1; color: %2; border-radius: 4px; font-size: 10px; font-weight: bold; font-family: monospace;").arg(badgeBg, badgeFg));
         rowLayout->addWidget(badge);
-        
+
         QLabel *nameLabel = new QLabel(QFileInfo(relativePath).fileName());
-        nameLabel->setStyleSheet("color: #c6d0f5; font-size: 12px;");
+        nameLabel->setObjectName(QStringLiteral("gitStatusName"));
+        nameLabel->setStyleSheet("font-size: 12px;");
         rowLayout->addWidget(nameLabel);
-        
+
         QLabel *pathLabel = new QLabel(QFileInfo(relativePath).path());
-        pathLabel->setStyleSheet("color: #6c7086; font-size: 11px;");
+        pathLabel->setObjectName(QStringLiteral("gitStatusPath"));
+        pathLabel->setStyleSheet("font-size: 11px;");
         rowLayout->addWidget(pathLabel, 1);
-        
+
         m_statusList->setItemWidget(item, rowWidget);
 
         ++changedFiles;
@@ -243,118 +530,6 @@ void GitPanel::refreshStatus()
             QString("%1 changed file(s). Select files to stage.")
                 .arg(changedFiles));
     }
-}
-
-void GitPanel::stageAll()
-{
-    QString stdErr;
-    if (!runGit({"add", "--all"}, nullptr, &stdErr)) {
-        setSummaryMessage(stdErr.isEmpty() ? "Failed to stage all changes." : stdErr, true);
-        return;
-    }
-
-    setSummaryMessage("Staged all changes.");
-    refreshStatus();
-}
-
-void GitPanel::stageSelected()
-{
-    const QStringList relativePaths = selectedRelativePaths();
-    if (relativePaths.isEmpty()) {
-        setSummaryMessage("Select one or more files to stage.", true);
-        return;
-    }
-
-    QStringList args = {"add", "--"};
-    args.append(relativePaths);
-
-    QString stdErr;
-    if (!runGit(args, nullptr, &stdErr)) {
-        setSummaryMessage(stdErr.isEmpty() ? "Failed to stage selected files." : stdErr, true);
-        return;
-    }
-
-    setSummaryMessage(QString("Staged %1 file(s).").arg(relativePaths.size()));
-    refreshStatus();
-}
-
-void GitPanel::unstageSelected()
-{
-    const QStringList relativePaths = selectedRelativePaths();
-    if (relativePaths.isEmpty()) {
-        setSummaryMessage("Select one or more files to unstage.", true);
-        return;
-    }
-
-    QStringList args = {"restore", "--staged", "--"};
-    args.append(relativePaths);
-
-    QString stdErr;
-    if (!runGit(args, nullptr, &stdErr)) {
-        setSummaryMessage(stdErr.isEmpty() ? "Failed to unstage selected files." : stdErr, true);
-        return;
-    }
-
-    setSummaryMessage(QString("Unstaged %1 file(s).").arg(relativePaths.size()));
-    refreshStatus();
-}
-
-void GitPanel::commitChanges()
-{
-    const QString message = m_commitInput->text().trimmed();
-    if (message.isEmpty()) {
-        setSummaryMessage("Enter a commit message before committing.", true);
-        return;
-    }
-
-    QString stdOut;
-    QString stdErr;
-    if (!runGit({"commit", "-m", message}, &stdOut, &stdErr)) {
-        setSummaryMessage(stdErr.isEmpty() ? "Commit failed." : stdErr, true);
-        return;
-    }
-
-    m_commitInput->clear();
-    setSummaryMessage(stdOut.simplified().isEmpty()
-        ? "Commit created successfully."
-        : stdOut.simplified());
-    refreshStatus();
-}
-
-void GitPanel::onItemActivated(QListWidgetItem *item)
-{
-    if (!item)
-        return;
-
-    const QString path = item->data(Qt::UserRole).toString();
-    if (!path.isEmpty())
-        emit fileActivated(path);
-}
-
-bool GitPanel::runGit(const QStringList &args, QString *stdOut, QString *stdErr)
-{
-    if (m_rootPath.isEmpty()) {
-        if (stdErr)
-            *stdErr = "Open a project inside a Git repository.";
-        return false;
-    }
-
-    QProcess git;
-    git.setWorkingDirectory(m_rootPath);
-    git.start("git", args);
-
-    if (!git.waitForFinished(kGitTimeoutMs)) {
-        if (stdErr)
-            *stdErr = "Timed out while running Git.";
-        return false;
-    }
-
-    if (stdOut)
-        *stdOut = QString::fromUtf8(git.readAllStandardOutput()).trimmed();
-    if (stdErr)
-        *stdErr = QString::fromUtf8(git.readAllStandardError()).trimmed();
-
-    return git.exitStatus() == QProcess::NormalExit && git.exitCode() == 0;
 }
 
 QStringList GitPanel::selectedRelativePaths() const
@@ -372,38 +547,41 @@ QStringList GitPanel::selectedRelativePaths() const
 
 void GitPanel::setSummaryMessage(const QString &message, bool isError)
 {
+    auto &tm = ThemeManager::instance();
     m_summaryLabel->setText(message);
     m_summaryLabel->setStyleSheet(QString("color: %1; font-size: 12px;")
-        .arg(isError ? "#e78284" : "#8c8fa1"));
+        .arg(isError
+                 ? tm.semanticColor(ThemeManager::SemanticRole::Error).name()
+                 : tm.semanticColor(ThemeManager::SemanticRole::TextMuted).name()));
 }
 
+void GitPanel::setBusy(bool busy)
+{
+    m_refreshButton->setEnabled(!busy);
+    m_commitButton->setEnabled(!busy);
+    m_commitInput->setEnabled(!busy);
+    m_stageAllButton->setEnabled(!busy);
+    m_stageSelectionButton->setEnabled(!busy);
+    m_unstageSelectionButton->setEnabled(!busy);
+    m_initButton->setEnabled(!busy);
+    m_connectGithubButton->setEnabled(!busy);
+}
 
 void GitPanel::initRepository()
 {
-    if (m_rootPath.isEmpty()) return;
-    
-    QProcess git;
-    git.setWorkingDirectory(m_rootPath);
-    git.start("git", {"init", "-b", "main"});
-    git.waitForFinished(kGitTimeoutMs);
-    
-    refreshStatus();
+    startGitOperation(GitOperation::Init, {"init", "-b", "main"});
 }
 
 void GitPanel::connectToGithub()
 {
-    if (m_rootPath.isEmpty()) return;
-    
     bool ok;
     QString url = QInputDialog::getText(this, "Connect to GitHub",
                                         "Enter GitHub Repository URL\(e.g., https://github.com/user/repo.git):",
                                         QLineEdit::Normal,
                                         "", &ok);
-    if (ok && !url.isEmpty()) {
-        QProcess git;
-        git.setWorkingDirectory(m_rootPath);
-        git.start("git", {"remote", "add", "origin", url.trimmed()});
-        git.waitForFinished(kGitTimeoutMs);
-        refreshStatus();
-    }
+    if (!ok || url.trimmed().isEmpty())
+        return;
+
+    startGitOperation(GitOperation::ConnectToGithub,
+                      {"remote", "add", "origin", url.trimmed()});
 }

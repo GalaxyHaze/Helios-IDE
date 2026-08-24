@@ -5,6 +5,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QDebug>
+#include <QDir>
+#include <QStandardPaths>
 
 TranslationManager::TranslationManager(QObject *parent)
     : QObject(parent)
@@ -20,11 +22,16 @@ TranslationManager &TranslationManager::instance()
 
 QString TranslationManager::findI18nFile(const QString &locale)
 {
-    QString appDir = QCoreApplication::applicationDirPath() + "/i18n/";
-    QString path = appDir + locale + ".json";
+    const QString resourceName = QString(":/appdata/i18n/%1.json").arg(locale);
+    if (QFileInfo::exists(resourceName))
+        return resourceName;
+
+    QString path = QCoreApplication::applicationDirPath() + "/i18n/" + locale + ".json";
     if (QFileInfo::exists(path)) return path;
 
-    path = "/home/diogo/Helios/i18n/" + locale + ".json";
+    const QString appDataDir = QStandardPaths::writableLocation(
+        QStandardPaths::AppDataLocation);
+    path = QDir(appDataDir).filePath("i18n/" + locale + ".json");
     if (QFileInfo::exists(path)) return path;
 
     return "";

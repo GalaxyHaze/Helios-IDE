@@ -2,12 +2,14 @@
 #define GITPANEL_H
 
 #include <QWidget>
+#include <QProcess>
 
 class QLabel;
 class QLineEdit;
 class QListWidget;
 class QListWidgetItem;
 class QPushButton;
+class QTimer;
 
 class GitPanel : public QWidget
 {
@@ -18,6 +20,7 @@ public:
 
     void setRootPath(const QString &path);
     QString rootPath() const { return m_rootPath; }
+    void applyTheme();
 
 public slots:
     void refreshStatus();
@@ -31,13 +34,36 @@ private slots:
     void unstageSelected();
     void commitChanges();
     void onItemActivated(QListWidgetItem *item);
+    void onGitProcessFinished(int exitCode, QProcess::ExitStatus exitStatus);
+    void onGitProcessError(QProcess::ProcessError error);
 
 private:
-    bool runGit(const QStringList &args, QString *stdOut = nullptr, QString *stdErr = nullptr);
+    enum class GitOperation {
+        None,
+        Status,
+        Remote,
+        Stage,
+        Unstage,
+        Commit,
+        Init,
+        ConnectToGithub
+    };
+
+    void startGitOperation(GitOperation operation, const QStringList &args);
+    void setBusy(bool busy);
+    void handleOperationFinished(GitOperation operation,
+                                 const QString &stdOut,
+                                 const QString &stdErr,
+                                 bool success);
+    void loadStatusOutput(const QString &output);
     QStringList selectedRelativePaths() const;
     void setSummaryMessage(const QString &message, bool isError = false);
 
     QString m_rootPath;
+    QProcess *m_gitProcess = nullptr;
+    QTimer *m_gitTimeoutTimer = nullptr;
+    GitOperation m_activeOperation = GitOperation::None;
+    GitOperation m_pendingOperation = GitOperation::None;
     QLabel *m_summaryLabel = nullptr;
     QLabel *m_branchLabel = nullptr;
     QListWidget *m_statusList = nullptr;
@@ -48,6 +74,8 @@ private:
     QPushButton *m_commitButton = nullptr;
     QPushButton *m_initButton = nullptr;
     QPushButton *m_connectGithubButton = nullptr;
+    QPushButton *m_refreshButton = nullptr;
+    int m_pendingFileCount = 0;
     void initRepository();
     void connectToGithub();
 };

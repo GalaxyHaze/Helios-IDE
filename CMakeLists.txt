@@ -118,6 +118,7 @@ add_executable(test_helios
     editor/editor/VimMotionController.cpp
     editor/core/TranslationManager.h
     editor/core/TranslationManager.cpp
+    editor/assets/resources.qrc
     editor/panels/SettingsPanel.h
     editor/panels/SettingsPanel.cpp
     editor/widgets/ProjectTreeModel.h

@@ -15,6 +15,7 @@ public:
 
     void runCommand(const QString &workingDir, const QString &command, const QStringList &args);
     bool isRunning() const;
+    void applyTheme();
 
 signals:
     void compileStarted();

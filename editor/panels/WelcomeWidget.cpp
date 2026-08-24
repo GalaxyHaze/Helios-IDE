@@ -27,12 +27,7 @@ WelcomeWidget::WelcomeWidget(QWidget *parent)
     leftCol->addWidget(m_recentLabel);
 
     m_recentList = new QListWidget;
-    m_recentList->setStyleSheet(
-        "QListWidget { border: 1px solid #363a4f; border-radius: 6px; padding: 5px; font-size: 13px; }"
-        "QListWidget::item { padding: 8px 10px; border-radius: 4px; }"
-        "QListWidget::item:hover { background: #363a4f; }"
-        "QListWidget::item:selected { background: #363a4f; color: #ffffff; }"
-    );
+    m_recentList->setStyleSheet({});
     leftCol->addWidget(m_recentList, 1);
     mainLayout->addLayout(leftCol, 3);
 
@@ -62,7 +57,7 @@ WelcomeWidget::WelcomeWidget(QWidget *parent)
     rightCol->addWidget(m_shortcutsTitle);
 
     m_shortcutTexts = new QLabel;
-    m_shortcutTexts->setStyleSheet("font-size: 12px; color: #a5adce; line-height: 18px;");
+    m_shortcutTexts->setStyleSheet("font-size: 12px; line-height: 18px;");
     rightCol->addWidget(m_shortcutTexts);
 
     // Tips Section
@@ -71,7 +66,7 @@ WelcomeWidget::WelcomeWidget(QWidget *parent)
     rightCol->addWidget(m_tipsTitle);
 
     m_tipText = new QLabel;
-    m_tipText->setStyleSheet("font-size: 12px; color: #a5adce; line-height: 18px;");
+    m_tipText->setStyleSheet("font-size: 12px; line-height: 18px;");
     m_tipText->setWordWrap(true);
     rightCol->addWidget(m_tipText);
 
@@ -135,25 +130,24 @@ void WelcomeWidget::updateThemeAndLanguage()
     QPalette pal = tm.palette();
     setPalette(pal);
 
-    QColor base = pal.color(QPalette::Base);
-    QColor text = pal.color(QPalette::Text);
-    QColor windowText = pal.color(QPalette::WindowText);
-    QColor highlight = pal.color(QPalette::Highlight);
-
-    QString textHex = text.name();
-    QString windowTextHex = windowText.name();
-    QString bgHex = base.name();
-    QString borderHex = tm.customColor("sidebarBorder", QColor("#363a4f")).name();
-    QString itemHoverHex = tm.customColor("treeHover", QColor("#363a4f")).name();
-    QString highlightHex = highlight.name();
+    const QString textHex = tm.semanticColor(ThemeManager::SemanticRole::Text).name();
+    const QString windowTextHex = tm.semanticColor(ThemeManager::SemanticRole::Text).name();
+    const QString mutedHex = tm.semanticColor(ThemeManager::SemanticRole::TextMuted).name();
+    const QString bgHex = tm.semanticColor(ThemeManager::SemanticRole::SurfaceAlt).name();
+    const QString borderHex = tm.semanticColor(ThemeManager::SemanticRole::Border).name();
+    const QString itemHoverHex = tm.semanticColor(ThemeManager::SemanticRole::Hover).name();
+    const QString selectedHex = tm.semanticColor(ThemeManager::SemanticRole::Selected).name();
+    const QString selectedTextHex = tm.semanticColor(ThemeManager::SemanticRole::SelectedText).name();
+    const QString accentHex = tm.semanticColor(ThemeManager::SemanticRole::Accent).name();
+    const QString onAccentHex = tm.semanticColor(ThemeManager::SemanticRole::OnAccent).name();
 
     m_recentList->setStyleSheet(
         QString(
             "QListWidget { background: %1; color: %2; border: 1px solid %3; border-radius: 6px; padding: 5px; font-size: 13px; }"
             "QListWidget::item { padding: 8px 10px; border-radius: 4px; color: %2; }"
             "QListWidget::item:hover { background: %4; }"
-            "QListWidget::item:selected { background: %5; color: #ffffff; }"
-        ).arg(bgHex, textHex, borderHex, itemHoverHex, highlightHex)
+            "QListWidget::item:selected { background: %5; color: %6; }"
+        ).arg(bgHex, textHex, borderHex, itemHoverHex, selectedHex, selectedTextHex)
     );
 
     m_titleLabel->setStyleSheet(QString("font-size: 28px; font-weight: bold; color: %1;").arg(windowTextHex));
@@ -161,13 +155,13 @@ void WelcomeWidget::updateThemeAndLanguage()
     m_shortcutsTitle->setStyleSheet(QString("font-size: 14px; font-weight: bold; margin-top: 10px; color: %1;").arg(windowTextHex));
     m_tipsTitle->setStyleSheet(QString("font-size: 14px; font-weight: bold; margin-top: 10px; color: %1;").arg(windowTextHex));
     m_shortcutTexts->setStyleSheet(QString("font-size: 12px; color: %1; line-height: 18px;").arg(textHex));
-    m_tipText->setStyleSheet(QString("font-size: 12px; color: %1; line-height: 18px;").arg(textHex));
+    m_tipText->setStyleSheet(QString("font-size: 12px; color: %1; line-height: 18px;").arg(mutedHex));
 
     m_openBtn->setStyleSheet(
         QString(
-            "QPushButton { background: %1; color: white; border: none; padding: 10px 15px; border-radius: 6px; font-size: 13px; font-weight: bold; }"
+        "QPushButton { background: %1; color: %2; border: none; padding: 10px 15px; border-radius: 6px; font-size: 13px; font-weight: bold; }"
             "QPushButton:hover { opacity: 0.9; }"
-        ).arg(highlightHex)
+        ).arg(accentHex, onAccentHex)
     );
 
     m_newBtn->setStyleSheet(

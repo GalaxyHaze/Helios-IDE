@@ -33,6 +33,7 @@ private slots:
         auto &store = TomlSettingsStore::instance();
         store.setFontSize(15);
         store.setTheme("helios-dark");
+        store.setCustomThemePath(QString());
         store.setLocale("pt-BR");
         store.setSidebarVisible(false);
         store.setTreeMaxDepth(20);
@@ -76,6 +77,7 @@ private slots:
         QCOMPARE(tm.palette().color(QPalette::Base), QColor("#141720"));
         QCOMPARE(tm.customColor("editorBg"), QColor("#1b1e2a"));
         QCOMPARE(tm.customColor("editorSelection"), QColor("#354b83"));
+        QVERIFY(tm.loadTheme("helios-dark"));
     }
 
     void testThemeCatalog() {
@@ -114,8 +116,8 @@ private slots:
 
         auto &tm = ThemeManager::instance();
         for (const QString &themeId : themeIds) {
-            const QString path = QDir(QCoreApplication::applicationDirPath())
-                                     .filePath("themes/" + themeId + ".json");
+            const QString path = QStringLiteral(":/appdata/themes/%1.json")
+                                     .arg(themeId);
             QFile file(path);
             QVERIFY2(file.open(QIODevice::ReadOnly), qPrintable(path));
 
@@ -149,7 +151,70 @@ private slots:
             QVERIFY(tm.customColor("editorBg").isValid());
             QVERIFY(tm.customColor("diagnosticError").isValid());
             QVERIFY(tm.syntaxStyle("comment").color.isValid());
+            QVERIFY2(tm.loadTheme(themeId), qPrintable(themeId));
         }
+    }
+
+    void testSemanticColors() {
+        auto &tm = ThemeManager::instance();
+
+        QVERIFY(tm.loadTheme("helios-dark"));
+        QVERIFY(tm.isDark());
+        QCOMPARE(tm.semanticColor(ThemeManager::SemanticRole::Canvas),
+                 tm.palette().color(QPalette::Window));
+        QCOMPARE(tm.semanticColor(ThemeManager::SemanticRole::Text),
+                 tm.palette().color(QPalette::Text));
+        QCOMPARE(tm.semanticColor(ThemeManager::SemanticRole::InputBg),
+                 tm.palette().color(QPalette::Base));
+        QCOMPARE(tm.semanticColor(ThemeManager::SemanticRole::Accent),
+                 tm.palette().color(QPalette::Link));
+        QCOMPARE(tm.semanticColor(ThemeManager::SemanticRole::Success),
+                 QColor("#a6d189"));
+
+        QTemporaryDir tempDir;
+        QVERIFY(tempDir.isValid());
+        QFile themeFile(QDir(tempDir.path()).filePath("partial-theme.json"));
+        QVERIFY(themeFile.open(QIODevice::WriteOnly | QIODevice::Text));
+        QTextStream out(&themeFile);
+        out << "{\n"
+            << "  \"name\": \"Partial Theme\",\n"
+            << "  \"palette\": {\n"
+            << "    \"window\": \"#101418\",\n"
+            << "    \"windowText\": \"#eef2f7\",\n"
+            << "    \"base\": \"#0c0f13\",\n"
+            << "    \"alternateBase\": \"#161b21\",\n"
+            << "    \"toolTipBase\": \"#1c222a\",\n"
+            << "    \"toolTipText\": \"#eef2f7\",\n"
+            << "    \"text\": \"#d9deeb\",\n"
+            << "    \"button\": \"#202638\",\n"
+            << "    \"buttonText\": \"#e6e9f2\",\n"
+            << "    \"brightText\": \"#ff7a90\",\n"
+            << "    \"link\": \"#8fa2ff\",\n"
+            << "    \"highlight\": \"#3b5ccc\",\n"
+            << "    \"highlightedText\": \"#ffffff\"\n"
+            << "  },\n"
+            << "  \"custom\": { \"editorBg\": \"#10151f\" },\n"
+            << "  \"syntax\": {\n"
+            << "    \"comment\": { \"color\": \"#6A5A8A\" }\n"
+            << "  }\n"
+            << "}\n";
+        themeFile.close();
+
+        QVERIFY(tm.loadThemeFile(themeFile.fileName()));
+        QCOMPARE(tm.semanticColor(ThemeManager::SemanticRole::Surface),
+                 tm.customColor("sidebar", tm.palette().color(QPalette::Window)));
+        QCOMPARE(tm.semanticColor(ThemeManager::SemanticRole::TextFaint),
+                 tm.customColor("editorLineNumber",
+                                tm.semanticColor(ThemeManager::SemanticRole::TextMuted)));
+
+        QVERIFY(tm.loadTheme("helios-light"));
+        QVERIFY(!tm.isDark());
+        QCOMPARE(tm.semanticColor(ThemeManager::SemanticRole::Canvas),
+                 tm.palette().color(QPalette::Window));
+        QCOMPARE(tm.semanticColor(ThemeManager::SemanticRole::Text),
+                 tm.palette().color(QPalette::Text));
+        QCOMPARE(tm.semanticColor(ThemeManager::SemanticRole::Success),
+                 QColor("#237a57"));
     }
 
     void testSyntaxThemeReload() {

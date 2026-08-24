@@ -141,6 +141,7 @@ private:
     QLabel *m_langLabel = nullptr;
     QString m_runtimeStatusText;
     QString m_runtimeTag;
+    QString m_lspLabelColor;
     QString m_activeLspPath;
     QString m_activeStdlibPath;
     QString m_activeWorkspaceRoot;

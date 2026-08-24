@@ -1,6 +1,7 @@
 #include "BreadcrumbsBar.h"
 
 #include "../core/AppearanceController.h"
+#include "../core/ThemeManager.h"
 
 #include <QLabel>
 #include <QHBoxLayout>
@@ -75,8 +76,11 @@ void BreadcrumbsBar::rebuild(const QStringList &dirs, const QString &file, const
         int fontSize = useLargeFont ?
                            AppearanceController::instance().uiLargeFont().pointSize() - fontDecrement:
                            AppearanceController::instance().uiFont().pointSize() - fontDecrement;
-        sep->setStyleSheet(QString("color: #6c7086; padding: 0 4px; font-size: %1;")
-                                .arg(QString::number(fontSize)));
+        sep->setStyleSheet(QString("color: %1; padding: 0 4px; font-size: %2;")
+                               .arg(ThemeManager::instance()
+                                        .semanticColor(ThemeManager::SemanticRole::TextFaint)
+                                        .name(),
+                                    QString::number(fontSize)));
         m_layout->addWidget(sep);
     };
 
@@ -102,16 +106,29 @@ void BreadcrumbsBar::rebuild(const QStringList &dirs, const QString &file, const
         AppearanceController::instance().uiFont();
 
     for (const QString &dir : dirs) {
-        addLabel(dir, "#9ca0b0", useLargeFont);
+        addLabel(dir,
+                 ThemeManager::instance()
+                     .semanticColor(ThemeManager::SemanticRole::TextMuted)
+                     .name(),
+                 useLargeFont);
         addSep(useLargeFont);
     }
-    addLabel(file, "#c6d0f5", useLargeFont, true);
+    addLabel(file,
+             ThemeManager::instance()
+                 .semanticColor(ThemeManager::SemanticRole::Text)
+                 .name(),
+             useLargeFont,
+             true);
     QFontMetrics metrics(font);
     setFixedHeight(metrics.height() + 5);
 
     if (!func.isEmpty()) {
         addSep(useLargeFont);
-        addLabel(func, "#e5c890", useLargeFont);
+        addLabel(func,
+                 ThemeManager::instance()
+                     .semanticColor(ThemeManager::SemanticRole::Accent)
+                     .name(),
+                 useLargeFont);
     }
     m_layout->addStretch();
 }
