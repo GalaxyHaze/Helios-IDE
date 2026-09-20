@@ -25,8 +25,13 @@
 #include "../editor/editor/Syntax.h"
 #include "../editor/editor/VimMotionController.h"
 #include "../editor/editor/CHighlighter.h"
+#include "../editor/panels/SearchPanel.h"
 #include "../editor/core/FileIcons.h"
 #include "../editor/widgets/ProjectTreeModel.h"
+#include "../editor/editor/Code.h"
+#include "../editor/widgets/FindReplaceBar.h"
+#include "../editor/core/SnippetManager.h"
+#include "../editor/editor/LspCompletionModel.h"
 
 class TestHelios : public QObject
 {
@@ -56,6 +61,8 @@ private slots:
         store.setUiScale(125);
         store.setVimMotionsEnabled(true);
         store.setUseOnlineZithLsp(true);
+        store.setSearchTextExtensions({"zith", "cpp", "dockerfile"});
+        store.setSearchExcludedDirs({".git", "vendor"});
 
         QStringList projects = {"/path/to/a", "/path/to/b"};
         store.setRecentProjects(projects);
@@ -74,6 +81,8 @@ private slots:
         QCOMPARE(store.uiScale(), 125);
         QVERIFY(store.vimMotionsEnabled());
         QVERIFY(store.useOnlineZithLsp());
+        QCOMPARE(store.searchTextExtensions(), QStringList({"zith", "cpp", "dockerfile"}));
+        QCOMPARE(store.searchExcludedDirs(), QStringList({".git", "vendor"}));
         QCOMPARE(store.customThemePath(), QString());
     }
 
@@ -851,6 +860,95 @@ private slots:
         manager.ensureLatest(true);
         QTRY_VERIFY(readySpy.count() > 0);
         QCOMPARE(readySpy.at(0).at(0).toString(), lspPath);
+    }
+
+    void testSearchPanelScansConfiguredExtensions() {
+        const QStringList extensions = {"zith", "cpp", "dockerfile"};
+        const QStringList excludedDirs = {".git", "vendor"};
+
+        QVERIFY(SearchPanel::shouldScanFile(
+            "/tmp/project/src/main.zith", extensions, excludedDirs));
+        QVERIFY(SearchPanel::shouldScanFile(
+            "/tmp/project/Dockerfile", extensions, excludedDirs));
+        QVERIFY(SearchPanel::shouldScanFile(
+            "/tmp/project/notes.txt", extensions, excludedDirs) == false);
+        QVERIFY(SearchPanel::shouldScanFile(
+            "/tmp/project/vendor/lib.cpp", extensions, excludedDirs) == false);
+        QVERIFY(SearchPanel::shouldScanFile(
+            "/tmp/project/.git/config", extensions, excludedDirs) == false);
+        QVERIFY(SearchPanel::shouldScanFile(
+            "/tmp/project/src/main.cpp", extensions, excludedDirs));
+        QVERIFY(SearchPanel::shouldScanFile(
+            "/tmp/project/dockerfile", extensions, excludedDirs));
+    }
+
+    void testFindReplaceBarFindAndWrap() {
+        CodeEditor editor;
+        editor.setInitialDocumentText("alpha beta\nbeta gamma\nbeta");
+
+        FindReplaceBar bar;
+        bar.setEditor(&editor);
+        bar.showFind();
+
+        auto *findInput = bar.findChild<QLineEdit *>();
+        QVERIFY(findInput);
+        findInput->setText("beta");
+
+        QTextCursor first = editor.textCursor();
+        QVERIFY(first.hasSelection());
+        QCOMPARE(first.selectedText(), QString("beta"));
+        QCOMPARE(editor.textCursor().selectionStart(), 6);
+
+        bar.findNext();
+        QCOMPARE(editor.textCursor().selectionStart(), 11);
+        bar.findNext();
+        QCOMPARE(editor.document()->findBlock(editor.textCursor().selectionStart()).blockNumber(), 2);
+        QCOMPARE(editor.textCursor().selectionStart(), 22);
+
+        bar.findNext();
+        QCOMPARE(editor.textCursor().selectionStart(), 6);
+
+        bar.findPrevious();
+        QCOMPARE(editor.document()->findBlock(editor.textCursor().selectionStart()).blockNumber(), 2);
+        QCOMPARE(editor.textCursor().selectionStart(), 22);
+        bar.findPrevious();
+        QCOMPARE(editor.textCursor().selectionStart(), 11);
+    }
+
+    void testFindReplaceBarReplaceAndReplaceAll() {
+        CodeEditor editor;
+        editor.setInitialDocumentText("alpha beta\nbeta gamma\nbeta");
+
+        FindReplaceBar bar;
+        bar.setEditor(&editor);
+        bar.showReplace();
+
+        const QList<QLineEdit *> inputs = bar.findChildren<QLineEdit *>();
+        QCOMPARE(inputs.size(), 2);
+        inputs[0]->setText("beta");
+
+        const QList<QPushButton *> buttons = bar.findChildren<QPushButton *>();
+        QPushButton *replaceBtn = nullptr;
+        QPushButton *replaceAllBtn = nullptr;
+        for (QPushButton *button : buttons) {
+            if (button->text() == "Replace")
+                replaceBtn = button;
+            else if (button->text() == "All")
+                replaceAllBtn = button;
+        }
+        QVERIFY(replaceBtn);
+        QVERIFY(replaceAllBtn);
+
+        inputs[1]->setText("X");
+        replaceBtn->click();
+        QCOMPARE(editor.toPlainText(), QString("alpha X\nbeta gamma\nbeta"));
+
+        QTextCursor cursor(editor.document());
+        cursor.movePosition(QTextCursor::Start);
+        editor.setTextCursor(cursor);
+        replaceAllBtn->click();
+        QCOMPARE(editor.toPlainText(), QString("alpha X\nX gamma\nX"));
+        QVERIFY(editor.document()->isModified());
     }
 };
 

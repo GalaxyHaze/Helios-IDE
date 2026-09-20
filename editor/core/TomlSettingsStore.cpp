@@ -90,6 +90,36 @@ void TomlSettingsStore::load()
             m_vimMotionsEnabled = (val == "true");
         } else if (key == "wordWrap") {
             m_wordWrap = (val == "true");
+        } else if (key == "searchTextExtensions") {
+            m_searchTextExtensions.clear();
+            if (val.startsWith('[') && val.endsWith(']')) {
+                const QString content = val.mid(1, val.length() - 2).trimmed();
+                if (!content.isEmpty()) {
+                    const QStringList items = content.split(',', Qt::SkipEmptyParts);
+                    for (const QString &item : items) {
+                        QString clean = item.trimmed();
+                        if (clean.startsWith('"') && clean.endsWith('"') && clean.length() >= 2)
+                            clean = clean.mid(1, clean.length() - 2);
+                        if (!clean.isEmpty())
+                            m_searchTextExtensions.append(clean);
+                    }
+                }
+            }
+        } else if (key == "searchExcludedDirs") {
+            m_searchExcludedDirs.clear();
+            if (val.startsWith('[') && val.endsWith(']')) {
+                const QString content = val.mid(1, val.length() - 2).trimmed();
+                if (!content.isEmpty()) {
+                    const QStringList items = content.split(',', Qt::SkipEmptyParts);
+                    for (const QString &item : items) {
+                        QString clean = item.trimmed();
+                        if (clean.startsWith('"') && clean.endsWith('"') && clean.length() >= 2)
+                            clean = clean.mid(1, clean.length() - 2);
+                        if (!clean.isEmpty())
+                            m_searchExcludedDirs.append(clean);
+                    }
+                }
+            }
         } else if (key == "sidebarWidth") {
             m_sidebarWidth = val.toInt();
             if (m_sidebarWidth < 50) m_sidebarWidth = 280;
@@ -161,6 +191,22 @@ void TomlSettingsStore::save()
     out << "editorFontSize = " << m_editorFontSize << "\n";
     out << "renderingStrategy = \"" << m_renderingStrategy << "\"\n";
     out << "wordWrap = " << (m_wordWrap ? "true" : "false") << "\n\n";
+
+    out << "[search]\n";
+    out << "searchTextExtensions = [";
+    for (int i = 0; i < m_searchTextExtensions.size(); ++i) {
+        out << "\"" << m_searchTextExtensions[i] << "\"";
+        if (i < m_searchTextExtensions.size() - 1)
+            out << ", ";
+    }
+    out << "]\n";
+    out << "searchExcludedDirs = [";
+    for (int i = 0; i < m_searchExcludedDirs.size(); ++i) {
+        out << "\"" << m_searchExcludedDirs[i] << "\"";
+        if (i < m_searchExcludedDirs.size() - 1)
+            out << ", ";
+    }
+    out << "]\n\n";
 
     out << "[ui]\n";
     out << "theme = \"" << m_theme << "\"\n";
@@ -234,6 +280,22 @@ void TomlSettingsStore::setUiScale(int percent)
 void TomlSettingsStore::setVimMotionsEnabled(bool enabled)
 {
     if (m_vimMotionsEnabled != enabled) { m_vimMotionsEnabled = enabled; save(); }
+}
+
+void TomlSettingsStore::setSearchTextExtensions(const QStringList &extensions)
+{
+    if (m_searchTextExtensions != extensions) {
+        m_searchTextExtensions = extensions;
+        save();
+    }
+}
+
+void TomlSettingsStore::setSearchExcludedDirs(const QStringList &dirs)
+{
+    if (m_searchExcludedDirs != dirs) {
+        m_searchExcludedDirs = dirs;
+        save();
+    }
 }
 
 void TomlSettingsStore::addRecentProject(const QString &project)

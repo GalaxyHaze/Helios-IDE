@@ -114,6 +114,16 @@ file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/i18n" DESTINATION "${CMAKE_CURRENT_BINARY
 # Testes automatizados
 add_executable(test_helios
     tests/test_helios.cpp
+    editor/editor/Code.h
+    editor/editor/Code.cpp
+    editor/editor/LspCompletionModel.h
+    editor/editor/LspCompletionModel.cpp
+    editor/core/SnippetManager.h
+    editor/core/SnippetManager.cpp
+    editor/widgets/FindReplaceBar.h
+    editor/widgets/FindReplaceBar.cpp
+    editor/panels/SearchPanel.h
+    editor/panels/SearchPanel.cpp
     editor/core/ZithToolchainManager.h
     editor/core/ZithToolchainManager.cpp
     editor/core/TomlSettingsStore.h

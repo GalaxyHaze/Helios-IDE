@@ -41,6 +41,7 @@ private slots:
 private:
     void doFind(bool forward);
     void highlightAllMatches();
+    void updateMatchLabel();
     void clearHighlights();
     void updateHeight();
     void updateButtonSize();
@@ -58,6 +59,7 @@ private:
     QCheckBox *m_caseCheck;
     QWidget *m_replaceRow;
     bool m_finding = false;
+    int m_currentIndex = 0;
     const QChar prevArrowChar = QChar(0x25B2);
 };
 

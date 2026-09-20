@@ -2,6 +2,7 @@
 
 #include "../core/AppearanceController.h"
 #include "../core/ThemeManager.h"
+#include "../core/TomlSettingsStore.h"
 
 #include <QDir>
 #include <QDirIterator>
@@ -62,7 +63,10 @@ public:
                && m_searchToken->load() == m_token
                && totalResults < kMaxResults) {
             const QString path = fileIterator.next();
-            if (!SearchPanel::shouldScanFile(path))
+            const auto &settings = TomlSettingsStore::instance();
+            if (!SearchPanel::shouldScanFile(path,
+                                             settings.searchTextExtensions(),
+                                             settings.searchExcludedDirs()))
                 continue;
 
             QFile file(path);
@@ -318,15 +322,35 @@ void SearchPanel::onItemActivated(QListWidgetItem *item)
         item->data(Qt::UserRole + 2).toInt());
 }
 
-bool SearchPanel::shouldScanFile(const QString &path)
+bool SearchPanel::shouldScanFile(const QString &path,
+                                 const QStringList &textExtensions,
+                                 const QStringList &excludedDirs)
 {
-    if (path.contains("/.git/") || path.contains("/build/") || path.contains("/venv/")) {
-        return false;
+    const QString normalized = QDir::fromNativeSeparators(path);
+    for (const QString &dir : excludedDirs) {
+        if (dir.isEmpty())
+            continue;
+        if (normalized.contains(QStringLiteral("/%1/").arg(dir)) ||
+            normalized.endsWith(QStringLiteral("/%1").arg(dir))) {
+            return false;
+        }
     }
 
-    const QString suffix = QFileInfo(path).suffix().toLower();
-    static const QStringList textSuffixes = {
-        "zith", "toml", "json", "md", "txt", "cpp", "cc", "cxx", "c", "h", "hpp", "qml"
-    };
-    return textSuffixes.contains(suffix);
+    const QString fileName = QFileInfo(normalized).fileName().toLower();
+    if (fileName.isEmpty())
+        return false;
+
+    const QString suffix = QFileInfo(normalized).suffix().toLower();
+    if (!suffix.isEmpty() && textExtensions.contains(suffix))
+        return true;
+
+    return textExtensions.contains(fileName);
+}
+
+bool SearchPanel::shouldScanFile(const QString &path)
+{
+    const auto &settings = TomlSettingsStore::instance();
+    return shouldScanFile(path,
+                          settings.searchTextExtensions(),
+                          settings.searchExcludedDirs());
 }

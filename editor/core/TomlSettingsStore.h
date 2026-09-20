@@ -133,6 +133,11 @@ public:
     bool vimMotionsEnabled() const { return m_vimMotionsEnabled; }
     void setVimMotionsEnabled(bool enabled);
 
+    QStringList searchTextExtensions() const { return m_searchTextExtensions; }
+    void setSearchTextExtensions(const QStringList &extensions);
+    QStringList searchExcludedDirs() const { return m_searchExcludedDirs; }
+    void setSearchExcludedDirs(const QStringList &dirs);
+
     bool wordWrap() const { return m_wordWrap; }
     void setWordWrap(bool wrap) { m_wordWrap = wrap; save(); }
 
@@ -170,7 +175,13 @@ private:
     int m_uiScale = 100;
     bool m_vimMotionsEnabled = false;
     bool m_wordWrap = false;
-    int m_sidebarWidth = 280;
+    QStringList m_searchTextExtensions = {
+        "zith", "toml", "json", "md", "txt", "cpp", "cc", "cxx", "c", "h",
+        "hpp", "qml", "cmake", "makefile", "dockerfile", "sh", "py", "rs",
+        "go", "js", "ts", "yml", "yaml", "xml", "ini", "env", "rc"
+    };
+    QStringList m_searchExcludedDirs = {".git", "build", "node_modules", "venv"};
+    int m_sidebarWidth = 320;
     bool m_sidebarVisible = true;
     bool m_outlineVisible = false;
     int m_treeMaxDepth = 12;

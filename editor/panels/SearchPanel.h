@@ -31,6 +31,9 @@ public:
 
     void setRootPath(const QString &path);
     QString rootPath() const { return m_rootPath; }
+    static bool shouldScanFile(const QString &path,
+                              const QStringList &textExtensions,
+                              const QStringList &excludedDirs);
     static bool shouldScanFile(const QString &path);
     void applyTheme();
 

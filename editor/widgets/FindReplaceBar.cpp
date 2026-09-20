@@ -208,6 +208,7 @@ void FindReplaceBar::doFind(bool forward)
         m_editor->ensureCursorVisible();
     }
 
+    highlightAllMatches();
     m_finding = false;
 }
 
@@ -238,10 +239,44 @@ void FindReplaceBar::highlightAllMatches()
         found = m_editor->document()->find(m_findInput->text(), found, flags);
     }
 
-    m_matchLabel->setText(count > 0 ? QString("1/%1").arg(count) : "0/0");
+    updateMatchLabel();
 
     if (count > 0)
         m_editor->setFindSelections(selections);
+}
+
+void FindReplaceBar::updateMatchLabel()
+{
+    if (!m_editor || m_findInput->text().isEmpty()) {
+        m_matchLabel->setText({});
+        return;
+    }
+
+    int total = 0;
+    QTextCursor cursor(m_editor->document());
+    cursor.movePosition(QTextCursor::Start);
+    QTextDocument::FindFlags flags;
+    if (m_caseCheck->isChecked())
+        flags |= QTextDocument::FindCaseSensitively;
+
+    const QTextCursor current = m_editor->textCursor();
+    while (true) {
+        cursor = m_editor->document()->find(m_findInput->text(), cursor, flags);
+        if (cursor.isNull())
+            break;
+        ++total;
+        if (current.hasSelection() && cursor.selectionStart() == current.selectionStart()
+            && cursor.selectionEnd() == current.selectionEnd()) {
+            m_currentIndex = total;
+        }
+    }
+
+    if (total == 0) {
+        m_currentIndex = 0;
+        m_matchLabel->setText("0/0");
+    } else {
+        m_matchLabel->setText(QString("%1/%2").arg(m_currentIndex).arg(total));
+    }
 }
 
 void FindReplaceBar::clearHighlights()
@@ -249,6 +284,7 @@ void FindReplaceBar::clearHighlights()
     if (m_editor)
         m_editor->setFindSelections({});
     m_matchLabel->setText({});
+    m_currentIndex = 0;
 }
 
 void FindReplaceBar::updateHeight()
@@ -343,17 +379,20 @@ void FindReplaceBar::replaceAll()
     if (m_caseCheck->isChecked())
         flags |= QTextDocument::FindCaseSensitively;
 
-    m_editor->setPlainText(m_editor->toPlainText());
     QTextCursor cursor(m_editor->document());
+    cursor.beginEditBlock();
     cursor.movePosition(QTextCursor::Start);
 
     int replaced = 0;
-    QTextCursor found = m_editor->document()->find(m_findInput->text(), cursor, flags);
-    while (!found.isNull()) {
-        found.insertText(m_replaceInput->text());
-        replaced++;
-        found = m_editor->document()->find(m_findInput->text(), found, flags);
+    while (true) {
+        cursor = m_editor->document()->find(m_findInput->text(), cursor, flags);
+        if (cursor.isNull())
+            break;
+        cursor.insertText(m_replaceInput->text());
+        ++replaced;
+        cursor.clearSelection();
     }
+    cursor.endEditBlock();
 
     if (replaced > 0) {
         m_editor->document()->setModified(true);
