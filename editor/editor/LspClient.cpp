@@ -35,8 +35,15 @@ LspClient::~LspClient() {
   }
 }
 
+#ifdef HELIOS_UNIT_TESTING
+void LspClient::waitForFinishedForTesting(int timeoutMs) {
+  if (m_process)
+    m_process->waitForFinished(timeoutMs);
+}
+#endif
+
 bool LspClient::start(const QString &serverPath, const QString &stdlibPath,
-                      const QString &workspaceRoot) {
+                      const QString &workspaceRoot, const QString &initMode) {
   if (!QFileInfo::exists(serverPath)) {
     emit serverError(QStringLiteral("LSP server not found: ") + serverPath);
     return false;
@@ -44,6 +51,9 @@ bool LspClient::start(const QString &serverPath, const QString &stdlibPath,
   m_serverPath = serverPath;
   m_stdlibPath = stdlibPath;
   m_workspaceRoot = workspaceRoot;
+  m_initMode = initMode == QLatin1String("clangd")
+                   ? InitMode::Clangd
+                   : InitMode::Zith;
   if (m_process) {
     m_startPending = true;
     stop();
@@ -91,6 +101,7 @@ void LspClient::resetSessionState() {
   m_hasFormattingProvider = m_hasFoldingRangeProvider =
       m_hasCodeActionProvider = false;
   m_hasSemanticTokensProvider = false;
+  m_hasExecuteCommandProvider = false;
 }
 
 void LspClient::stop() {
@@ -176,33 +187,42 @@ void LspClient::onProcessStarted() {
       {"codeAction", QJsonObject{}},
       {"semanticTokens", QJsonObject{{"requests", QJsonObject{{"full", true}}},
                                      {"formats", QJsonArray{"relative"}}}}};
-  QJsonObject params{
-      {"processId", QJsonValue::Null},
-      {"capabilities",
-       QJsonObject{
-           {"textDocument", textDocument},
-           {"experimental",
-            QJsonObject{{"zith", QJsonObject{{"requestSaveAll", true}}}}}}}};
+  QJsonObject params{{"processId", QJsonValue::Null},
+                     {"capabilities",
+                      QJsonObject{{"textDocument", textDocument}}}};
+  if (m_initMode != InitMode::Clangd) {
+    QJsonObject capabilities = params.value("capabilities").toObject();
+    capabilities["experimental"] =
+        QJsonObject{{"zith", QJsonObject{{"requestSaveAll", true}}}};
+    params["capabilities"] = capabilities;
+  }
   const QString root =
       m_workspaceRoot.isEmpty() ? QDir::currentPath() : m_workspaceRoot;
   params["rootUri"] = QUrl::fromLocalFile(root).toString();
   params["rootPath"] = root;
-  QJsonObject zithOpts = {
-      {"frontend", QJsonObject{
-          {"enabled", true},
-          {"warmupStdlib", true},
-          {"statusNotifications", true},
-          {"maxWorkers", 0}
-      }}
-  };
-  QJsonObject initOpts = {{"zith", zithOpts}};
-  if (!m_stdlibPath.isEmpty())
-    initOpts["stdlibPath"] = m_stdlibPath;
-  params["initializationOptions"] = initOpts;
+  if (m_initMode != InitMode::Clangd) {
+    QJsonObject zithOpts = {
+        {"frontend", QJsonObject{
+            {"enabled", true},
+            {"warmupStdlib", true},
+            {"statusNotifications", true},
+            {"maxWorkers", 0}
+        }}
+    };
+    QJsonObject initOpts = {{"zith", zithOpts}};
+    if (!m_stdlibPath.isEmpty())
+      initOpts["stdlibPath"] = m_stdlibPath;
+    params["initializationOptions"] = initOpts;
+  }
   sendRequest("initialize", params, {}, -1, false,
               [this](const QJsonObject &response) {
-                if (response.contains("error"))
+                if (response.contains("error")) {
+                  const QJsonObject error = response.value("error").toObject();
+                  emit serverError(
+                      error.value("message")
+                          .toString(QStringLiteral("initialize failed")));
                   return;
+                }
                 parseServerCapabilities(response.value("result")
                                             .toObject()
                                             .value("capabilities")
@@ -231,6 +251,7 @@ void LspClient::parseServerCapabilities(const QJsonObject &caps) {
   m_hasFoldingRangeProvider = providerEnabled(caps, "foldingRangeProvider");
   m_hasCodeActionProvider = providerEnabled(caps, "codeActionProvider");
   m_hasSemanticTokensProvider = providerEnabled(caps, "semanticTokensProvider");
+  m_hasExecuteCommandProvider = providerEnabled(caps, "executeCommandProvider");
   const QJsonValue sync = caps.value("textDocumentSync");
   m_syncKind = sync.isObject() ? sync.toObject().value("change").toInt(1)
                                : sync.toInt(1);
@@ -572,6 +593,34 @@ void LspClient::requestCodeActions(const QString &uri, int version,
                                        r.value("result").toArray());
               });
 }
+qint64 LspClient::executeWorkspaceCommand(
+    const QString &command, const QJsonValue &args,
+    std::function<void(const QJsonObject &)> callback) {
+  const qint64 id = sendRequest(
+      "workspace/executeCommand",
+      QJsonObject{{"command", command}, {"arguments", args}},
+      QStringLiteral("workspace"), -1, false,
+      [this, command, callback](const QJsonObject &response) {
+        const QJsonValue result = response.value("result");
+        if (response.contains("error")) {
+          const QJsonObject error = response.value("error").toObject();
+          emit commandResult(
+              command, false,
+              error.value("message")
+                  .toString(QStringLiteral("workspace/executeCommand failed")));
+        } else {
+          emit commandResult(command, true, result);
+        }
+        if (callback)
+          callback(response);
+      });
+  if (id < 0)
+    emit commandResult(
+        command, false,
+        QStringLiteral("LSP is not ready; workspace/executeCommand was "
+                       "not sent"));
+  return id;
+}
 void LspClient::resolveCompletion(const QString &uri, int version,
                                   const QJsonObject &item) {
   sendRequest("completionItem/resolve", item, uri, version, true,
@@ -683,17 +732,40 @@ void LspClient::processBuffer() {
       return;
     QByteArray body = m_buffer.mid(start, length);
     m_buffer.remove(0, start + length);
-    QJsonParseError error;
-    QJsonDocument doc = QJsonDocument::fromJson(body, &error);
-    if (error.error != QJsonParseError::NoError || !doc.isObject())
-      continue;
-    QJsonObject message = doc.object();
-    if (message.contains("id") &&
-        (message.contains("result") || message.contains("error")))
-      handleResponse(message);
-    else if (message.contains("method"))
-      handleNotification(message);
+    receiveFrame(body);
   }
+}
+
+void LspClient::receiveFrame(const QByteArray &body) {
+  QJsonParseError error;
+  QJsonDocument doc = QJsonDocument::fromJson(body, &error);
+  if (error.error != QJsonParseError::NoError || !doc.isObject())
+    return;
+  QJsonObject message = doc.object();
+  if (message.contains("id") &&
+      (message.contains("result") || message.contains("error")))
+    handleResponse(message);
+  else if (message.contains("method") && message.contains("id"))
+    handleServerRequest(message);
+  else if (message.contains("method"))
+    handleNotification(message);
+}
+
+void LspClient::handleServerRequest(const QJsonObject &message) {
+  const QString method = message.value("method").toString();
+  const QJsonValue id = message.value("id");
+  if (method == QLatin1String("window/workDoneProgress/create")) {
+    if (isRunning())
+      sendMessage({{"jsonrpc", "2.0"}, {"id", id}, {"result", QJsonValue::Null}});
+    return;
+  }
+  if (isRunning())
+    sendMessage({{"jsonrpc", "2.0"},
+                 {"id", id},
+                 {"error",
+                  QJsonObject{{"code", -32601},
+                              {"message", QStringLiteral("Method not found: ") +
+                                               method}}}});
 }
 
 void LspClient::handleResponse(const QJsonObject &message) {
@@ -755,6 +827,18 @@ void LspClient::handleNotification(const QJsonObject &message) {
     emit frontendStatusReceived(p);
   else if (method == "zith/metrics")
     emit metricsReceived(p);
+  else if (method == "zith/processOutput")
+    emit processOutputReceived(p.value("taskId").toString(),
+                               p.value("chunk").toString());
+  else if (method == "zith/processExit")
+    emit processExitReceived(p.value("taskId").toString(),
+                             p.value("exitCode").toInt(-1));
+  else if (method == "$/progress") {
+    const QJsonObject value = p.value("value").toObject();
+    emit workDoneProgressReceived(p.value("token").toString(),
+                                  value.value("kind").toString(),
+                                  value.value("message").toString());
+  }
 }
 
 void LspClient::onProcessError(QProcess::ProcessError) {

@@ -35,6 +35,8 @@ add_executable(Helios
     editor/core/ThemeManager.cpp
     editor/core/AppearanceController.h
     editor/core/AppearanceController.cpp
+    editor/core/RunOutputCollector.h
+    editor/core/RunOutputCollector.cpp
     editor/core/TranslationManager.h
     editor/core/TranslationManager.cpp
     editor/panels/WelcomeWidget.h
@@ -75,6 +77,8 @@ add_executable(Helios
     editor/core/ContextManager.cpp
     editor/panels/CompilerPanel.h
     editor/panels/CompilerPanel.cpp
+    editor/panels/BottomPanel.h
+    editor/panels/BottomPanel.cpp
     editor/core/SnippetManager.h
     editor/core/SnippetManager.cpp
     editor/widgets/FindReplaceBar.h
@@ -110,6 +114,8 @@ file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/i18n" DESTINATION "${CMAKE_CURRENT_BINARY
 # Testes automatizados
 add_executable(test_helios
     tests/test_helios.cpp
+    editor/core/ZithToolchainManager.h
+    editor/core/ZithToolchainManager.cpp
     editor/core/TomlSettingsStore.h
     editor/core/TomlSettingsStore.cpp
     editor/core/ThemeManager.h
@@ -118,6 +124,8 @@ add_executable(test_helios
     editor/core/FileIcons.cpp
     editor/core/AppearanceController.h
     editor/core/AppearanceController.cpp
+    editor/core/RunOutputCollector.h
+    editor/core/RunOutputCollector.cpp
     editor/editor/Syntax.h
     editor/editor/Syntax.cpp
     editor/editor/CHighlighter.h
@@ -126,6 +134,10 @@ add_executable(test_helios
     editor/editor/VimMotionController.cpp
     editor/core/TranslationManager.h
     editor/core/TranslationManager.cpp
+    editor/editor/LspClient.h
+    editor/editor/LspClient.cpp
+    editor/panels/CompilerPanel.h
+    editor/panels/CompilerPanel.cpp
     editor/assets/resources.qrc
     editor/panels/SettingsPanel.h
     editor/panels/SettingsPanel.cpp
@@ -134,10 +146,12 @@ add_executable(test_helios
 )
 target_link_libraries(test_helios PRIVATE
     Qt6::Core
+    Qt6::Network
     Qt6::Widgets
     Qt6::Gui
     Qt6::Test
 )
+target_compile_definitions(test_helios PRIVATE HELIOS_UNIT_TESTING)
 add_test(NAME HeliosTests COMMAND test_helios)
 set_tests_properties(HeliosTests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 

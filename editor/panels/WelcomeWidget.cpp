@@ -159,9 +159,11 @@ void WelcomeWidget::updateThemeAndLanguage()
 
     m_openBtn->setStyleSheet(
         QString(
-        "QPushButton { background: %1; color: %2; border: none; padding: 10px 15px; border-radius: 6px; font-size: 13px; font-weight: bold; }"
-            "QPushButton:hover { opacity: 0.9; }"
-        ).arg(accentHex, onAccentHex)
+            "QPushButton { background: %1; color: %2; border: 1px solid %3; "
+            "border-left: 2px solid %4; border-bottom: 2px solid %4; padding: 10px 15px; "
+            "border-radius: 6px; font-size: 13px; font-weight: bold; }"
+            "QPushButton:hover { background: %5; }"
+        ).arg(accentHex, onAccentHex, borderHex, accentHex, itemHoverHex)
     );
 
     m_newBtn->setStyleSheet(

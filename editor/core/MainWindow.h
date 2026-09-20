@@ -8,13 +8,16 @@
 #include <QJsonObject>
 #include <QSyntaxHighlighter>
 #include "../widgets/ActivityBar.h"
+#include "RunOutputCollector.h"
 
+class QCloseEvent;
 class QTabWidget;
 class QLabel;
 class QSplitter;
 class QStackedWidget;
 class QMenu;
 class QAction;
+class QTimer;
 class CodeEditor;
 class LspClient;
 class LspCompletionModel;
@@ -30,6 +33,7 @@ class SnippetManager;
 class SearchPanel;
 class GitPanel;
 class SettingsPanel;
+class BottomPanel;
 class ShortcutsDialog;
 class PreferencesDialog;
 class VimHelpDialog;
@@ -44,6 +48,13 @@ QIcon createHeliosIcon();
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
+
+public:
+    enum class EditorLanguage {
+        Zith,
+        CFamily,
+        PlainText
+    };
 
 public:
     explicit MainWindow(QWidget *parent = nullptr);
@@ -62,6 +73,7 @@ private slots:
     void restoreContextState(const Context &ctx);
     CodeEditor *currentEditor() const;
     void setSidebarMode(ActivityBar::Mode mode);
+    void setBottomPanelVisible(bool visible);
     void applyEditorPreferences(CodeEditor *editor);
     void setAppFontFamily(const QString &family);
     void setAppFontSize(int pointSize);
@@ -83,6 +95,17 @@ private slots:
     void setLspEnabled(bool enabled);
     void applyWorkspaceEdit(const QJsonObject &edit);
     void saveAllForLsp();
+    bool canExecuteLspWorkspaceCommand() const;
+    void updateRunActionsEnabled();
+    void runBuild();
+    void runCheckFile();
+    void runProject();
+    void stopRunningTask();
+    void onWorkDoneProgressReceived(const QString &token, const QString &kind,
+                                    const QString &message);
+    void appendPublishedDiagnostics();
+    void onLspCommandResult(const QString &command, bool success,
+                            const QJsonValue &result);
 
     void applyThemeAndLanguage();
     void updateCentralWidgetState();
@@ -92,9 +115,26 @@ private slots:
     void showLspManagerDialog();
     void showVimHelpDialog();
 
+protected:
+    void closeEvent(QCloseEvent *event) override;
+
 private:
     void setWorkspaceRoot(const QString &path);
     bool lspEnabled() const;
+    bool cLspEnabled() const;
+    QString resolvedCLspPath() const;
+    EditorLanguage languageForPath(const QString &path) const;
+    QString lspLanguageId(EditorLanguage language) const;
+    LspClient *lspClientForPath(const QString &path) const;
+    LspClient *lspClientForLanguage(EditorLanguage language) const;
+    LspClient *lspClientForEditor(CodeEditor *editor) const;
+    bool shouldUseLspForPath(const QString &path) const;
+    bool isZithEditor(CodeEditor *editor) const;
+    bool isCFamilyEditor(CodeEditor *editor) const;
+    void syncEditorWithLsp(CodeEditor *editor, bool openDocument);
+    void closeEditorWithLsp(CodeEditor *editor);
+    void updateClangdLifecycle();
+    void updateClangdRuntimeInfo();
     void applyTheme();
     void applyTranslations();
     void applyAppearanceChange();
@@ -102,7 +142,8 @@ private:
 
     QTabWidget *m_tabWidget = nullptr;
     QMap<CodeEditor*, QSyntaxHighlighter*> m_highlighters;
-    LspClient *m_lspClient = nullptr;
+    LspClient *m_zithLspClient = nullptr;
+    LspClient *m_clangdClient = nullptr;
     LspCompletionModel *m_completionModel = nullptr;
     LspCompleter *m_completer = nullptr;
     DiagnosticsPanel *m_diagnosticsPanel = nullptr;
@@ -124,6 +165,7 @@ private:
     SnippetManager *m_snippetManager = nullptr;
     ZithToolchainManager *m_zithToolchainManager = nullptr;
     QString m_lastLspError;
+    QString m_clangdError;
     bool m_initialContextSetup;
     bool m_replacingWorkspaceRoot = false;
     QSplitter *m_splitter;
@@ -142,13 +184,21 @@ private:
     QLabel *m_langLabel = nullptr;
     QString m_runtimeStatusText;
     QString m_runtimeTag;
+    QString m_activeProgressToken;
     QString m_lspLabelColor;
     QString m_activeLspPath;
     QString m_activeStdlibPath;
+    QString m_activeCLspPath;
     QString m_activeWorkspaceRoot;
     QString m_appliedTheme;
     QString m_appliedLocale;
     QList<qint64> m_lspRestartTimes;
+    QTimer *m_outlineSymbolsTimer = nullptr;
+    QString m_outlineSymbolsUri;
+    int m_outlineSymbolsVersion = -1;
+    QString m_outlineRequestedUri;
+    int m_outlineRequestedVersion = -1;
+    RunOutputCollector m_runOutput;
 
     WelcomeWidget *m_welcomeWidget = nullptr;
     OutlinePanel *m_outlinePanel = nullptr;
@@ -167,12 +217,14 @@ private:
     QAction *m_exitAct = nullptr;
     QAction *m_buildAct = nullptr;
     QAction *m_checkAct = nullptr;
-    QAction *m_compileAct = nullptr;
     QAction *m_runAct = nullptr;
+    QAction *m_stopAct = nullptr;
     QAction *m_restartLspAct = nullptr;
     QAction *m_gettingStartedAct = nullptr;
     QAction *m_preferencesAct = nullptr;
-    
+    QAction *m_outlineToggleAct = nullptr;
+    QAction *m_bottomToggleAct = nullptr;
+    BottomPanel *m_bottomPanel = nullptr;
     QAction *m_shortcutsAct = nullptr;
     QAction *m_lspManagerAct = nullptr;
     QAction *m_vimHelpAct = nullptr;

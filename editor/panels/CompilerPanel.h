@@ -1,11 +1,13 @@
 #ifndef COMPILERPANEL_H
 #define COMPILERPANEL_H
 
-#include <QDockWidget>
 #include <QPlainTextEdit>
-#include <QProcess>
+#include <QString>
+#include <QWidget>
 
-class CompilerPanel : public QDockWidget
+#include "../editor/LspClient.h"
+
+class CompilerPanel : public QWidget
 {
     Q_OBJECT
 
@@ -13,21 +15,33 @@ public:
     explicit CompilerPanel(QWidget *parent = nullptr);
     ~CompilerPanel();
 
-    void runCommand(const QString &workingDir, const QString &command, const QStringList &args);
+    void startBuild(const QString &title, const QString &progressToken = {});
+    void appendOutput(const QString &text);
+    void appendRawOutput(const QByteArray &bytes);
+    void appendWorkDoneProgress(const QString &token, const QString &kind,
+                                const QString &message = {});
+    void appendDiagnostics(const QList<LspDiagnostic> &diagnostics);
+    void clearOutput();
+    void setRunningTask(const QString &taskId);
+    void stopRunningTask();
+    void showBuildResult(bool success, const QString &programUri = {});
     bool isRunning() const;
     void applyTheme();
+    QString runningTaskId() const;
+    QString outputText() const;
+    void setActiveProgressToken(const QString &token);
+    void clearActiveProgress();
+    QString activeProgressToken() const;
 
 signals:
     void compileStarted();
     void compileFinished(int exitCode);
-
-private slots:
-    void onProcessOutput();
-    void onProcessFinished(int exitCode, QProcess::ExitStatus status);
+    void stopRequested(const QString &taskId);
 
 private:
     QPlainTextEdit *m_output;
-    QProcess *m_process;
+    QString m_runningTaskId;
+    QString m_activeProgressToken;
 };
 
 #endif

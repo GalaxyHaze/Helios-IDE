@@ -24,11 +24,13 @@ public:
   void setInitialDocumentText(const QString &text, int initialVersion = 1);
   QString filePath() const { return m_filePath; }
   QString fileUri() const { return m_fileUri; }
+  LspClient *lspClient() const { return m_lspClient; }
   int documentVersion() const { return m_documentVersion; }
   QList<LspDiagnostic> diagnostics() const { return m_diagnostics; }
   void flushPendingLspChanges() { flushDocumentChanges(); }
 
   void setLspClient(LspClient *client);
+  void detachLspClient();
   void setCompleter(LspCompleter *completer);
   void setSnippetManager(SnippetManager *manager);
 
@@ -121,6 +123,13 @@ private:
   QList<QTextEdit::ExtraSelection> m_findSelections;
   QTimer *m_hoverTimer = nullptr;
   QTimer *m_documentHighlightTimer = nullptr;
+  QMetaObject::Connection m_lspDiagnosticsConnection;
+  QMetaObject::Connection m_lspHighlightsConnection;
+  QMetaObject::Connection m_lspHoverConnection;
+  QMetaObject::Connection m_lspDefinitionConnection;
+  QMetaObject::Connection m_lspImplementationConnection;
+  QMetaObject::Connection m_lspDeclarationConnection;
+  QMetaObject::Connection m_lspSignatureConnection;
   int m_hoverLine = -1;
   int m_hoverChar = -1;
   int m_hoverTimerId = 0;

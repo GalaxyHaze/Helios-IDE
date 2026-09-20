@@ -276,48 +276,40 @@ void FindReplaceBar::applyTheme()
 {
     auto &tm = ThemeManager::instance();
     const QString surface = tm.semanticColor(ThemeManager::SemanticRole::SurfaceMuted).name();
-    const QString surfaceAlt = tm.semanticColor(ThemeManager::SemanticRole::Surface).name();
     const QString border = tm.semanticColor(ThemeManager::SemanticRole::Border).name();
-    const QString borderStrong = tm.semanticColor(ThemeManager::SemanticRole::BorderStrong).name();
-    const QString text = tm.semanticColor(ThemeManager::SemanticRole::Text).name();
     const QString textMuted = tm.semanticColor(ThemeManager::SemanticRole::TextMuted).name();
     const QString inputBg = tm.semanticColor(ThemeManager::SemanticRole::InputBg).name();
     const QString inputText = tm.semanticColor(ThemeManager::SemanticRole::InputText).name();
     const QString buttonBg = tm.semanticColor(ThemeManager::SemanticRole::ButtonBg).name();
-    const QString buttonText = tm.semanticColor(ThemeManager::SemanticRole::ButtonText).name();
     const QString buttonHover = tm.semanticColor(ThemeManager::SemanticRole::ButtonHover).name();
     const QString accent = tm.semanticColor(ThemeManager::SemanticRole::Accent).name();
     const QString disabledText = tm.semanticColor(ThemeManager::SemanticRole::TextFaint).name();
 
     const int baseSize = AppearanceController::instance().uiFont().pointSize();
     setStyleSheet(QString(
-        "FindReplaceBar { background: %1; border-bottom: 1px solid %3; }"
-        "QLineEdit { background: %8; color: %9; border: 1px solid %3; "
-        "  border-radius: 4px; padding: 6px 10px; font-size: %13; }"
-        "QLineEdit:focus { border-color: %12; }"
-        "QPushButton { background: %10; color: %11; border: none; "
-        "  border-radius: 4px; padding: 4px 12px; font-size: %13; }"
-        "QPushButton:hover { background: %14; }"
-        "QPushButton:pressed { background: %12; }"
-        "QPushButton:disabled { color: %15; }"
-        "QCheckBox { color: %6; font-size: %13; }"
-        "QLabel { color: %6; font-size: %13; }"
-        "QLabel#matchLabel { color: %7; }")
+        "FindReplaceBar { background: %1; border-bottom: 1px solid %2; }"
+        "QLineEdit { background: %3; color: %4; border: 1px solid %2; "
+        "  border-radius: 6px; padding: 6px 10px; font-size: %10; }"
+        "QLineEdit:focus { border-color: %7; }"
+        "QPushButton { background: %5; color: %6; border: none; "
+        "  border-left: 2px solid %7; border-bottom: 2px solid %7; "
+        "  border-radius: 6px; padding: 5px 12px; font-size: %10; }"
+        "QPushButton:hover { background: %8; }"
+        "QPushButton:pressed { background: %7; }"
+        "QPushButton:disabled { color: %9; }"
+        "QCheckBox { color: %6; font-size: %10; }"
+        "QLabel { color: %6; font-size: %10; }"
+        "QLabel#matchLabel { color: %9; }")
         .arg(surface,
-             surfaceAlt,
              border,
-             borderStrong,
-             text,
-             textMuted,
-             textMuted,
              inputBg,
              inputText,
              buttonBg,
-             buttonText,
+             textMuted,
              accent,
-             QString::number(baseSize + 1),
              buttonHover,
-             disabledText)
+             disabledText,
+             QString::number(baseSize + 1))
     );
 
     m_matchLabel->setObjectName("matchLabel");

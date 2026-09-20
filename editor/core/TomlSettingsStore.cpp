@@ -20,6 +20,10 @@ TomlSettingsStore &TomlSettingsStore::instance()
 
 QString TomlSettingsStore::filePath() const
 {
+#ifdef HELIOS_UNIT_TESTING
+    if (!m_overrideDir.isEmpty())
+        return QDir(m_overrideDir).filePath("settings.toml");
+#endif
     QString dir = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
     return QDir(dir).filePath("settings.toml");
 }
@@ -91,6 +95,8 @@ void TomlSettingsStore::load()
             if (m_sidebarWidth < 50) m_sidebarWidth = 280;
         } else if (key == "sidebarVisible") {
             m_sidebarVisible = (val == "true");
+        } else if (key == "outlineVisible") {
+            m_outlineVisible = (val == "true");
         } else if (key == "treeMaxDepth") {
             m_treeMaxDepth = val.toInt();
             if (m_treeMaxDepth < 1 || m_treeMaxDepth > 64) m_treeMaxDepth = 12;
@@ -98,6 +104,19 @@ void TomlSettingsStore::load()
             m_onboardingDismissed = (val == "true");
         } else if (key == "lspEnabled") {
             m_lspEnabled = (val == "true");
+        } else if (key == "useOnlineZithLsp") {
+            m_useOnlineZithLsp = (val == "true");
+        } else if (key == "cLspEnabled") {
+            m_cLspEnabled = (val == "true");
+        } else if (key == "cLspPath") {
+            if (val.startsWith('"') && val.endsWith('"') && val.length() >= 2)
+                m_cLspPath = val.mid(1, val.length() - 2);
+        } else if (key == "mainWindowGeometry") {
+            if (val.startsWith('"') && val.endsWith('"') && val.length() >= 2)
+                m_mainWindowGeometryBase64 = val.mid(1, val.length() - 2);
+        } else if (key == "mainWindowState") {
+            if (val.startsWith('"') && val.endsWith('"') && val.length() >= 2)
+                m_mainWindowStateBase64 = val.mid(1, val.length() - 2);
         } else if (key == "recentProjects") {
             m_recentProjects.clear();
             if (val.startsWith('[') && val.endsWith(']')) {
@@ -152,11 +171,22 @@ void TomlSettingsStore::save()
     out << "uiScale = " << m_uiScale << "\n";
     out << "sidebarWidth = " << m_sidebarWidth << "\n";
     out << "sidebarVisible = " << (m_sidebarVisible ? "true" : "false") << "\n";
+    out << "outlineVisible = " << (m_outlineVisible ? "true" : "false") << "\n";
     out << "treeMaxDepth = " << m_treeMaxDepth << "\n";
     out << "onboardingDismissed = " << (m_onboardingDismissed ? "true" : "false") << "\n\n";
 
     out << "[lsp]\n";
-    out << "lspEnabled = " << (m_lspEnabled ? "true" : "false") << "\n\n";
+    out << "lspEnabled = " << (m_lspEnabled ? "true" : "false") << "\n";
+    out << "useOnlineZithLsp = " << (m_useOnlineZithLsp ? "true" : "false")
+        << "\n\n";
+
+    out << "[cLsp]\n";
+    out << "cLspEnabled = " << (m_cLspEnabled ? "true" : "false") << "\n";
+    out << "cLspPath = \"" << m_cLspPath << "\"\n\n";
+
+    out << "[main window]\n";
+    out << "mainWindowGeometry = \"" << m_mainWindowGeometryBase64 << "\"\n";
+    out << "mainWindowState = \"" << m_mainWindowStateBase64 << "\"\n\n";
 
     out << "[vim]\n";
     out << "vimMotionsEnabled = " << (m_vimMotionsEnabled ? "true" : "false") << "\n\n";

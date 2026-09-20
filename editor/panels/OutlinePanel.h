@@ -27,6 +27,7 @@ private slots:
 private:
     QTreeWidget *m_treeWidget;
     QLabel *m_titleLabel;
+    QLabel *m_emptyLabel;
 
     void populateTree(const QJsonArray &symbols, QTreeWidgetItem *parentItem);
 };

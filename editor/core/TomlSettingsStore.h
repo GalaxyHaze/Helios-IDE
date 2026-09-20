@@ -1,6 +1,7 @@
 #ifndef TOMLSETTINGSSTORE_H
 #define TOMLSETTINGSSTORE_H
 
+#include <QByteArray>
 #include <QString>
 #include <QStringList>
 #include <QObject>
@@ -12,6 +13,13 @@ public:
     explicit TomlSettingsStore(QObject *parent = nullptr);
 
     static TomlSettingsStore &instance();
+#ifdef HELIOS_UNIT_TESTING
+    void setConfigDirForTesting(const QString &dir)
+    {
+        m_overrideDir = dir;
+        load();
+    }
+#endif
 
     void load();
     void save();
@@ -43,11 +51,64 @@ public:
     }
 
     bool lspEnabled() const { return m_lspEnabled; }
+    bool useOnlineZithLsp() const { return m_useOnlineZithLsp; }
+    void setUseOnlineZithLsp(bool enabled)
+    {
+        if (m_useOnlineZithLsp == enabled)
+            return;
+        m_useOnlineZithLsp = enabled;
+        save();
+    }
+
     void setLspEnabled(bool enabled)
     {
         if (m_lspEnabled == enabled)
             return;
         m_lspEnabled = enabled;
+        save();
+    }
+
+    bool cLspEnabled() const { return m_cLspEnabled; }
+    void setCLspEnabled(bool enabled)
+    {
+        if (m_cLspEnabled == enabled)
+            return;
+        m_cLspEnabled = enabled;
+        save();
+    }
+
+    QString cLspPath() const { return m_cLspPath; }
+    void setCLspPath(const QString &path)
+    {
+        if (m_cLspPath == path)
+            return;
+        m_cLspPath = path;
+        save();
+    }
+
+    QByteArray mainWindowGeometry() const
+    {
+        return QByteArray::fromBase64(m_mainWindowGeometryBase64.toLatin1());
+    }
+    void setMainWindowGeometry(const QByteArray &geometry)
+    {
+        const QString encoded = QString::fromLatin1(geometry.toBase64());
+        if (m_mainWindowGeometryBase64 == encoded)
+            return;
+        m_mainWindowGeometryBase64 = encoded;
+        save();
+    }
+
+    QByteArray mainWindowState() const
+    {
+        return QByteArray::fromBase64(m_mainWindowStateBase64.toLatin1());
+    }
+    void setMainWindowState(const QByteArray &state)
+    {
+        const QString encoded = QString::fromLatin1(state.toBase64());
+        if (m_mainWindowStateBase64 == encoded)
+            return;
+        m_mainWindowStateBase64 = encoded;
         save();
     }
 
@@ -81,6 +142,9 @@ public:
     bool sidebarVisible() const { return m_sidebarVisible; }
     void setSidebarVisible(bool visible) { m_sidebarVisible = visible; save(); }
 
+    bool outlineVisible() const { return m_outlineVisible; }
+    void setOutlineVisible(bool visible) { m_outlineVisible = visible; save(); }
+
     int treeMaxDepth() const { return m_treeMaxDepth; }
     void setTreeMaxDepth(int depth) { m_treeMaxDepth = depth; save(); }
 
@@ -92,6 +156,9 @@ public:
     void addRecentProject(const QString &project);
 
 private:
+#ifdef HELIOS_UNIT_TESTING
+    QString m_overrideDir;
+#endif
     QString m_theme = "helios-dark";
     QString m_customThemePath;
     QString m_locale = "en-US";
@@ -105,9 +172,15 @@ private:
     bool m_wordWrap = false;
     int m_sidebarWidth = 280;
     bool m_sidebarVisible = true;
+    bool m_outlineVisible = false;
     int m_treeMaxDepth = 12;
     bool m_onboardingDismissed = false;
     bool m_lspEnabled = false;
+    bool m_useOnlineZithLsp = false;
+    bool m_cLspEnabled = true;
+    QString m_cLspPath;
+    QString m_mainWindowGeometryBase64;
+    QString m_mainWindowStateBase64;
     QStringList m_recentProjects;
 
     QString filePath() const;

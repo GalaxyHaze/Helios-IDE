@@ -179,86 +179,124 @@ void CodeEditor::setInitialDocumentText(const QString &text,
 }
 
 void CodeEditor::setLspClient(LspClient *client) {
+  if (m_lspClient == client)
+    return;
+
+  detachLspClient();
   m_lspClient = client;
+  if (!client)
+    return;
 
-  if (m_lspClient) {
-    connect(m_lspClient, &LspClient::diagnosticsReceived, this,
-            [this](const QString &uri, int version,
-                   const QList<LspDiagnostic> &diags) {
-              if (uri == m_fileUri &&
-                  (version < 0 || version == m_documentVersion))
-                setDiagnostics(diags);
-            });
+  m_lspDiagnosticsConnection = connect(
+      m_lspClient, &LspClient::diagnosticsReceived, this,
+      [this](const QString &uri, int version,
+             const QList<LspDiagnostic> &diags) {
+        if (uri == m_fileUri && (version < 0 || version == m_documentVersion))
+          setDiagnostics(diags);
+      });
 
-    connect(m_lspClient, &LspClient::hoverResult, this,
-            [this](const QString &uri, int, const LspHoverInfo &info) {
-              if (uri == m_fileUri && !info.contents.isEmpty()) {
-                QString text = info.contents;
-                text.replace(QRegularExpression("```\\w*\\n?"), "");
-                text.replace(QRegularExpression("\\n?```"), "");
-                QToolTip::showText(QCursor::pos(), text.trimmed(), this);
-              }
-            });
+  m_lspHoverConnection = connect(
+      m_lspClient, &LspClient::hoverResult, this,
+      [this](const QString &uri, int, const LspHoverInfo &info) {
+        if (uri == m_fileUri && !info.contents.isEmpty()) {
+          QString text = info.contents;
+          text.replace(QRegularExpression("```\\w*\\n?"), "");
+          text.replace(QRegularExpression("\\n?```"), "");
+          QToolTip::showText(QCursor::pos(), text.trimmed(), this);
+        }
+      });
 
-    connect(m_lspClient, &LspClient::definitionResult, this,
-            [this](const QString &uri, int, const LspLocation &loc) {
-              if (uri == m_fileUri && !loc.uri.isEmpty())
-                emit navigateToLocation(loc.uri, loc.range.start.line,
-                                        loc.range.start.character);
-            });
+  m_lspDefinitionConnection = connect(
+      m_lspClient, &LspClient::definitionResult, this,
+      [this](const QString &uri, int, const LspLocation &loc) {
+        if (uri == m_fileUri && !loc.uri.isEmpty())
+          emit navigateToLocation(loc.uri, loc.range.start.line,
+                                  loc.range.start.character);
+      });
 
-    connect(m_lspClient, &LspClient::implementationResult, this,
-            [this](const QString &uri, int, const LspLocation &loc) {
-              if (uri == m_fileUri && !loc.uri.isEmpty())
-                emit navigateToLocation(loc.uri, loc.range.start.line,
-                                        loc.range.start.character);
-            });
+  m_lspImplementationConnection = connect(
+      m_lspClient, &LspClient::implementationResult, this,
+      [this](const QString &uri, int, const LspLocation &loc) {
+        if (uri == m_fileUri && !loc.uri.isEmpty())
+          emit navigateToLocation(loc.uri, loc.range.start.line,
+                                  loc.range.start.character);
+      });
 
-    connect(m_lspClient, &LspClient::declarationResult, this,
-            [this](const QString &uri, int, const LspLocation &loc) {
-              if (uri == m_fileUri && !loc.uri.isEmpty())
-                emit navigateToLocation(loc.uri, loc.range.start.line,
-                                        loc.range.start.character);
-            });
+  m_lspDeclarationConnection = connect(
+      m_lspClient, &LspClient::declarationResult, this,
+      [this](const QString &uri, int, const LspLocation &loc) {
+        if (uri == m_fileUri && !loc.uri.isEmpty())
+          emit navigateToLocation(loc.uri, loc.range.start.line,
+                                  loc.range.start.character);
+      });
 
-    connect(m_lspClient, &LspClient::signatureHelpResult, this,
-            [this](const QString &uri, int, const LspSignatureHelp &help) {
-              if (uri == m_fileUri && !help.parameters.isEmpty()) {
-                QString text = help.activeSignature;
-                text += "\n\n";
-                for (int i = 0; i < help.parameters.size(); i++) {
-                  if (i == help.activeParameter)
-                    text += "• " + help.parameters[i] + "  ←\n";
-                  else
-                    text += "• " + help.parameters[i] + "\n";
-                }
-                QToolTip::showText(QCursor::pos(), text, this);
-              }
-            });
-
-    connect(
-        m_lspClient, &LspClient::documentHighlightsResult, this,
-        [this](const QString &uri, int version, const QList<LspRange> &ranges) {
-          if (uri != m_fileUri || version != m_documentVersion)
-            return;
-          m_lspHighlightSelections.clear();
-          QTextCharFormat format;
-          QColor color = ThemeManager::instance().customColor(
-              "editorSelection", m_editorSelection);
-          color.setAlpha(85);
-          format.setBackground(color);
-          for (const LspRange &range : ranges) {
-            QTextEdit::ExtraSelection selection;
-            selection.format = format;
-            selection.cursor = textCursor();
-            selection.cursor.setPosition(offsetForLspPosition(range.start));
-            selection.cursor.setPosition(offsetForLspPosition(range.end),
-                                         QTextCursor::KeepAnchor);
-            m_lspHighlightSelections.append(selection);
+  m_lspSignatureConnection = connect(
+      m_lspClient, &LspClient::signatureHelpResult, this,
+      [this](const QString &uri, int, const LspSignatureHelp &help) {
+        if (uri == m_fileUri && !help.parameters.isEmpty()) {
+          QString text = help.activeSignature;
+          text += "\n\n";
+          for (int i = 0; i < help.parameters.size(); i++) {
+            if (i == help.activeParameter)
+              text += "• " + help.parameters[i] + "  ←\n";
+            else
+              text += "• " + help.parameters[i] + "\n";
           }
-          highlightCurrentLine();
-        });
-  }
+          QToolTip::showText(QCursor::pos(), text, this);
+        }
+      });
+
+  m_lspHighlightsConnection =
+      connect(m_lspClient, &LspClient::documentHighlightsResult, this,
+              [this](const QString &uri, int version,
+                     const QList<LspRange> &ranges) {
+                if (uri != m_fileUri || version != m_documentVersion)
+                  return;
+                m_lspHighlightSelections.clear();
+                QTextCharFormat format;
+                QColor color = ThemeManager::instance().customColor(
+                    "editorSelection", m_editorSelection);
+                color.setAlpha(85);
+                format.setBackground(color);
+                for (const LspRange &range : ranges) {
+                  QTextEdit::ExtraSelection selection;
+                  selection.format = format;
+                  selection.cursor = textCursor();
+                  selection.cursor.setPosition(offsetForLspPosition(
+                      range.start));
+                  selection.cursor.setPosition(offsetForLspPosition(range.end),
+                                               QTextCursor::KeepAnchor);
+                  m_lspHighlightSelections.append(selection);
+                }
+                highlightCurrentLine();
+              });
+}
+
+void CodeEditor::detachLspClient() {
+  if (m_lspDiagnosticsConnection)
+    disconnect(m_lspDiagnosticsConnection);
+  if (m_lspHighlightsConnection)
+    disconnect(m_lspHighlightsConnection);
+  if (m_lspHoverConnection)
+    disconnect(m_lspHoverConnection);
+  if (m_lspDefinitionConnection)
+    disconnect(m_lspDefinitionConnection);
+  if (m_lspImplementationConnection)
+    disconnect(m_lspImplementationConnection);
+  if (m_lspDeclarationConnection)
+    disconnect(m_lspDeclarationConnection);
+  if (m_lspSignatureConnection)
+    disconnect(m_lspSignatureConnection);
+  m_lspDiagnosticsConnection = {};
+  m_lspHighlightsConnection = {};
+  m_lspHoverConnection = {};
+  m_lspDefinitionConnection = {};
+  m_lspImplementationConnection = {};
+  m_lspDeclarationConnection = {};
+  m_lspSignatureConnection = {};
+  m_pendingDocumentChanges.clear();
+  m_lspHighlightSelections.clear();
+  clearDiagnostics();
 }
 
 void CodeEditor::setCompleter(LspCompleter *completer) {
@@ -956,8 +994,12 @@ void CodeEditor::onDocumentContentsChanged(int position, int charsRemoved,
 
 void CodeEditor::flushDocumentChanges() {
   m_documentSyncTimer->stop();
-  if (m_pendingDocumentChanges.isEmpty() || !m_lspClient || m_fileUri.isEmpty())
+  if (m_pendingDocumentChanges.isEmpty())
     return;
+  if (!m_lspClient || m_fileUri.isEmpty()) {
+    m_pendingDocumentChanges.clear();
+    return;
+  }
 
   m_documentVersion++;
   // Prefer incremental ranged edits, but fall back to a whole-document sync
@@ -1191,15 +1233,14 @@ void CodeEditor::contextMenuEvent(QContextMenuEvent *event) {
       });
   formatAction->setEnabled(m_lspClient && m_lspClient->isReady());
 
-  QAction *copySymAction =
-      menu->addAction(tr.translate("menu.copy_symbol"), this, [this]() {
-        QTextCursor cursor = textCursor();
-        cursor.select(QTextCursor::WordUnderCursor);
-        QString word = cursor.selectedText();
-        if (!word.isEmpty()) {
-          QApplication::clipboard()->setText(word);
-        }
-      });
+  menu->addAction(tr.translate("menu.copy_symbol"), this, [this]() {
+    QTextCursor cursor = textCursor();
+    cursor.select(QTextCursor::WordUnderCursor);
+    QString word = cursor.selectedText();
+    if (!word.isEmpty()) {
+      QApplication::clipboard()->setText(word);
+    }
+  });
 
   menu->setStyleSheet(
       QString("QMenu { background: %1; color: %2; border: 1px solid %3; }"

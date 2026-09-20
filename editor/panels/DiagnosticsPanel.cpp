@@ -6,15 +6,17 @@
 #include <QVBoxLayout>
 
 DiagnosticsPanel::DiagnosticsPanel(QWidget *parent)
-    : QDockWidget("Diagnostics", parent) {
-  setAllowedAreas(Qt::BottomDockWidgetArea | Qt::RightDockWidgetArea);
-  setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable);
+    : QWidget(parent) {
+  setObjectName(QStringLiteral("diagnosticsDock"));
 
   m_list = new QListWidget;
   m_list->setFont(QFont("monospace", 10));
   m_list->setWordWrap(true);
 
-  setWidget(m_list);
+  auto *layout = new QVBoxLayout(this);
+  layout->setContentsMargins(0, 0, 0, 0);
+  layout->setSpacing(0);
+  layout->addWidget(m_list);
 
   connect(m_list, &QListWidget::itemClicked, this,
           &DiagnosticsPanel::onItemClicked);
@@ -28,6 +30,8 @@ void DiagnosticsPanel::updateTheme() {
   const QPalette pal = tm.palette();
   setPalette(pal);
 
+  setStyleSheet(QString("DiagnosticsPanel { background: %1; }")
+                    .arg(pal.color(QPalette::Base).name()));
   m_list->setStyleSheet(
       QString(
           "QListWidget { background: %1; color: %2; border: none; }"
@@ -63,6 +67,14 @@ void DiagnosticsPanel::setDiagnostics(const QString &uri, int version,
 void DiagnosticsPanel::clearDiagnostics(const QString &uri) {
   m_diagnosticsByUri.remove(uri);
   rebuild();
+}
+
+QList<LspDiagnostic> DiagnosticsPanel::allDiagnostics() const {
+  QList<LspDiagnostic> diagnostics;
+  for (auto it = m_diagnosticsByUri.cbegin(); it != m_diagnosticsByUri.cend();
+       ++it)
+    diagnostics.append(it.value());
+  return diagnostics;
 }
 
 void DiagnosticsPanel::rebuild() {

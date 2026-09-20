@@ -12,9 +12,9 @@ BreadcrumbsBar::BreadcrumbsBar(QWidget *parent)
     : QWidget(parent)
 {
     m_layout = new QHBoxLayout(this);
-    m_layout->setContentsMargins(12, 2, 12, 2);
+    m_layout->setContentsMargins(14, 2, 14, 2);
     m_layout->setSpacing(0);
-    setFixedHeight(22);
+    setMinimumHeight(26);
     hide();
 }
 
@@ -120,7 +120,7 @@ void BreadcrumbsBar::rebuild(const QStringList &dirs, const QString &file, const
              useLargeFont,
              true);
     QFontMetrics metrics(font);
-    setFixedHeight(metrics.height() + 5);
+    setFixedHeight(qMax(metrics.height() + 7, 26));
 
     if (!func.isEmpty()) {
         addSep(useLargeFont);

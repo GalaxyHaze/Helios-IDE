@@ -15,8 +15,12 @@
 
 #include "../editor/core/TomlSettingsStore.h"
 #include "../editor/core/AppearanceController.h"
+#include "../editor/core/ZithToolchainManager.h"
 #include "../editor/core/ThemeManager.h"
 #include "../editor/core/TranslationManager.h"
+#include "../editor/core/RunOutputCollector.h"
+#include "../editor/editor/LspClient.h"
+#include "../editor/panels/CompilerPanel.h"
 #include "../editor/panels/SettingsPanel.h"
 #include "../editor/editor/Syntax.h"
 #include "../editor/editor/VimMotionController.h"
@@ -35,6 +39,9 @@ private slots:
 
     void testTomlSettingsStore() {
         auto &store = TomlSettingsStore::instance();
+        QTemporaryDir tempDir;
+        QVERIFY(tempDir.isValid());
+        store.setConfigDirForTesting(tempDir.path());
         store.setFontSize(15);
         store.setTheme("helios-dark");
         store.setCustomThemePath(QString());
@@ -48,6 +55,7 @@ private slots:
         store.setRenderingStrategy("no-antialias");
         store.setUiScale(125);
         store.setVimMotionsEnabled(true);
+        store.setUseOnlineZithLsp(true);
 
         QStringList projects = {"/path/to/a", "/path/to/b"};
         store.setRecentProjects(projects);
@@ -65,6 +73,7 @@ private slots:
         QCOMPARE(store.editorFontSize(), 15);
         QCOMPARE(store.uiScale(), 125);
         QVERIFY(store.vimMotionsEnabled());
+        QVERIFY(store.useOnlineZithLsp());
         QCOMPARE(store.customThemePath(), QString());
     }
 
@@ -448,6 +457,199 @@ private slots:
         QCOMPARE(spy.count(), 1);
     }
 
+    void testLspClientParsesWorkDoneProgress() {
+        LspClient client;
+        QSignalSpy progressSpy(&client, &LspClient::workDoneProgressReceived);
+
+        client.receiveFrame(QJsonDocument(QJsonObject{
+            {"jsonrpc", "2.0"},
+            {"method", "$/progress"},
+            {"params", QJsonObject{
+                {"token", "zith-build-1"},
+                {"value", QJsonObject{
+                    {"kind", "begin"},
+                    {"title", "Zith zith.build"},
+                    {"cancellable", false}
+                }}
+            }}
+        }).toJson(QJsonDocument::Compact));
+        client.receiveFrame(QJsonDocument(QJsonObject{
+            {"jsonrpc", "2.0"},
+            {"method", "$/progress"},
+            {"params", QJsonObject{
+                {"token", "zith-build-1"},
+                {"value", QJsonObject{
+                    {"kind", "report"},
+                    {"message", "Compiling"}
+                }}
+            }}
+        }).toJson(QJsonDocument::Compact));
+        client.receiveFrame(QJsonDocument(QJsonObject{
+            {"jsonrpc", "2.0"},
+            {"method", "$/progress"},
+            {"params", QJsonObject{
+                {"token", "zith-build-1"},
+                {"value", QJsonObject{
+                    {"kind", "end"},
+                    {"message", "Finished"}
+                }}
+            }}
+        }).toJson(QJsonDocument::Compact));
+
+        QCOMPARE(progressSpy.count(), 3);
+        QCOMPARE(progressSpy.at(0).at(0).toString(),
+                 QStringLiteral("zith-build-1"));
+        QCOMPARE(progressSpy.at(0).at(1).toString(),
+                 QStringLiteral("begin"));
+        QCOMPARE(progressSpy.at(1).at(1).toString(),
+                 QStringLiteral("report"));
+        QCOMPARE(progressSpy.at(1).at(2).toString(),
+                 QStringLiteral("Compiling"));
+        QCOMPARE(progressSpy.at(2).at(1).toString(),
+                 QStringLiteral("end"));
+        QCOMPARE(progressSpy.at(2).at(2).toString(),
+                 QStringLiteral("Finished"));
+    }
+
+    void testLspClientRepliesToWorkDoneProgressCreate() {
+        LspClient client;
+        QTemporaryDir tempDir;
+        QVERIFY(tempDir.isValid());
+
+        QString serverPath = QDir(tempDir.path()).filePath("lsp-server");
+        QFile serverFile(serverPath);
+        QVERIFY(serverFile.open(QIODevice::WriteOnly));
+        serverFile.write("#!/bin/sh\nexit 0\n");
+        serverFile.close();
+        QVERIFY(QFile::setPermissions(
+            serverPath, QFileDevice::ReadOwner | QFileDevice::WriteOwner |
+                            QFileDevice::ExeOwner));
+
+        client.start(serverPath);
+        QTRY_VERIFY(client.isRunning());
+
+        client.receiveFrame(QJsonDocument(QJsonObject{
+            {"jsonrpc", "2.0"},
+            {"id", "wdp-1"},
+            {"method", "window/workDoneProgress/create"},
+            {"params", QJsonObject{{"token", "zith-build-1"}}}
+        }).toJson(QJsonDocument::Compact));
+
+        client.stop();
+        client.waitForFinishedForTesting(5000);
+    }
+
+    void testCompilerPanelShowsProgressAndDiagnostics() {
+        CompilerPanel panel;
+        panel.startBuild(QStringLiteral("Build project /tmp/demo"));
+
+        panel.appendWorkDoneProgress(QStringLiteral("token-1"),
+                                     QStringLiteral("begin"));
+        panel.appendWorkDoneProgress(QStringLiteral("token-1"),
+                                     QStringLiteral("report"),
+                                     QStringLiteral("Compiling"));
+        panel.appendWorkDoneProgress(QStringLiteral("old-token"),
+                                     QStringLiteral("end"),
+                                     QStringLiteral("Finished"));
+        QVERIFY(panel.outputText().contains(QStringLiteral("Compiling...")));
+
+        panel.appendWorkDoneProgress(QStringLiteral("token-1"),
+                                     QStringLiteral("end"),
+                                     QStringLiteral("Finished"));
+        panel.appendDiagnostics(QList<LspDiagnostic>{
+            {{ {2, 3}, {2, 7} }, 1, QStringLiteral("type error"), QStringLiteral("zithc")}});
+
+        const QString text = panel.outputText();
+        QVERIFY(text.contains(QStringLiteral("Finished")));
+        QVERIFY(text.contains(QStringLiteral("  line 3, col 4: type error")));
+        QVERIFY(!text.contains(QStringLiteral("old-token")));
+    }
+
+    void testCompilerPanelIgnoresForeignProgress() {
+        CompilerPanel panel;
+        panel.startBuild(QStringLiteral("Build /tmp/other"));
+        panel.setActiveProgressToken(QStringLiteral("current"));
+
+        panel.appendWorkDoneProgress(QStringLiteral("stale"),
+                                     QStringLiteral("begin"));
+        panel.appendWorkDoneProgress(QStringLiteral("stale"),
+                                     QStringLiteral("end"));
+
+        QVERIFY(!panel.outputText().contains(QStringLiteral("Compiling")));
+        QVERIFY(!panel.outputText().contains(QStringLiteral("Finished")));
+    }
+
+    void testRunOutputCollectorBuffersUntilTaskKnown() {
+        RunOutputCollector collector;
+        collector.buffer(QStringLiteral("task-1"), QStringLiteral("hello"));
+        collector.buffer(QStringLiteral("task-2"), QStringLiteral("other"));
+        collector.buffer(QStringLiteral("task-1"), QStringLiteral(" world"));
+
+        const QStringList task1 = collector.takeFor(QStringLiteral("task-1"));
+        QCOMPARE(task1, QStringList({QStringLiteral("hello"),
+                                     QStringLiteral(" world")}));
+        QVERIFY(collector.takeFor(QStringLiteral("task-1")).isEmpty());
+        QVERIFY(!collector.takeExitFor(QStringLiteral("task-1")).has_value());
+
+        const QStringList task2 = collector.takeFor(QStringLiteral("task-2"));
+        QCOMPARE(task2, QStringList({QStringLiteral("other")}));
+
+        RunOutputCollector earlyExitCollector;
+        earlyExitCollector.buffer(QStringLiteral("task-3"),
+                                  QStringLiteral("done\n"));
+        earlyExitCollector.bufferExit(QStringLiteral("task-3"), 0);
+        QCOMPARE(earlyExitCollector.takeFor(QStringLiteral("task-3")),
+                 QStringList({QStringLiteral("done\n")}));
+        const auto earlyExit =
+            earlyExitCollector.takeExitFor(QStringLiteral("task-3"));
+        QVERIFY(earlyExit.has_value());
+        QCOMPARE(*earlyExit, 0);
+        QVERIFY(!earlyExitCollector.takeExitFor(QStringLiteral("task-3"))
+                     .has_value());
+    }
+
+    void testRunOutputCollectorDiscardKeepsUnrelatedTasks() {
+        RunOutputCollector collector;
+        collector.buffer(QStringLiteral("stale"), QStringLiteral("old\n"));
+        collector.bufferExit(QStringLiteral("stale"), 1);
+        collector.buffer(QStringLiteral("current"), QStringLiteral("live\n"));
+
+        collector.discardFor(QStringLiteral("stale"));
+
+        QVERIFY(collector.takeFor(QStringLiteral("stale")).isEmpty());
+        QVERIFY(!collector.takeExitFor(QStringLiteral("stale")).has_value());
+        QCOMPARE(collector.takeFor(QStringLiteral("current")),
+                 QStringList({QStringLiteral("live\n")}));
+    }
+
+    void testRunOutputCollectorEarlyOutputAndExitsCoexistByTask() {
+        RunOutputCollector collector;
+        collector.buffer(QStringLiteral("task-b"),
+                         QStringLiteral("second output\n"));
+        collector.bufferExit(QStringLiteral("task-b"), 1);
+        collector.buffer(QStringLiteral("task-a"),
+                         QStringLiteral("first output\n"));
+        collector.bufferExit(QStringLiteral("task-a"), 0);
+        collector.bufferExit(QStringLiteral("task-a"), 2);
+
+        QCOMPARE(collector.takeFor(QStringLiteral("task-a")),
+                 QStringList({QStringLiteral("first output\n")}));
+        const auto firstExit = collector.takeExitFor(QStringLiteral("task-a"));
+        QVERIFY(firstExit.has_value());
+        QCOMPARE(*firstExit, 0);
+        const auto secondExit = collector.takeExitFor(QStringLiteral("task-a"));
+        QVERIFY(secondExit.has_value());
+        QCOMPARE(*secondExit, 2);
+        QVERIFY(!collector.takeExitFor(QStringLiteral("task-a")).has_value());
+
+        QCOMPARE(collector.takeFor(QStringLiteral("task-b")),
+                 QStringList({QStringLiteral("second output\n")}));
+        const auto exitB = collector.takeExitFor(QStringLiteral("task-b"));
+        QVERIFY(exitB.has_value());
+        QCOMPARE(*exitB, 1);
+        QVERIFY(!collector.takeExitFor(QStringLiteral("task-b")).has_value());
+    }
+
     void testProjectTreeModelLimitAndPagination() {
         QTemporaryDir tempDir;
         QVERIFY(tempDir.isValid());
@@ -553,6 +755,102 @@ private slots:
         QVERIFY(foundZith);
         QVERIFY(foundC);
         QVERIFY(foundH);
+    }
+
+    void testZithToolchainRejectsLocalCacheAsRelease() {
+        QTemporaryDir tempDir;
+        QVERIFY(tempDir.isValid());
+
+        ZithToolchainManager manager;
+        const QString cacheRoot = QDir(tempDir.path()).filePath("zith-runtime");
+        manager.setCacheRootForTesting(cacheRoot);
+        QDir rootDir(cacheRoot);
+        QVERIFY(rootDir.mkpath("."));
+
+        auto createRuntime = [&rootDir](const QString &tag, const QString &marker) {
+            const QString releaseRoot = rootDir.filePath(tag);
+            QVERIFY2(QDir().mkpath(QDir(releaseRoot).filePath("stdlib")),
+                     qPrintable(releaseRoot));
+
+            QFile lsp(QDir(releaseRoot).filePath("zith-lsp"));
+            QVERIFY2(lsp.open(QIODevice::WriteOnly | QIODevice::Truncate),
+                     qPrintable(lsp.fileName()));
+            lsp.write("fake-lsp\n");
+            lsp.close();
+            QVERIFY2(QFile::setPermissions(lsp.fileName(),
+                                           QFileDevice::ReadOwner |
+                                               QFileDevice::WriteOwner |
+                                               QFileDevice::ExeOwner),
+                     qPrintable(lsp.fileName()));
+
+            QFile stdlibFile(QDir(releaseRoot).filePath("stdlib/std.zith"));
+            QVERIFY2(stdlibFile.open(QIODevice::WriteOnly | QIODevice::Truncate),
+                     qPrintable(stdlibFile.fileName()));
+            stdlibFile.write(marker.toUtf8());
+            stdlibFile.close();
+        };
+
+        createRuntime("local", "outdated");
+        createRuntime("v1.2.3", "release");
+        createRuntime("v1.10.0", "newer");
+
+        QString lspPath;
+        QString stdlibPath;
+        QString tag;
+        QVERIFY(manager.resolveNewestInstalledRelease(&lspPath, &stdlibPath, &tag));
+        QCOMPARE(tag, QStringLiteral("v1.10.0"));
+        QVERIFY(!lspPath.contains("/local/"));
+        QVERIFY(!stdlibPath.contains("/local/"));
+
+        QVERIFY(!manager.resolveInstalledRelease("local", &lspPath, &stdlibPath));
+    }
+
+    void testZithToolchainPreferOnlineSkipsLocalCheckout() {
+        QTemporaryDir tempDir;
+        QVERIFY(tempDir.isValid());
+
+        ZithToolchainManager manager;
+        const QString cacheRoot = QDir(tempDir.path()).filePath("zith-runtime");
+        manager.setCacheRootForTesting(cacheRoot);
+
+        auto createRuntime = [&cacheRoot](const QString &tag, const QString &marker) {
+            const QString releaseRoot = QDir(cacheRoot).filePath(tag);
+            QVERIFY2(QDir().mkpath(QDir(releaseRoot).filePath("stdlib")),
+                     qPrintable(releaseRoot));
+
+            QFile lsp(QDir(releaseRoot).filePath("zith-lsp"));
+            QVERIFY2(lsp.open(QIODevice::WriteOnly | QIODevice::Truncate),
+                     qPrintable(lsp.fileName()));
+            lsp.write("fake-lsp\n");
+            lsp.close();
+            QVERIFY2(QFile::setPermissions(lsp.fileName(),
+                                           QFileDevice::ReadOwner |
+                                               QFileDevice::WriteOwner |
+                                               QFileDevice::ExeOwner),
+                     qPrintable(lsp.fileName()));
+
+            QFile stdlibFile(QDir(releaseRoot).filePath("stdlib/std.zith"));
+            QVERIFY2(stdlibFile.open(QIODevice::WriteOnly | QIODevice::Truncate),
+                     qPrintable(stdlibFile.fileName()));
+            stdlibFile.write(marker.toUtf8());
+            stdlibFile.close();
+        };
+
+        createRuntime("v0.6.2", "online");
+        manager.setPreferOnline(true);
+
+        QString lspPath;
+        QString stdlibPath;
+        QString tag;
+        QVERIFY(manager.resolveNewestInstalledRelease(&lspPath, &stdlibPath, &tag));
+        QCOMPARE(tag, QStringLiteral("v0.6.2"));
+        QVERIFY(lspPath.contains("/v0.6.2/zith-lsp"));
+        QVERIFY(stdlibPath.contains("/v0.6.2/stdlib"));
+
+        QSignalSpy readySpy(&manager, &ZithToolchainManager::ready);
+        manager.ensureLatest(true);
+        QTRY_VERIFY(readySpy.count() > 0);
+        QCOMPARE(readySpy.at(0).at(0).toString(), lspPath);
     }
 };
 

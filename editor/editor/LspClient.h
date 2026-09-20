@@ -30,6 +30,8 @@ struct LspLocation { QString uri; LspRange range; };
 struct LspHoverInfo { QString contents; LspRange range; };
 struct LspSignatureHelp { QString activeSignature; int activeParameter = 0; QStringList parameters; };
 
+class TestHelios;
+
 class LspClient : public QObject
 {
     Q_OBJECT
@@ -38,7 +40,13 @@ public:
     explicit LspClient(QObject *parent = nullptr);
     ~LspClient() override;
 
-    bool start(const QString &serverPath, const QString &stdlibPath = {}, const QString &workspaceRoot = {});
+#ifdef HELIOS_UNIT_TESTING
+    void waitForFinishedForTesting(int timeoutMs);
+#endif
+
+    bool start(const QString &serverPath, const QString &stdlibPath = {},
+               const QString &workspaceRoot = {},
+               const QString &initMode = {});
     void stop();
     bool isRunning() const;
     bool isReady() const;
@@ -58,6 +66,7 @@ public:
     bool hasFoldingRangeProvider() const { return m_hasFoldingRangeProvider; }
     bool hasCodeActionProvider() const { return m_hasCodeActionProvider; }
     bool hasSemanticTokensProvider() const { return m_hasSemanticTokensProvider; }
+    bool hasExecuteCommandProvider() const { return m_hasExecuteCommandProvider; }
 
     void openDocument(const QString &uri, const QString &languageId, const QString &text, int version = 1);
     void changeDocument(const QString &uri, const QList<LspTextChange> &changes, int version);
@@ -80,6 +89,8 @@ public:
     void requestRename(const QString &uri, int version, const LspPosition &pos, const QString &newName);
     void requestCodeActions(const QString &uri, int version, const LspRange &range, const QList<LspDiagnostic> &diagnostics);
     void resolveCompletion(const QString &uri, int version, const QJsonObject &item);
+    qint64 executeWorkspaceCommand(const QString &command, const QJsonValue &args,
+                                   std::function<void(const QJsonObject &)> callback = {});
 
 signals:
     void initialized();
@@ -105,6 +116,11 @@ signals:
     void saveAllRequested();
     void logMessage(const QString &message);
     void showMessage(const QString &message);
+    void processOutputReceived(const QString &taskId, const QString &chunk);
+    void processExitReceived(const QString &taskId, int exitCode);
+    void workDoneProgressReceived(const QString &token, const QString &kind,
+                                  const QString &message);
+    void commandResult(const QString &command, bool success, const QJsonValue &result);
     void frontendStatusReceived(const QJsonObject &status);
     void metricsReceived(const QJsonObject &metrics);
 
@@ -116,6 +132,7 @@ private slots:
     void onProcessFinished(int exitCode, QProcess::ExitStatus status);
 
 private:
+    friend class TestHelios;
     static constexpr qsizetype MaxMessageSize = 64LL * 1024 * 1024;
     struct DocumentState { int version = 1; bool open = false; };
     struct PendingRequest {
@@ -131,9 +148,11 @@ private:
     void launch();
     void resetSessionState();
     bool sendMessage(const QJsonObject &msg);
-    void handleResponse(const QJsonObject &msg);
+    void handleServerRequest(const QJsonObject &msg);
     void handleNotification(const QJsonObject &msg);
     void processBuffer();
+    void receiveFrame(const QByteArray &body);
+    void handleResponse(const QJsonObject &msg);
     qint64 nextId();
     qint64 sendRequest(const QString &method, const QJsonObject &params, const QString &uri, int version,
                        bool cancellable, std::function<void(const QJsonObject &)> callback);
@@ -158,6 +177,8 @@ private:
     bool m_shutdownRequested = false;
     bool m_exitSent = false;
     bool m_stopping = false;
+    enum class InitMode { Zith, Clangd };
+    InitMode m_initMode = InitMode::Zith;
     int m_syncKind = 1;
     QTimer *m_shutdownTimer = nullptr;
     QHash<QString, DocumentState> m_documents;
@@ -171,6 +192,7 @@ private:
     bool m_hasDocumentHighlightProvider = false, m_hasRenameProvider = false, m_hasDocumentSymbolProvider = false;
     bool m_hasFormattingProvider = false, m_hasFoldingRangeProvider = false, m_hasCodeActionProvider = false;
     bool m_hasSemanticTokensProvider = false;
+    bool m_hasExecuteCommandProvider = false;
 };
 
 #endif

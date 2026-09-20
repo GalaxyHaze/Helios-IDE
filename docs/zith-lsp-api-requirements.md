@@ -115,11 +115,16 @@ relative semantic tokens. `window/logMessage`, `window/showMessage`,
 `publishDiagnostics`, and `zith/requestSaveAll` are handled. The only custom
 experimental capability negotiated is `zith.requestSaveAll`.
 
-## 6. Workspace edits and local commands
+## 6. Workspace commands
 
 Helios accepts local `file://` workspace edits in `WorkspaceEdit.changes` only.
-It validates all ranges before changing any file. Build, Check, Compile, and
-Run remain local editor actions; they do not use `workspace/executeCommand`.
+It validates all ranges before changing any file. Build, Check, Run, and Stop
+are project/file commands invoked through `workspace/executeCommand`, using the
+`zith.build`, `zith.check`, `zith.run`, and `zith.stop` commands advertised by
+the LSP server. Project commands receive a `file://` project root URI; file
+checks receive the file URI. `zith.run` returns a `taskId` and emits
+`zith/processOutput` and `zith/processExit` notifications until the process
+finishes. Clients must advertise `executeCommandProvider` for these actions.
 
 ## 11. Planned, not supported
 

@@ -5,6 +5,7 @@
 
 class QCheckBox;
 class QLabel;
+class QLineEdit;
 class QPlainTextEdit;
 class QPushButton;
 
@@ -16,6 +17,12 @@ public:
     explicit LspManagerDialog(QWidget *parent = nullptr);
 
     void setLspEnabled(bool enabled);
+    void setUseOnlineZithLsp(bool enabled);
+    void setCLspEnabled(bool enabled);
+    void setCLspPath(const QString &path);
+    void setCLspInfo(const QString &status,
+                     const QString &resolvedPath,
+                     const QString &message);
     void setRuntimeInfo(const QString &status,
                         const QString &tag,
                         const QString &lspPath,
@@ -29,6 +36,9 @@ public:
 
 signals:
     void lspEnabledChanged(bool enabled);
+    void useOnlineZithLspChanged(bool enabled);
+    void cLspEnabledChanged(bool enabled);
+    void cLspPathChanged(const QString &path);
     void refreshRuntimeRequested();
     void clearRuntimeCacheRequested();
 
@@ -64,10 +74,21 @@ private:
     QLabel *m_lspConnectionValue = nullptr;
     QLabel *m_lspSyncModeValue = nullptr;
     QLabel *m_lspLastErrorValue = nullptr;
+    QLineEdit *m_cLspPathEdit = nullptr;
+    QLabel *m_labelCLspStatus = nullptr;
+    QLabel *m_labelCLspPath = nullptr;
+    QLabel *m_labelCLspMessage = nullptr;
+    QLabel *m_cLspStatusValue = nullptr;
+    QLabel *m_cLspPathValue = nullptr;
+    QLabel *m_cLspMessageValue = nullptr;
+    QLabel *m_cLspTitle = nullptr;
+    QCheckBox *m_cLspEnabledCheck = nullptr;
     QPlainTextEdit *m_lspLogView = nullptr;
     QPushButton *m_refreshRuntimeButton = nullptr;
     QPushButton *m_clearRuntimeCacheButton = nullptr;
+    QPushButton *m_cLspBrowseButton = nullptr;
     QCheckBox *m_lspEnabledCheck = nullptr;
+    QCheckBox *m_useOnlineZithLspCheck = nullptr;
 
     QString m_rawStatus;
     QString m_rawTag;

@@ -1,97 +1,160 @@
 #include "CompilerPanel.h"
 #include "../core/ThemeManager.h"
 #include <QFont>
+#include <QScrollBar>
 #include <QVBoxLayout>
 
 CompilerPanel::CompilerPanel(QWidget *parent)
-    : QDockWidget("Compiler Output", parent)
+    : QWidget(parent)
 {
-    setAllowedAreas(Qt::BottomDockWidgetArea | Qt::RightDockWidgetArea);
-    setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable);
+    setObjectName(QStringLiteral("compilerOutputDock"));
 
     m_output = new QPlainTextEdit;
     m_output->setReadOnly(true);
     m_output->setFont(QFont("monospace", 10));
     applyTheme();
 
-    setWidget(m_output);
-
-    m_process = new QProcess(this);
-
-    connect(m_process, &QProcess::readyReadStandardOutput,
-            this, &CompilerPanel::onProcessOutput);
-    connect(m_process, &QProcess::readyReadStandardError,
-            this, &CompilerPanel::onProcessOutput);
-    connect(m_process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
-            this, &CompilerPanel::onProcessFinished);
+    auto *layout = new QVBoxLayout(this);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(0);
+    layout->addWidget(m_output);
 
     connect(&ThemeManager::instance(), &ThemeManager::themeChanged,
             this, &CompilerPanel::applyTheme);
 }
 
-CompilerPanel::~CompilerPanel()
-{
-    if (m_process->state() != QProcess::NotRunning) {
-        m_process->kill();
-        m_process->waitForFinished(3000);
-    }
-}
+CompilerPanel::~CompilerPanel() = default;
 
 bool CompilerPanel::isRunning() const
 {
-    return m_process->state() != QProcess::NotRunning;
+    return !m_runningTaskId.isEmpty();
+}
+
+QString CompilerPanel::runningTaskId() const
+{
+    return m_runningTaskId;
+}
+
+QString CompilerPanel::activeProgressToken() const
+{
+    return m_activeProgressToken;
 }
 
 void CompilerPanel::applyTheme()
 {
     auto &tm = ThemeManager::instance();
+    const QColor canvas =
+        tm.semanticColor(ThemeManager::SemanticRole::Canvas);
+    const QColor text =
+        tm.semanticColor(ThemeManager::SemanticRole::Text);
+    setStyleSheet(QString("CompilerPanel { background: %1; color: %2; }")
+                      .arg(canvas.name(), text.name()));
     m_output->setStyleSheet(
-        QString("QPlainTextEdit { background: %1; color: %2; border: none; }")
-            .arg(tm.semanticColor(ThemeManager::SemanticRole::Canvas).name(),
-                 tm.semanticColor(ThemeManager::SemanticRole::Text).name()));
+        QString("QPlainTextEdit { background: %1; color: %2; border: none; "
+                "padding: 4px; }")
+            .arg(canvas.name(), text.name()));
 }
 
-void CompilerPanel::runCommand(const QString &workingDir, const QString &command, const QStringList &args)
+void CompilerPanel::clearOutput()
 {
-    if (m_process->state() != QProcess::NotRunning) {
-        m_process->kill();
-        m_process->waitForFinished(1000);
-    }
-
     m_output->clear();
-    QString cmdLine = command;
-    for (const QString &a : args)
-        cmdLine += " " + a;
-    m_output->appendPlainText("$ " + cmdLine);
-    m_output->appendPlainText(QString());
+}
 
-    m_process->setWorkingDirectory(workingDir);
-    m_process->start(command, args);
+void CompilerPanel::startBuild(const QString &title, const QString &progressToken)
+{
+    m_output->clear();
+    m_activeProgressToken = progressToken;
+    m_runningTaskId.clear();
+    m_output->appendPlainText(title);
+    m_output->appendPlainText(QString());
 
     emit compileStarted();
 }
 
-void CompilerPanel::onProcessOutput()
+void CompilerPanel::appendOutput(const QString &text)
 {
-    QByteArray data = m_process->readAllStandardOutput();
-    if (!data.isEmpty())
-        m_output->appendPlainText(QString::fromUtf8(data));
-
-    data = m_process->readAllStandardError();
-    if (!data.isEmpty())
-        m_output->appendPlainText(QString::fromUtf8(data));
+    if (!text.isEmpty()) {
+        m_output->appendPlainText(text);
+        auto *scroll = m_output->verticalScrollBar();
+        scroll->setValue(scroll->maximum());
+    }
 }
 
-void CompilerPanel::onProcessFinished(int exitCode, QProcess::ExitStatus status)
+void CompilerPanel::appendRawOutput(const QByteArray &bytes)
+{
+    if (bytes.isEmpty())
+        return;
+    QTextCursor cursor(m_output->document());
+    cursor.movePosition(QTextCursor::End);
+    cursor.insertText(QString::fromUtf8(bytes));
+    auto *scroll = m_output->verticalScrollBar();
+    scroll->setValue(scroll->maximum());
+}
+
+void CompilerPanel::appendWorkDoneProgress(const QString &token,
+                                           const QString &kind,
+                                           const QString &message)
+{
+    if (token.isEmpty())
+        return;
+    if (!m_activeProgressToken.isEmpty() && token != m_activeProgressToken)
+        return;
+    if (kind == QLatin1String("begin"))
+        appendOutput(QStringLiteral("Compiling..."));
+    else if (kind == QLatin1String("report"))
+        appendOutput(message.isEmpty() ? QStringLiteral("Working...") : message);
+    else if (kind == QLatin1String("end"))
+        appendOutput(message.isEmpty() ? QStringLiteral("Finished")
+                                       : message);
+}
+
+void CompilerPanel::appendDiagnostics(const QList<LspDiagnostic> &diagnostics)
+{
+    for (const LspDiagnostic &diagnostic : diagnostics) {
+        const QString message =
+            QStringLiteral("  line %1, col %2: %3")
+                .arg(diagnostic.range.start.line + 1)
+                .arg(diagnostic.range.start.character + 1)
+                .arg(diagnostic.message);
+        appendOutput(message);
+    }
+}
+
+QString CompilerPanel::outputText() const
+{
+    return m_output->toPlainText();
+}
+
+void CompilerPanel::setActiveProgressToken(const QString &token)
+{
+    m_activeProgressToken = token;
+}
+
+void CompilerPanel::clearActiveProgress()
+{
+    m_activeProgressToken.clear();
+}
+
+void CompilerPanel::setRunningTask(const QString &taskId)
+{
+    m_runningTaskId = taskId;
+}
+
+void CompilerPanel::stopRunningTask()
+{
+    if (!m_runningTaskId.isEmpty())
+        emit stopRequested(m_runningTaskId);
+}
+
+void CompilerPanel::showBuildResult(bool success, const QString &programUri)
 {
     QString msg;
-    if (status == QProcess::CrashExit) {
-        msg = "Process crashed";
-    } else if (exitCode == 0) {
+    if (success && !programUri.isEmpty())
+        msg = QString("Build/run result available at %1").arg(programUri);
+    else if (success)
         msg = "Completed successfully";
-    } else {
-        msg = QString("Completed with exit code %1").arg(exitCode);
-    }
+    else
+        msg = "Failed";
     m_output->appendPlainText(msg);
-    emit compileFinished(exitCode);
+    emit compileFinished(success ? 0 : 1);
 }

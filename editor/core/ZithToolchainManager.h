@@ -19,6 +19,14 @@ public:
     void cancel();
     QString runtimeCacheRootPath() const;
     bool clearCachedRuntime(QString *errorMessage = nullptr) const;
+    void setPreferOnline(bool preferOnline)
+    {
+        m_preferOnline = preferOnline;
+    }
+    void setCacheRootForTesting(const QString &path)
+    {
+        m_cacheRootOverride = path;
+    }
 
 signals:
     void statusChanged(const QString &message);
@@ -34,6 +42,10 @@ private:
         LspBinary,
         StdlibArchive
     };
+
+#ifdef HELIOS_UNIT_TESTING
+    friend class TestHelios;
+#endif
 
     struct ReleaseAsset {
         QString name;
@@ -66,6 +78,8 @@ private:
     bool resolveNewestInstalledRelease(QString *lspPath,
                                        QString *stdlibPath,
                                        QString *tag) const;
+    bool isReleaseDirectoryName(const QString &directoryName) const;
+    bool removeStaleLocalRuntimeCache(QString *errorMessage = nullptr);
     bool installDownloadedAsset(const PendingDownload &download,
                                 const QString &tag,
                                 QString *errorMessage) const;
@@ -95,7 +109,9 @@ private:
     QList<PendingDownload> m_pendingDownloads;
     QString m_pendingTag;
     bool m_preferCached = true;
+    bool m_preferOnline = false;
     bool m_hasResolvedRuntime = false;
+    QString m_cacheRootOverride;
 };
 
 #endif

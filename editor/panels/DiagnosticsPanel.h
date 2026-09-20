@@ -1,10 +1,10 @@
 #ifndef DIAGNOSTICSPANEL_H
 #define DIAGNOSTICSPANEL_H
 
-#include <QDockWidget>
 #include <QListWidget>
 #include <QMap>
 #include <QSet>
+#include <QWidget>
 #include "../editor/LspClient.h"
 
 class CodeEditor;
@@ -16,7 +16,7 @@ public:
     LspDiagnostic diagnostic;
 };
 
-class DiagnosticsPanel : public QDockWidget
+class DiagnosticsPanel : public QWidget
 {
     Q_OBJECT
 
@@ -26,6 +26,7 @@ public:
     void clear();
     void setDiagnostics(const QString &uri, int version, const QList<LspDiagnostic> &diagnostics);
     void clearDiagnostics(const QString &uri);
+    QList<LspDiagnostic> allDiagnostics() const;
 
     int errorCount() const { return m_errorCount; }
     int warningCount() const { return m_warningCount; }

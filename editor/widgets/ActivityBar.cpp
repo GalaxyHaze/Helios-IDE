@@ -64,6 +64,7 @@ static QIcon settingsIcon(const QColor &color)
 ActivityBar::ActivityBar(QWidget *parent)
     : QDockWidget(parent)
 {
+    setObjectName(QStringLiteral("activityBar"));
     connect(&ThemeManager::instance(), &ThemeManager::themeChanged,
             this, &ActivityBar::applyTheme);
     applyTheme();
@@ -151,8 +152,8 @@ void ActivityBar::applyTheme()
     const QColor bg = tm.semanticColor(ThemeManager::SemanticRole::Surface);
     const QColor border = tm.semanticColor(ThemeManager::SemanticRole::Border);
 
-    setStyleSheet(QString("ActivityBar { background: %1; border-right: 1px solid %2; }")
-                      .arg(bg.name(), border.name()));
+    setStyleSheet(QString("ActivityBar { background: %1; }")
+        .arg(bg.name()));
 
     const QString style = buttonStyleSheet();
     for (QToolButton *button : std::as_const(m_buttons))

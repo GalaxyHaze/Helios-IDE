@@ -79,8 +79,11 @@ GitPanel::GitPanel(QWidget *parent)
     actionRow->setSpacing(6);
 
     m_stageAllButton = new QPushButton("Stage all");
+    m_stageAllButton->setMaximumWidth(70);
     m_stageSelectionButton = new QPushButton("Stage");
+    m_stageSelectionButton->setMaximumWidth(56);
     m_unstageSelectionButton = new QPushButton("Unstage");
+    m_unstageSelectionButton->setMaximumWidth(64);
     
     actionRow->addWidget(m_stageAllButton);
     actionRow->addWidget(m_stageSelectionButton);
@@ -174,28 +177,35 @@ void GitPanel::applyTheme()
             .arg(accent));
 
     m_initButton->setStyleSheet(
-        QString("background: %1; color: %2; font-weight: bold; padding: 6px; border-radius: 4px;")
-            .arg(success, onAccent));
+        QString("background: %1; color: %2; font-weight: bold; padding: 7px; "
+                "border: none; border-left: 2px solid %3; border-bottom: 2px solid %3; "
+                "border-radius: 6px;")
+            .arg(success, onAccent, success));
 
     m_connectGithubButton->setStyleSheet(
-        QString("background: %1; color: %2; font-weight: bold; padding: 6px; border-radius: 4px;")
-            .arg(info, onAccent));
+        QString("background: %1; color: %2; font-weight: bold; padding: 7px; "
+                "border: none; border-left: 2px solid %3; border-bottom: 2px solid %3; "
+                "border-radius: 6px;")
+            .arg(info, onAccent, info));
 
     m_commitInput->setStyleSheet(
         QString("QLineEdit { background: %1; color: %2; border: 1px solid %3; "
-                "border-radius: 4px; padding: 6px 8px; font-size: 12px; }")
+                "border-radius: 6px; padding: 6px 8px; font-size: 12px; }")
             .arg(inputBg, text, border));
 
     m_commitButton->setStyleSheet(
         QString("QPushButton { background: %1; color: %2; font-weight: bold; border: none; "
-                "border-radius: 4px; padding: 6px 10px; font-size: 12px; } "
+                "border-left: 2px solid %4; border-bottom: 2px solid %4; "
+                "border-radius: 6px; padding: 6px 10px; font-size: 12px; } "
                 "QPushButton:hover { background: %3; }")
-            .arg(accent, onAccent, accentHover));
+            .arg(accent, onAccent, accentHover, accent));
 
     const QString actionStyle =
         QString("QPushButton { background: %1; color: %2; border: none; border-radius: 4px; "
-                "padding: 4px 8px; font-size: 11px; } QPushButton:hover { background: %3; }")
-            .arg(buttonBg, text, buttonHover);
+                "border-left: 2px solid %4; border-bottom: 2px solid %4; "
+                "border-radius: 6px; padding: 5px 9px; font-size: 11px; } "
+                "QPushButton:hover { background: %3; }")
+            .arg(buttonBg, text, buttonHover, accent);
     m_stageAllButton->setStyleSheet(actionStyle);
     m_stageSelectionButton->setStyleSheet(actionStyle);
     m_unstageSelectionButton->setStyleSheet(actionStyle);

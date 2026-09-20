@@ -34,6 +34,7 @@ FileTreePanel::FileTreePanel(QWidget *parent)
     m_treeView->setRootIsDecorated(true);
     m_treeView->setExpandsOnDoubleClick(true);
     m_treeView->setContextMenuPolicy(Qt::CustomContextMenu);
+    m_treeView->setContentsMargins(0, 6, 0, 0);
 
     layout->addWidget(m_treeView);
 
@@ -235,7 +236,7 @@ void FileTreePanel::updateThemeAndLanguage()
     m_treeView->setStyleSheet(
         QString(
             "QTreeView { background: %1; color: %2; border: none; font-size: 13px; }"
-            "QTreeView::item { padding: 4px 6px; color: %2; }"
+            "QTreeView::item { padding: 7px 10px; color: %2; border-radius: 6px; }"
             "QTreeView::item:hover { background: %3; }"
             "QTreeView::item:selected { background: %3; color: %4; }"
             "QTreeView::branch { background: %1; }"

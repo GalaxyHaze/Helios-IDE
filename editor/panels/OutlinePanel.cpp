@@ -11,13 +11,20 @@
 OutlinePanel::OutlinePanel(QWidget *parent)
     : QWidget(parent)
 {
+    setMinimumWidth(180);
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
 
-    m_titleLabel = new QLabel("Structure");
+    m_titleLabel = new QLabel;
     m_titleLabel->setStyleSheet("font-weight: bold; padding: 6px 10px; font-size: 12px;");
     layout->addWidget(m_titleLabel);
+
+    m_emptyLabel = new QLabel;
+    m_emptyLabel->setWordWrap(true);
+    m_emptyLabel->setAlignment(Qt::AlignCenter);
+    m_emptyLabel->hide();
+    layout->addWidget(m_emptyLabel);
 
     m_treeWidget = new QTreeWidget;
     m_treeWidget->setHeaderHidden(true);
@@ -39,11 +46,20 @@ OutlinePanel::OutlinePanel(QWidget *parent)
 void OutlinePanel::clear()
 {
     m_treeWidget->clear();
+    m_emptyLabel->show();
+    m_treeWidget->hide();
 }
 
 void OutlinePanel::setSymbols(const QJsonArray &symbols)
 {
     m_treeWidget->clear();
+    if (symbols.isEmpty()) {
+        m_emptyLabel->show();
+        m_treeWidget->hide();
+        return;
+    }
+    m_emptyLabel->hide();
+    m_treeWidget->show();
     populateTree(symbols, nullptr);
     m_treeWidget->expandAll();
 }
@@ -55,7 +71,11 @@ void OutlinePanel::populateTree(const QJsonArray &symbols, QTreeWidgetItem *pare
         QString name = obj.value("name").toString();
         int kind = obj.value("kind").toInt();
 
-        QJsonObject rangeObj = obj.value("range").toObject();
+        QJsonObject selectionRangeObj =
+            obj.value("selectionRange").toObject();
+        QJsonObject rangeObj = selectionRangeObj.isEmpty()
+                                   ? obj.value("range").toObject()
+                                   : selectionRangeObj;
         QJsonObject startObj = rangeObj.value("start").toObject();
         int line = startObj.value("line").toInt();
         int col = startObj.value("character").toInt();
@@ -115,18 +135,24 @@ void OutlinePanel::updateThemeAndLanguage()
     const QString itemSelectedHex = tm.semanticColor(ThemeManager::SemanticRole::Selected).name();
     const QString itemSelectedTextHex = tm.semanticColor(ThemeManager::SemanticRole::SelectedText).name();
 
-    m_titleLabel->setText("Structure");
+    m_titleLabel->setText(
+        TranslationManager::instance().translate("outline.title"));
+    m_emptyLabel->setText(
+        TranslationManager::instance().translate("outline.no_symbols"));
     m_titleLabel->setStyleSheet(
         QString("font-weight: bold; padding: 6px 10px; font-size: 12px; border-bottom: 1px solid %1; color: %2; background: %3;")
         .arg(borderHex, windowTextHex, bgHex)
     );
+    m_emptyLabel->setStyleSheet(
+        QString("color: %1; font-size: 12px; padding: 16px 10px; background: %2;")
+            .arg(windowTextHex, bgHex));
 
     m_treeWidget->setStyleSheet(
         QString(
             "QTreeWidget { background: %1; color: %2; border: none; font-size: 12px; }"
-            "QTreeWidget::item { padding: 4px 6px; color: %2; }"
+            "QTreeWidget::item { padding: 7px 10px; color: %2; border-radius: 6px; }"
             "QTreeWidget::item:hover { background: %3; }"
-            "QTreeWidget::item:selected { background: %5; color: %6; }"
-        ).arg(bgHex, textHex, itemHoverHex, windowTextHex, itemSelectedHex, itemSelectedTextHex)
+            "QTreeWidget::item:selected { background: %4; color: %5; }"
+        ).arg(bgHex, textHex, itemHoverHex, itemSelectedHex, itemSelectedTextHex)
     );
 }

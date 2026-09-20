@@ -216,20 +216,21 @@ void SearchPanel::applyTheme()
 
     setStyleSheet(QString(
         "SearchPanel { background: %1; }"
-        "QLineEdit { background: %5; color: %3; border: 1px solid %2; border-radius: 4px; padding: 6px 8px; }"
-        "QPushButton { background: %6; color: %3; border: none; border-radius: 4px; padding: 6px 10px; }"
-        "QPushButton:hover { background: %7; }")
-        .arg(bg, border, text, muted, inputBg, buttonBg, buttonHover, selected, selectedText)
+        "QLineEdit { background: %2; color: %3; border: 1px solid %4; border-radius: 6px; padding: 6px 8px; }"
+        "QPushButton { background: %5; color: %3; border: none; border-radius: 6px; padding: 6px 10px; }"
+        "QPushButton:hover { background: %6; }")
+        .arg(bg, inputBg, text, border, buttonBg, buttonHover)
     );
 
     m_summaryLabel->setStyleSheet(
         QString("color: %1; font-size: 12px; font-weight: normal;").arg(muted));
 
     m_results->setStyleSheet(QString(
-        "QListWidget { background: %1; color: %3; border: 1px solid %2; }"
-        "QListWidget::item { padding: 6px; border-bottom: 1px solid %2; }"
-        "QListWidget::item:selected { background: %8; color: %9; }")
-        .arg(bg, border, text, muted, inputBg, buttonBg, buttonHover, selected, selectedText)
+        "QListWidget { background: %1; color: %2; border: 1px solid %3; "
+        "border-radius: 6px; }"
+        "QListWidget::item { padding: 7px 10px; border-radius: 6px; }"
+        "QListWidget::item:selected { background: %4; color: %5; }")
+        .arg(bg, text, border, selected, selectedText)
     );
 
     m_titleLabel->setStyleSheet(QString("color: %1; font-weight: bold; font-size: %2px;")

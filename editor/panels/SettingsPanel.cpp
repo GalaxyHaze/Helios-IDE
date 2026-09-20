@@ -162,6 +162,21 @@ SettingsPanel::SettingsPanel(QWidget *parent)
     diagForm->addRow("Last error", m_lspLastErrorValue);
     lspLayout->addLayout(diagForm);
 
+    m_cLspTitleLabel = new QLabel("C/C++ LSP (clangd)");
+    m_cLspTitleLabel->setStyleSheet("font-weight: bold; font-size: 13px; padding-top: 8px;");
+    lspLayout->addWidget(m_cLspTitleLabel);
+
+    auto *cLspForm = new QFormLayout;
+    cLspForm->setContentsMargins(0, 4, 0, 0);
+    cLspForm->setSpacing(kPanelSpacing);
+    m_cLspStatusValue = makeValueLabel();
+    m_cLspPathValue = makeValueLabel();
+    m_cLspMessageValue = makeValueLabel();
+    cLspForm->addRow("Status", m_cLspStatusValue);
+    cLspForm->addRow("Path", m_cLspPathValue);
+    cLspForm->addRow("Message", m_cLspMessageValue);
+    lspLayout->addLayout(cLspForm);
+
     m_logLabel = new QLabel("Recent LSP log");
     m_logLabel->setStyleSheet("font-size: 12px; padding-top: 4px;");
     lspLayout->addWidget(m_logLabel);
@@ -169,8 +184,9 @@ SettingsPanel::SettingsPanel(QWidget *parent)
     m_lspLogView = new QPlainTextEdit;
     m_lspLogView->setReadOnly(true);
     m_lspLogView->setMaximumBlockCount(200);
-    m_lspLogView->setFixedHeight(140);
-    lspLayout->addWidget(m_lspLogView);
+    m_lspLogView->setMinimumHeight(140);
+    m_lspLogView->setLineWrapMode(QPlainTextEdit::NoWrap);
+    lspLayout->addWidget(m_lspLogView, 1);
 
     lspLayout->addStretch();
     m_tabWidget->addTab(lspTab, "LSP");
@@ -255,6 +271,18 @@ void SettingsPanel::setLspDiagnostics(const QString &connection,
         m_lspLastErrorValue->setText(lastError.isEmpty() ? "None" : lastError);
 }
 
+void SettingsPanel::setCLspInfo(const QString &status,
+                                const QString &path,
+                                const QString &message)
+{
+    if (m_cLspStatusValue)
+        m_cLspStatusValue->setText(status.isEmpty() ? "Unavailable" : status);
+    if (m_cLspPathValue)
+        m_cLspPathValue->setText(path.isEmpty() ? "Unavailable" : path);
+    if (m_cLspMessageValue)
+        m_cLspMessageValue->setText(message.isEmpty() ? QString() : message);
+}
+
 void SettingsPanel::appendLspLog(const QString &line)
 {
     if (m_lspLogView && !line.isEmpty())
@@ -319,8 +347,8 @@ void SettingsPanel::initializeShortcutTree()
         { "shortcut.completion", "Ctrl+Space" },
         { "shortcut.build", "Ctrl+B" },
         { "shortcut.check", "Ctrl+Shift+C" },
-        { "shortcut.compile", "Ctrl+Shift+B" },
         { "shortcut.run", "Ctrl+Shift+R" },
+        { "shortcut.stop", "Ctrl+Shift+Q" },
         { "shortcut.restart_lsp", "Ctrl+Shift+L" },
         { "shortcut.getting_started", "F1" }
     });
@@ -361,6 +389,8 @@ void SettingsPanel::applyTranslations()
     m_openPreferencesButton->setText(tr.translate("settings.preferences_button"));
     m_openShortcutsButton->setText(tr.translate("settings.shortcuts_button"));
     m_openLspManagerButton->setText(tr.translate("settings.lsp_button"));
+    m_cLspTitleLabel->setText(
+        TranslationManager::instance().translate("lsp.c_title"));
     m_tabWidget->setTabText(0, tr.translate("settings.tab_shortcuts"));
     m_tabWidget->setTabText(1, tr.translate("settings.tab_lsp"));
     updateShortcutTexts();
@@ -411,6 +441,10 @@ void SettingsPanel::applyTheme()
         QString("color: %1; font-size: 12px;").arg(textHex));
     setStyleSheetIfChanged(
         m_diagTitleLabel,
+        QString("color: %1; font-weight: bold; font-size: 13px; padding-top: 8px;")
+            .arg(windowTextHex));
+    setStyleSheetIfChanged(
+        m_cLspTitleLabel,
         QString("color: %1; font-weight: bold; font-size: 13px; padding-top: 8px;")
             .arg(windowTextHex));
     setStyleSheetIfChanged(

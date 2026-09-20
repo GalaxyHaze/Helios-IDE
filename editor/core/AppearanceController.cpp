@@ -4,8 +4,24 @@
 #include "TomlSettingsStore.h"
 
 #include <QApplication>
+#include <QFontInfo>
 #include <QFontDatabase>
 #include <QRegularExpression>
+
+namespace {
+QString preferredMonospaceFamily()
+{
+    const QString preferred = QStringLiteral("Hack");
+    if (QFontDatabase::families().contains(preferred))
+        return preferred;
+
+    const QString fallback = QStringLiteral("DejaVu Sans Mono");
+    if (QFontDatabase::families().contains(fallback))
+        return fallback;
+
+    return QFontDatabase::systemFont(QFontDatabase::FixedFont).family();
+}
+}
 
 AppearanceController::AppearanceController(QObject *parent)
     : QObject(parent), m_defaultUiFont(QApplication::font()) {
@@ -21,12 +37,16 @@ AppearanceController &AppearanceController::instance() {
 QFont AppearanceController::fontFor(const QString &family, int pointSize,
                                     bool editor) const {
   QFont font;
-  if (family != "System Default" && !family.isEmpty()) {
-    font.setFamily(family);
+  const bool isSystemDefault =
+      family.isEmpty() || family == QStringLiteral("System Default");
+  if (isSystemDefault) {
+    font.setFamily(preferredMonospaceFamily());
+    font.setStyleHint(QFont::Monospace);
   } else if (editor) {
-    font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+    font.setFamily(family);
+    font.setStyleHint(QFont::Monospace);
   } else {
-    font = m_defaultUiFont;
+    font.setFamily(family);
   }
 
   const auto &settings = TomlSettingsStore::instance();
@@ -34,8 +54,10 @@ QFont AppearanceController::fontFor(const QString &family, int pointSize,
       editor ? pointSize
              : qRound(pointSize * settings.uiScale() / 100.0);
   font.setPointSize(qMax(6, effectivePointSize));
-  if (editor) {
+  if (editor || isSystemDefault) {
     font.setStyleHint(QFont::Monospace);
+  }
+  if (editor) {
     const QString strategy = settings.renderingStrategy();
     font.setStyleStrategy(strategy == "no-antialias" ? QFont::NoAntialias
                                                      : QFont::PreferAntialias);

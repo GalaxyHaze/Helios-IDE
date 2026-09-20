@@ -50,10 +50,21 @@ void ZithToolchainManager::ensureLatest(bool preferCached)
 
     const QFileInfo localLsp(kLocalLspPath);
     const QFileInfo localStdlib(kLocalStdlibPath);
-    if (localLsp.isExecutable() && localStdlib.isDir()) {
+    if (!m_preferOnline && localLsp.isExecutable() && localStdlib.isDir()) {
         emit statusChanged(QStringLiteral("Using local Zith development runtime."));
         finishWithResolvedRuntime(kLocalLspPath, kLocalStdlibPath, QStringLiteral("local"));
+        QString staleError;
+        removeStaleLocalRuntimeCache(&staleError);
         return;
+    }
+
+    const QFileInfo localCache(releaseRootPath(QStringLiteral("local")));
+    if (localCache.exists()) {
+        emit statusChanged(QStringLiteral("Ignoring outdated local runtime cache."));
+        QString staleError;
+        if (!removeStaleLocalRuntimeCache(&staleError) && !staleError.isEmpty()) {
+            emit statusChanged(staleError);
+        }
     }
 
     if (preferCached) {
@@ -351,6 +362,9 @@ bool ZithToolchainManager::resolveInstalledRelease(const QString &tag,
                                                    QString *lspPath,
                                                    QString *stdlibPath) const
 {
+    if (!isReleaseDirectoryName(tag))
+        return false;
+
     const QString resolvedLspPath = lspInstallPath(tag);
     const QString resolvedStdlibPath = stdlibInstallPath(tag);
     const QFileInfo lspInfo(resolvedLspPath);
@@ -406,6 +420,33 @@ bool ZithToolchainManager::resolveNewestInstalledRelease(QString *lspPath,
     if (tag)
         *tag = bestTag;
     return found;
+}
+
+bool ZithToolchainManager::isReleaseDirectoryName(const QString &directoryName) const
+{
+    return directoryName.startsWith(QLatin1Char('v')) &&
+        !releaseVersion(directoryName).isNull();
+}
+
+bool ZithToolchainManager::removeStaleLocalRuntimeCache(QString *errorMessage)
+{
+    const QString localCache = releaseRootPath(QStringLiteral("local"));
+    const QFileInfo localCacheInfo(localCache);
+    if (!localCacheInfo.exists())
+        return true;
+
+    QDir localCacheDir(localCache);
+    if (!localCacheDir.removeRecursively()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QString(
+                "Failed to remove the stale local Zith runtime cache at %1.")
+                                .arg(localCache);
+        }
+        return false;
+    }
+
+    emit statusChanged(QStringLiteral("Removing stale local Zith runtime cache."));
+    return true;
 }
 
 bool ZithToolchainManager::installDownloadedAsset(const PendingDownload &download,
@@ -511,6 +552,9 @@ bool ZithToolchainManager::ensureDirectory(const QString &path) const
 
 QString ZithToolchainManager::cacheRootPath() const
 {
+    if (!m_cacheRootOverride.isEmpty())
+        return m_cacheRootOverride;
+
     QString root = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
     if (root.isEmpty())
         root = QDir::homePath() + "/.helios";

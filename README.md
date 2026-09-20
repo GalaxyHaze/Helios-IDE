@@ -110,7 +110,7 @@ Key modules inside `editor/`:
 
 For the full Zith-oriented workflow, Helios also expects:
 
-- `zithc` available in `PATH` for compiler actions
+- `zith-lsp` runtime with `workspace/executeCommand` support for build, check, and run actions
 - network access on first run so the managed Zith runtime can be cached locally
 
 ## Quick Start

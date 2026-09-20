@@ -113,8 +113,8 @@ void ShortcutsDialog::initializeShortcutTree()
         { "shortcut.completion", "Ctrl+Space" },
         { "shortcut.build", "Ctrl+B" },
         { "shortcut.check", "Ctrl+Shift+C" },
-        { "shortcut.compile", "Ctrl+Shift+B" },
         { "shortcut.run", "Ctrl+Shift+R" },
+        { "shortcut.stop", "Ctrl+Shift+Q" },
         { "shortcut.restart_lsp", "Ctrl+Shift+L" },
         { "shortcut.getting_started", "F1" }
     });

@@ -32,6 +32,9 @@ public:
     void setLspDiagnostics(const QString &connection,
                            const QString &syncMode,
                            const QString &lastError);
+    void setCLspInfo(const QString &status,
+                     const QString &path,
+                     const QString &message);
     void appendLspLog(const QString &line);
     void clearLspLog();
 
@@ -76,6 +79,10 @@ private:
     QLabel *m_lspConnectionValue = nullptr;
     QLabel *m_lspSyncModeValue = nullptr;
     QLabel *m_lspLastErrorValue = nullptr;
+    QLabel *m_cLspStatusValue = nullptr;
+    QLabel *m_cLspPathValue = nullptr;
+    QLabel *m_cLspMessageValue = nullptr;
+    QLabel *m_cLspTitleLabel = nullptr;
     QPlainTextEdit *m_lspLogView = nullptr;
     QPushButton *m_refreshRuntimeButton = nullptr;
     QPushButton *m_clearRuntimeCacheButton = nullptr;
