@@ -1329,6 +1329,8 @@ void MainWindow::connectEditorSignals(CodeEditor *editor) {
     if (editor == currentEditor() && m_vimLabel)
       m_vimLabel->setText("VIM: " + mode);
   });
+  connect(editor, &CodeEditor::vimCommandEntered, this,
+          &MainWindow::handleVimCommand);
 
   connect(editor, &CodeEditor::navigateToLocation, this,
           [this](const QString &uri, int line, int col) {
@@ -1358,6 +1360,43 @@ void MainWindow::connectEditorSignals(CodeEditor *editor) {
 }
 
 void MainWindow::newFile() { createTab(true); }
+
+void MainWindow::handleVimCommand(const QString &command) {
+  const QString trimmed = command.trimmed();
+  CodeEditor *editor = currentEditor();
+  if (!editor)
+    return;
+
+  if (trimmed == "w") {
+    saveFile();
+  } else if (trimmed == "q!") {
+    const int idx = m_tabWidget->indexOf(editor);
+    if (idx >= 0) {
+      releaseEditor(editor);
+      updateCentralWidgetState();
+    }
+  } else if (trimmed == "q") {
+    if (editor->document()->isModified()) {
+      statusBar()->showMessage("No write since last change (use :q! to force).",
+                               5000);
+    } else {
+      const int idx = m_tabWidget->indexOf(editor);
+      if (idx >= 0) {
+        releaseEditor(editor);
+        updateCentralWidgetState();
+      }
+    }
+  } else if (trimmed == "wq") {
+    saveFile();
+    if (!editor->document()->isModified()) {
+      const int idx = m_tabWidget->indexOf(editor);
+      if (idx >= 0) {
+        releaseEditor(editor);
+        updateCentralWidgetState();
+      }
+    }
+  }
+}
 
 void MainWindow::newProject() {
   QString dir = QFileDialog::getExistingDirectory(this, "New project folder");

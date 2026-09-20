@@ -39,6 +39,8 @@ CodeEditor::CodeEditor(QWidget *parent) : QPlainTextEdit(parent) {
               label = "INSERT";
             emit vimModeChanged(label);
           });
+  connect(m_vimController, &VimMotionController::commandEntered, this,
+          [this](const QString &command) { emit vimCommandEntered(command); });
 
   connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this,
           [this]() { updateTheme(); });

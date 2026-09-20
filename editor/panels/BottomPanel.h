@@ -35,6 +35,7 @@ public:
     void clearCurrent();
     void setDiagnosticsCount(int errors, int warnings);
     void applyTheme();
+    void applyTranslations();
 
 signals:
     void closeRequested();

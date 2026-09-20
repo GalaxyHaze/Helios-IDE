@@ -951,6 +951,91 @@ private slots:
         QVERIFY(editor.document()->isModified());
     }
 
+    void testVimExpandedCommands() {
+        QPlainTextEdit editor;
+        editor.setPlainText("alpha beta\ngamma delta\nepsilon");
+        VimMotionController controller(&editor);
+        controller.setEnabled(true);
+        QStringList commands;
+        connect(&controller, &VimMotionController::commandEntered,
+                [&commands](const QString &command) { commands << command; });
+        auto press = [&controller](int key, const QString &text) {
+            QKeyEvent event(QEvent::KeyPress, key, Qt::NoModifier, text);
+            QVERIFY(controller.handleKeyPress(&event));
+        };
+
+        editor.setTextCursor(QTextCursor(editor.document()));
+        press(Qt::Key_0, "0");
+        press(Qt::Key_L, "l");
+        press(Qt::Key_X, "x");
+        QCOMPARE(editor.toPlainText(),
+                 QString("apha beta\ngamma delta\nepsilon"));
+
+        press(Qt::Key_U, "u");
+        QCOMPARE(editor.toPlainText(),
+                 QString("alpha beta\ngamma delta\nepsilon"));
+
+        press(Qt::Key_W, "w");
+        press(Qt::Key_W, "w");
+        press(Qt::Key_W, "w");
+        QCOMPARE(editor.textCursor().positionInBlock(), 0);
+
+        press(Qt::Key_R, "r");
+        press(Qt::Key_Z, "z");
+        QCOMPARE(editor.textCursor().positionInBlock(), 1);
+
+        press(Qt::Key_Slash, "/");
+        press(Qt::Key_G, "g");
+        press(Qt::Key_A, "a");
+        press(Qt::Key_M, "m");
+        press(Qt::Key_M, "m");
+        press(Qt::Key_Return, "");
+        QCOMPARE(editor.textCursor().blockNumber(), 1);
+
+        press(Qt::Key_0, "0");
+        press(Qt::Key_V, "v");
+        press(Qt::Key_E, "e");
+        press(Qt::Key_X, "x");
+        QCOMPARE(editor.textCursor().positionInBlock(), 0);
+
+        QTextCursor start(editor.document());
+        start.movePosition(QTextCursor::Start);
+        editor.setTextCursor(start);
+        press(Qt::Key_D, "d");
+        press(Qt::Key_D, "d");
+        QCOMPARE(editor.document()->blockCount(), 2);
+
+        editor.setPlainText("alpha beta\ngamma delta\nepsilon");
+        QTextCursor opCursor(editor.document());
+        editor.setTextCursor(opCursor);
+        press(Qt::Key_D, "d");
+        press(Qt::Key_F, "f");
+        press(Qt::Key_A, "a");
+        QCOMPARE(editor.toPlainText(),
+                 QString("a beta\ngamma delta\nepsilon"));
+        QTextCursor opCursor2(editor.document());
+        editor.setTextCursor(opCursor2);
+        press(Qt::Key_D, "d");
+        press(Qt::Key_D, "d");
+        QCOMPARE(editor.toPlainText(),
+                 QString("gamma delta\nepsilon"));
+
+        press(Qt::Key_Colon, ":");
+        press(Qt::Key_W, "w");
+        press(Qt::Key_Return, "");
+        QCOMPARE(commands.count(), 1);
+        QCOMPARE(commands.last(), QString("w"));
+    }
+
+    void testTranslationKeysMatch() {
+        auto &tr = TranslationManager::instance();
+        tr.loadLocale("en-US");
+        QCOMPARE(tr.translate("bottom.close"), QString("Close"));
+        tr.loadLocale("pt-BR");
+        QCOMPARE(tr.translate("bottom.close"), QString("Fechar"));
+        QCOMPARE(tr.translate("bottom.clear"), QString("Limpar"));
+    }
+
     void testWorkspaceReplaceEditsAndApply() {
         const QString text = QString("alpha beta\nbeta gamma\nlast beta\n");
 

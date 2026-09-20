@@ -4,6 +4,7 @@
 #include "DiagnosticsPanel.h"
 #include "ReferencesPanel.h"
 #include "../core/ThemeManager.h"
+#include "../core/TranslationManager.h"
 
 #include <QHBoxLayout>
 #include <QStackedWidget>
@@ -90,7 +91,10 @@ BottomPanel::BottomPanel(QWidget *parent)
             this, &BottomPanel::setDiagnosticsCount);
     connect(&ThemeManager::instance(), &ThemeManager::themeChanged,
             this, &BottomPanel::applyTheme);
+    connect(&TranslationManager::instance(), &TranslationManager::localeChanged,
+            this, &BottomPanel::applyTranslations);
 
+    applyTranslations();
     applyTheme();
 }
 
@@ -121,12 +125,13 @@ void BottomPanel::setDiagnosticsCount(int errors, int warnings)
     m_warningCount = warnings;
     const int total = m_errorCount + m_warningCount;
     if (total == 0) {
-        m_tabBar->setTabText(int(Tab::Diagnostics),
-                             QStringLiteral("Diagnostics"));
+        applyTranslations();
     } else {
         m_tabBar->setTabText(
             int(Tab::Diagnostics),
-            QStringLiteral("Diagnostics (E%1 W%2)")
+            QString("%1 (E%2 W%3)")
+                .arg(TranslationManager::instance().translate(
+                    "bottom.diagnostics"))
                 .arg(m_errorCount)
                 .arg(m_warningCount));
     }
@@ -177,4 +182,28 @@ void BottomPanel::applyTheme()
             "BottomPanel QToolButton:pressed { background: %9; }")
             .arg(canvas, surface, surfaceAlt, border, text, muted, hover,
                  selectedText, selected));
+}
+
+void BottomPanel::applyTranslations()
+{
+    const auto &tr = TranslationManager::instance();
+    const QString diagnostics = tr.translate("bottom.diagnostics");
+    const QString compiler = tr.translate("bottom.compiler_output");
+    const QString references = tr.translate("bottom.references");
+    m_tabBar->setTabText(int(Tab::Diagnostics), diagnostics);
+    m_tabBar->setTabText(int(Tab::Compiler), compiler);
+    m_tabBar->setTabText(int(Tab::References), references);
+    m_clearButton->setText(tr.translate("bottom.clear"));
+    m_clearButton->setToolTip(tr.translate("bottom.clear_tooltip"));
+    m_closeButton->setText(tr.translate("bottom.close"));
+    m_closeButton->setToolTip(tr.translate("bottom.close_tooltip"));
+
+    if (m_errorCount > 0 || m_warningCount > 0) {
+        m_tabBar->setTabText(
+            int(Tab::Diagnostics),
+            QString("%1 (E%2 W%3)")
+                .arg(tr.translate("bottom.diagnostics"))
+                .arg(m_errorCount)
+                .arg(m_warningCount));
+    }
 }

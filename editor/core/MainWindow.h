@@ -91,6 +91,7 @@ private slots:
     void applyWorkspaceReplace(const QString &needle,
                                const QString &replacement,
                                const QVector<SearchReplaceTarget> &targets);
+    void handleVimCommand(const QString &command);
     void ensureLspRuntime(bool preferCached);
     void startLspRuntime(const QString &lspPath,
                          const QString &stdlibPath,

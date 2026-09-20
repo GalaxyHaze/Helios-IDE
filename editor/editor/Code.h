@@ -59,6 +59,7 @@ signals:
                             const LspRange &range);
   void zoomChanged(double scaleFactor);
   void vimModeChanged(const QString &mode);
+  void vimCommandEntered(const QString &command);
 
 public slots:
   void onCompletionSelected(const QString &insertText,
