@@ -8,6 +8,7 @@
 #include <QJsonObject>
 #include <QSyntaxHighlighter>
 #include "../widgets/ActivityBar.h"
+#include "../panels/SearchPanel.h"
 #include "RunOutputCollector.h"
 
 class QCloseEvent;
@@ -30,7 +31,6 @@ class FindReplaceBar;
 class FileTreePanel;
 class ContextManager;
 class SnippetManager;
-class SearchPanel;
 class GitPanel;
 class SettingsPanel;
 class BottomPanel;
@@ -85,6 +85,12 @@ private slots:
     void setLspStatus(const QString &text, const QString &color);
     void onFrontendStatusReceived(const QJsonObject &status);
     void onMetricsReceived(const QJsonObject &metrics);
+    void onReplaceAllPreviewReady(const QString &needle,
+                                  const QString &replacement,
+                                  const QVector<SearchReplaceTarget> &targets);
+    void applyWorkspaceReplace(const QString &needle,
+                               const QString &replacement,
+                               const QVector<SearchReplaceTarget> &targets);
     void ensureLspRuntime(bool preferCached);
     void startLspRuntime(const QString &lspPath,
                          const QString &stdlibPath,

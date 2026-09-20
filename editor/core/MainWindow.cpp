@@ -690,6 +690,9 @@ MainWindow::MainWindow(QWidget *parent)
               ed->goToLine(line, column);
           });
 
+  connect(m_searchPanel, &SearchPanel::replaceAllPreviewReady, this,
+          &MainWindow::onReplaceAllPreviewReady);
+
   connect(m_gitPanel, &GitPanel::fileActivated, this,
           [this](const QString &path) { openFilePath(path); });
 
@@ -2709,6 +2712,92 @@ void MainWindow::applyWorkspaceEdit(const QJsonObject &edit) {
       }
     }
   }
+}
+
+void MainWindow::onReplaceAllPreviewReady(
+    const QString &needle,
+    const QString &replacement,
+    const QVector<SearchReplaceTarget> &targets) {
+  if (targets.isEmpty()) {
+    statusBar()->showMessage(
+        QString("No matches for \"%1\".").arg(needle), 5000);
+    return;
+  }
+
+  int totalMatches = 0;
+  for (const SearchReplaceTarget &target : targets)
+    totalMatches += target.matches;
+
+  const auto answer = QMessageBox::question(
+      this,
+      "Replace in workspace",
+      QString("Replace %1 matches in %2 files?\n"
+              "\"%3\" -> \"%4\"")
+          .arg(totalMatches)
+          .arg(targets.size())
+          .arg(needle, replacement),
+      QMessageBox::Yes | QMessageBox::Cancel,
+      QMessageBox::Cancel);
+  if (answer != QMessageBox::Yes)
+    return;
+
+  applyWorkspaceReplace(needle, replacement, targets);
+}
+
+void MainWindow::applyWorkspaceReplace(
+    const QString &needle,
+    const QString &replacement,
+    const QVector<SearchReplaceTarget> &targets) {
+  int replaced = 0;
+  for (const SearchReplaceTarget &target : targets) {
+    CodeEditor *openEditor = nullptr;
+    for (int i = 0; i < m_tabWidget->count(); ++i) {
+      auto *editor = qobject_cast<CodeEditor *>(m_tabWidget->widget(i));
+      if (editor && editor->filePath() == target.path) {
+        openEditor = editor;
+        break;
+      }
+    }
+
+    if (openEditor) {
+      const QList<QPair<LspRange, QString>> edits =
+          SearchPanel::replaceEdits(openEditor->toPlainText(), needle, replacement);
+      if (edits.isEmpty())
+        continue;
+      openEditor->applyEdits(edits);
+      openEditor->document()->setModified(true);
+      openEditor->flushPendingLspChanges();
+    } else {
+      QFile file(target.path);
+      if (!file.open(QIODevice::ReadOnly))
+        continue;
+      const QString text = QString::fromUtf8(file.readAll());
+      file.close();
+
+      const QList<QPair<LspRange, QString>> edits =
+          SearchPanel::replaceEdits(text, needle, replacement);
+      if (edits.isEmpty())
+        continue;
+
+      QSaveFile out(target.path);
+      if (!out.open(QIODevice::WriteOnly)) {
+        statusBar()->showMessage(
+            "Could not write " + target.path, 5000);
+        continue;
+      }
+      out.write(SearchPanel::applyReplaceEdits(text, edits).toUtf8());
+      if (!out.commit()) {
+        statusBar()->showMessage(
+            "Could not save " + target.path, 5000);
+        continue;
+      }
+    }
+    replaced += target.matches;
+  }
+
+  statusBar()->showMessage(
+      QString("Replaced %1 matches in workspace.").arg(replaced), 8000);
+  m_searchPanel->setRootPath(m_searchPanel->rootPath());
 }
 
 void MainWindow::onFrontendStatusReceived(const QJsonObject &status) {

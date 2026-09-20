@@ -950,6 +950,43 @@ private slots:
         QCOMPARE(editor.toPlainText(), QString("alpha X\nX gamma\nX"));
         QVERIFY(editor.document()->isModified());
     }
+
+    void testWorkspaceReplaceEditsAndApply() {
+        const QString text = QString("alpha beta\nbeta gamma\nlast beta\n");
+
+        const auto edits = SearchPanel::replaceEdits(text, "beta", "X");
+        QCOMPARE(edits.size(), 3);
+
+        const auto &first = edits.at(0);
+        const auto &second = edits.at(1);
+        const auto &third = edits.at(2);
+        QCOMPARE(first.first.start.line, 0);
+        QCOMPARE(first.first.start.character, 6);
+        QCOMPARE(first.first.end.character, 10);
+        QCOMPARE(second.first.start.line, 1);
+        QCOMPARE(second.first.start.character, 0);
+        QCOMPARE(second.first.end.character, 4);
+        QCOMPARE(third.first.start.line, 2);
+        QCOMPARE(third.first.start.character, 5);
+        QCOMPARE(third.first.end.character, 9);
+
+        QCOMPARE(SearchPanel::applyReplaceEdits(text, edits),
+                 QString("alpha X\nX gamma\nlast X\n"));
+    }
+
+    void testWorkspaceReplaceEditsIgnoresEmptyNeedleAndSyncsOpenFile() {
+        QVERIFY(SearchPanel::replaceEdits("no changes", QString(), "X").isEmpty());
+
+        CodeEditor editor;
+        editor.setInitialDocumentText("alpha beta\nbeta gamma\n");
+        const auto edits = SearchPanel::replaceEdits(
+            editor.toPlainText(), "beta", "X");
+        const QString replaced =
+            SearchPanel::applyReplaceEdits(editor.toPlainText(), edits);
+        QCOMPARE(replaced, QString("alpha X\nX gamma\n"));
+        editor.setInitialDocumentText(replaced);
+        QCOMPARE(editor.toPlainText(), replaced);
+    }
 };
 
 QTEST_MAIN(TestHelios)

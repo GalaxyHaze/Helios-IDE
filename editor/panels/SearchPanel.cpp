@@ -4,6 +4,7 @@
 #include "../core/ThemeManager.h"
 #include "../core/TomlSettingsStore.h"
 
+#include <QByteArray>
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
@@ -15,6 +16,7 @@
 #include <QMetaObject>
 #include <QThreadPool>
 #include <QPushButton>
+#include <QRegularExpression>
 #include <QTextStream>
 #include <QTimer>
 #include <QVBoxLayout>
@@ -148,6 +150,89 @@ private:
     std::shared_ptr<std::atomic<qint64>> m_searchToken;
     QVector<SearchResult> m_results;
 };
+
+class ReplaceScanRunnable : public QRunnable
+{
+public:
+    ReplaceScanRunnable(QPointer<SearchPanel> panel,
+                        QString rootPath,
+                        QString needle,
+                        QString replacement,
+                        QStringList textExtensions,
+                        QStringList excludedDirs,
+                        qint64 token,
+                        std::shared_ptr<std::atomic<qint64>> searchToken)
+        : m_panel(panel)
+        , m_rootPath(std::move(rootPath))
+        , m_needle(std::move(needle))
+        , m_replacement(std::move(replacement))
+        , m_textExtensions(std::move(textExtensions))
+        , m_excludedDirs(std::move(excludedDirs))
+        , m_token(token)
+        , m_searchToken(std::move(searchToken))
+    {
+        setAutoDelete(true);
+    }
+
+    void run() override
+    {
+        if (!m_panel || !m_searchToken || m_searchToken->load() != m_token)
+            return;
+
+        QVector<SearchReplaceTarget> targets;
+        QDir root(m_rootPath);
+        QDirIterator fileIterator(
+            m_rootPath,
+            QDir::Files | QDir::NoDotAndDotDot,
+            QDirIterator::Subdirectories);
+
+        while (fileIterator.hasNext()
+               && m_searchToken->load() == m_token) {
+            const QString path = fileIterator.next();
+            if (!SearchPanel::shouldScanFile(path, m_textExtensions, m_excludedDirs))
+                continue;
+
+            QFile file(path);
+            if (!file.open(QIODevice::ReadOnly))
+                continue;
+            const QString text = QString::fromUtf8(file.readAll());
+            file.close();
+
+            const QList<QPair<LspRange, QString>> edits =
+                SearchPanel::replaceEdits(text, m_needle, m_replacement);
+            if (!edits.isEmpty()) {
+                SearchReplaceTarget target;
+                target.path = path;
+                target.matches = edits.size();
+                targets.append(target);
+            }
+        }
+
+        if (!m_searchToken || m_searchToken->load() != m_token)
+            return;
+
+        QMetaObject::invokeMethod(
+            m_panel,
+            [panel = m_panel,
+             needle = m_needle,
+             replacement = m_replacement,
+             targets]() {
+                if (panel)
+                    emit panel->replaceAllPreviewReady(needle, replacement, targets);
+            },
+            Qt::QueuedConnection);
+    }
+
+private:
+    QPointer<SearchPanel> m_panel;
+    QString m_rootPath;
+    QString m_needle;
+    QString m_replacement;
+    QStringList m_textExtensions;
+    QStringList m_excludedDirs;
+    qint64 m_token;
+    std::shared_ptr<std::atomic<qint64>> m_searchToken;
+};
 }
 
 SearchPanel::SearchPanel(QWidget *parent)
@@ -175,6 +260,16 @@ SearchPanel::SearchPanel(QWidget *parent)
 
     layout->addLayout(row);
 
+    auto *replaceRow = new QHBoxLayout;
+    m_replaceInput = new QLineEdit;
+    m_replaceInput->setPlaceholderText("Replace in project...");
+    m_replaceInput->setClearButtonEnabled(true);
+    replaceRow->addWidget(m_replaceInput, 1);
+
+    m_replaceButton = new QPushButton("Replace All");
+    replaceRow->addWidget(m_replaceButton);
+    layout->addLayout(replaceRow);
+
     m_summaryLabel = new QLabel("Enter a query to search the current workspace.");
     m_summaryLabel->setWordWrap(true);
     layout->addWidget(m_summaryLabel);
@@ -191,8 +286,12 @@ SearchPanel::SearchPanel(QWidget *parent)
         m_searchTimer->start();
     });
     connect(m_queryInput, &QLineEdit::returnPressed, this, &SearchPanel::triggerSearch);
+    connect(m_replaceInput, &QLineEdit::returnPressed, this,
+            &SearchPanel::triggerReplaceAll);
     connect(m_searchTimer, &QTimer::timeout, this, &SearchPanel::triggerSearch);
     connect(searchButton, &QPushButton::clicked, this, &SearchPanel::triggerSearch);
+    connect(m_replaceButton, &QPushButton::clicked, this,
+            &SearchPanel::triggerReplaceAll);
     connect(m_results, &QListWidget::itemActivated, this, &SearchPanel::onItemActivated);
     connect(m_results, &QListWidget::itemClicked, this, &SearchPanel::onItemActivated);
     connect(&ThemeManager::instance(), &ThemeManager::themeChanged,
@@ -277,6 +376,26 @@ void SearchPanel::triggerSearch()
     QThreadPool::globalInstance()->start(runnable);
 }
 
+void SearchPanel::triggerReplaceAll()
+{
+    const QString needle = m_queryInput->text().trimmed();
+    const QString replacement = m_replaceInput->text().trimmed();
+    if (m_rootPath.isEmpty() || needle.isEmpty())
+        return;
+
+    const auto &settings = TomlSettingsStore::instance();
+    auto runnable = new ReplaceScanRunnable(
+        this,
+        m_rootPath,
+        needle,
+        replacement,
+        settings.searchTextExtensions(),
+        settings.searchExcludedDirs(),
+        ++(*m_searchToken),
+        m_searchToken);
+    QThreadPool::globalInstance()->start(runnable);
+}
+
 void SearchPanel::deliverSearchResults(const QVector<SearchResult> &results, qint64 token)
 {
     if (token != m_searchToken->load())
@@ -353,4 +472,68 @@ bool SearchPanel::shouldScanFile(const QString &path)
     return shouldScanFile(path,
                           settings.searchTextExtensions(),
                           settings.searchExcludedDirs());
+}
+
+QList<QPair<LspRange, QString>> SearchPanel::replaceEdits(
+    const QString &text,
+    const QString &needle,
+    const QString &replacement)
+{
+    QList<QPair<LspRange, QString>> edits;
+    if (needle.isEmpty())
+        return edits;
+
+    // The SearchPanel contract is case-insensitive because the existing
+    // workspace finder is case-insensitive.  Keep replacement consistent
+    // with that behavior.
+    int offset = 0;
+    while (true) {
+        const int found = text.indexOf(needle, offset, Qt::CaseInsensitive);
+        if (found < 0)
+            break;
+
+        LspRange range;
+        const QString prefix = text.left(found);
+        range.start.line = prefix.count('\n');
+        const int lineStart = prefix.lastIndexOf('\n');
+        range.start.character = lineStart < 0 ? found : found - lineStart - 1;
+        range.end.line = range.start.line;
+        range.end.character = range.start.character + needle.size();
+
+        edits.append({range, replacement});
+        offset = found + needle.size();
+    }
+    return edits;
+}
+
+QString SearchPanel::applyReplaceEdits(
+    const QString &text,
+    const QList<QPair<LspRange, QString>> &edits)
+{
+    QString result = text;
+    for (auto it = edits.rbegin(); it != edits.rend(); ++it) {
+        const LspRange &range = it->first;
+        const int start = SearchPanel::offsetForPosition(result, range.start);
+        const int end = SearchPanel::offsetForPosition(result, range.end);
+        if (start < 0 || end < start)
+            continue;
+        result.replace(start, end - start, it->second);
+    }
+    return result;
+}
+
+int SearchPanel::offsetForPosition(const QString &text, const LspPosition &pos)
+{
+    int line = pos.line;
+    int offset = 0;
+    while (line > 0 && offset < text.size()) {
+        const int next = text.indexOf('\n', offset);
+        if (next < 0)
+            return -1;
+        offset = next + 1;
+        --line;
+    }
+    if (offset + pos.character > text.size())
+        return -1;
+    return offset + pos.character;
 }
