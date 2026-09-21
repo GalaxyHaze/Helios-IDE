@@ -1069,6 +1069,16 @@ MainWindow::MainWindow(QWidget *parent)
       m_toolsMenu->addAction("&Check File", QKeySequence("Ctrl+Shift+C"));
   connect(m_checkAct, &QAction::triggered, this, &MainWindow::runCheckFile);
 
+  m_formatDocAct = m_toolsMenu->addAction(
+      "Format Document", QKeySequence("Ctrl+Alt+L"));
+  connect(m_formatDocAct, &QAction::triggered, this, [this]() {
+    auto *ed = currentEditor();
+    if (!ed || !ed->lspClient() || !ed->lspClient()->isReady())
+      return;
+    ed->flushPendingLspChanges();
+    ed->lspClient()->requestFormatting(ed->fileUri(), ed->documentVersion());
+  });
+
   m_runAct = m_toolsMenu->addAction("&Run", QKeySequence("Ctrl+Shift+R"));
   connect(m_runAct, &QAction::triggered, this, &MainWindow::runProject);
 
@@ -1883,6 +1893,7 @@ void MainWindow::applyTranslations() {
   m_toolsMenu->setTitle(tr.translate("menu.tools"));
   m_buildAct->setText(tr.translate("menu.build"));
   m_checkAct->setText(tr.translate("menu.check"));
+  m_formatDocAct->setText(tr.translate("menu.format_doc"));
   m_runAct->setText(tr.translate("menu.run"));
   m_stopAct->setText(tr.translate("menu.stop"));
   m_restartLspAct->setText(tr.translate("menu.restart_lsp"));
@@ -2396,14 +2407,21 @@ bool MainWindow::canExecuteLspWorkspaceCommand() const {
 }
 
 void MainWindow::updateRunActionsEnabled() {
-  if (!m_buildAct || !m_checkAct || !m_runAct || !m_stopAct)
+  if (!m_buildAct || !m_checkAct || !m_runAct || !m_stopAct ||
+      !m_formatDocAct)
     return;
   const bool canExecute = canExecuteLspWorkspaceCommand();
   const bool activeZith =
       isZithEditor(currentEditor());
+  CodeEditor *activeEditor = currentEditor();
+  const bool canFormat =
+      activeEditor && !activeEditor->fileUri().isEmpty() &&
+      activeEditor->lspClient() && activeEditor->lspClient()->isReady() &&
+      activeEditor->lspClient()->hasFormattingProvider();
   m_buildAct->setEnabled(canExecute && activeZith);
   m_checkAct->setEnabled(canExecute && activeZith && currentEditor() &&
                          !currentEditor()->filePath().isEmpty());
+  m_formatDocAct->setEnabled(canFormat);
   m_runAct->setEnabled(canExecute && activeZith &&
                        !m_compilerPanel->isRunning());
   m_stopAct->setEnabled(canExecute && activeZith &&
@@ -2422,6 +2440,9 @@ void MainWindow::updateRunActionsEnabled() {
       canExecute && activeZith && currentEditor() && !currentEditor()->filePath().isEmpty()
           ? QStringLiteral("Check current file (Ctrl+Shift+C)")
           : stateTooltip("Check current file (Ctrl+Shift+C)"));
+  m_formatDocAct->setToolTip(
+      canFormat ? QStringLiteral("Format document (Ctrl+Alt+L)")
+                : QStringLiteral("Formatting is unavailable with the active LSP server"));
   m_runAct->setToolTip(
       canExecute && activeZith && m_compilerPanel->isRunning()
           ? QStringLiteral("A task is already running")

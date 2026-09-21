@@ -599,7 +599,7 @@ qint64 LspClient::executeWorkspaceCommand(
   const qint64 id = sendRequest(
       "workspace/executeCommand",
       QJsonObject{{"command", command}, {"arguments", args}},
-      QStringLiteral("workspace"), -1, false,
+      {}, -1, false,
       [this, command, callback](const QJsonObject &response) {
         const QJsonValue result = response.value("result");
         if (response.contains("error")) {

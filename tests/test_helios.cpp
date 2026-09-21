@@ -7,11 +7,15 @@
 #include <QTextStream>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonArray>
+#include <QJsonValue>
+#include <QUrl>
 #include <QPlainTextEdit>
 #include <QKeyEvent>
 #include <QPushButton>
 #include <QSyntaxHighlighter>
 #include <QModelIndex>
+#include <QTreeWidget>
 
 #include "../editor/core/TomlSettingsStore.h"
 #include "../editor/core/AppearanceController.h"
@@ -32,6 +36,7 @@
 #include "../editor/widgets/FindReplaceBar.h"
 #include "../editor/core/SnippetManager.h"
 #include "../editor/editor/LspCompletionModel.h"
+#include "../editor/panels/OutlinePanel.h"
 
 class TestHelios : public QObject
 {
@@ -543,6 +548,112 @@ private slots:
             {"method", "window/workDoneProgress/create"},
             {"params", QJsonObject{{"token", "zith-build-1"}}}
         }).toJson(QJsonDocument::Compact));
+
+        client.stop();
+        client.waitForFinishedForTesting(5000);
+    }
+
+    void testLspClientReturnsDocumentSymbolsAndOutlineRenders() {
+        const QString serverPath =
+            QStringLiteral("/home/diogo/zith-lsp/build/zith-lsp");
+        if (!QFileInfo::exists(serverPath))
+            QSKIP("zith-lsp build not available");
+
+        QTemporaryDir tempDir;
+        QVERIFY(tempDir.isValid());
+        const QString sourcePath = QDir(tempDir.path()).filePath("symbols.zith");
+        const QByteArray source =
+            "struct MyStruct {\n"
+            "  field_a: i32,\n"
+            "}\n"
+            "fn my_func(): i32 { return 1; }\n";
+        QFile sourceFile(sourcePath);
+        QVERIFY(sourceFile.open(QIODevice::WriteOnly | QIODevice::Text));
+        sourceFile.write(source);
+        sourceFile.close();
+
+        LspClient client;
+        QSignalSpy initializedSpy(&client, &LspClient::initialized);
+        QSignalSpy symbolsSpy(&client, &LspClient::documentSymbolsResult);
+        QVERIFY(client.start(serverPath, {}, QDir(tempDir.path()).path()));
+        QTRY_VERIFY_WITH_TIMEOUT(initializedSpy.count() > 0, 15000);
+        QVERIFY(client.hasDocumentSymbolProvider());
+
+        const QString uri = QUrl::fromLocalFile(sourcePath).toString();
+        client.openDocument(uri, "zith", QString::fromUtf8(source));
+        client.requestDocumentSymbols(uri, 1);
+        QTRY_VERIFY_WITH_TIMEOUT(symbolsSpy.count() > 0, 15000);
+
+        const QJsonArray symbols = symbolsSpy.at(0).at(2).toJsonArray();
+        QVERIFY(symbols.size() >= 2);
+        QStringList labels;
+        for (const QJsonValue &value : symbols)
+            labels << value.toObject().value("name").toString();
+        QVERIFY(labels.contains(QStringLiteral("MyStruct")));
+        QVERIFY(labels.contains(QStringLiteral("my_func")));
+
+        OutlinePanel panel;
+        panel.setSymbols(symbols);
+        auto *tree = panel.findChild<QTreeWidget *>();
+        QVERIFY(tree);
+        QVERIFY(tree->topLevelItemCount() >= 2);
+
+        client.stop();
+        client.waitForFinishedForTesting(5000);
+    }
+
+    void testLspClientExecutesWorkspaceCommand() {
+        const QString serverPath =
+            QStringLiteral("/home/diogo/zith-lsp/build/zith-lsp");
+        if (!QFileInfo::exists(serverPath))
+            QSKIP("zith-lsp build not available");
+
+        QTemporaryDir tempDir;
+        QVERIFY(tempDir.isValid());
+
+        LspClient client;
+        QSignalSpy initializedSpy(&client, &LspClient::initialized);
+        QSignalSpy commandSpy(&client, &LspClient::commandResult);
+        QVERIFY(client.start(serverPath, {}, QDir(tempDir.path()).path()));
+        QTRY_VERIFY_WITH_TIMEOUT(initializedSpy.count() > 0, 15000);
+        QVERIFY(client.hasExecuteCommandProvider());
+
+        const QString projectName = QStringLiteral("cmd_proj");
+        client.executeWorkspaceCommand(
+            QStringLiteral("zith.new"),
+            QJsonArray{projectName});
+        QTRY_VERIFY_WITH_TIMEOUT(commandSpy.count() > 0, 15000);
+        QCOMPARE(commandSpy.at(0).at(0).toString(),
+                 QStringLiteral("zith.new"));
+        QCOMPARE(commandSpy.at(0).at(1).toBool(), true);
+
+        const QJsonObject result =
+            QJsonValue::fromVariant(commandSpy.at(0).at(2)).toObject();
+        QVERIFY(result.value(QStringLiteral("success")).toBool());
+        const QString rootUri =
+            result.value(QStringLiteral("rootUri")).toString();
+        QVERIFY(rootUri.startsWith(QStringLiteral("file://")));
+        const QString rootDir =
+            QUrl(rootUri).toLocalFile();
+        QVERIFY(QFileInfo::exists(
+            QDir(rootDir).filePath(QStringLiteral("ZithProject.toml"))));
+        QVERIFY(QFileInfo::exists(
+            QDir(rootDir).filePath(QStringLiteral("src/main.zith"))));
+
+        commandSpy.clear();
+        client.executeWorkspaceCommand(
+            QStringLiteral("zith.check"),
+            QJsonArray{QUrl::fromLocalFile(
+                           QDir(rootDir).filePath(QStringLiteral("src/main.zith")))
+                           .toString()});
+        QTRY_VERIFY_WITH_TIMEOUT(commandSpy.count() > 0, 30000);
+        QCOMPARE(commandSpy.at(0).at(0).toString(),
+                 QStringLiteral("zith.check"));
+        QCOMPARE(commandSpy.at(0).at(1).toBool(), true);
+        QVERIFY(QJsonValue::fromVariant(commandSpy.at(0).at(2))
+                    .toObject()
+                    .value(QStringLiteral("success"))
+                    .toBool());
 
         client.stop();
         client.waitForFinishedForTesting(5000);

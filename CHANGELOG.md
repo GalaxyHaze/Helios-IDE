@@ -4,6 +4,15 @@ This changelog records the recent commits and features focused on performance op
 
 ## [Unreleased] - 2026-07-15
 
+### Added
+- **Format Document Command**: exposed the existing LSP document formatting action from the Tools menu with `Ctrl+Alt+L`, enabled only when the active editor has a ready formatting provider.
+- **Expanded Vim Motions**: added editing operators, search, visual mode, and `:w`, `:q`, `:wq` support.
+- **Workspace Replace**: added preview and project-wide replacement support from the search experience.
+
+### Improved
+- **LSP Coverage**: expanded Zith document symbols and workspace command tests, and widened IDE integration around the bottom panel and translation synchronization.
+- **Find and Sidebar**: fixed find behavior and widened the default sidebar width.
+
 ### Optimized
 - **Syntax Highlighter Trimming**: Exclude leading whitespace characters (spaces and tabs) from regular expression search starts (`SyntaxHighlighter::highlightBlock`). This reduces search spaces and speeds up line-by-line parsing.
   - *Contributor*: Bqr1s (PR #3)

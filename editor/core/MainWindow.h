@@ -224,6 +224,7 @@ private:
     QAction *m_exitAct = nullptr;
     QAction *m_buildAct = nullptr;
     QAction *m_checkAct = nullptr;
+    QAction *m_formatDocAct = nullptr;
     QAction *m_runAct = nullptr;
     QAction *m_stopAct = nullptr;
     QAction *m_restartLspAct = nullptr;

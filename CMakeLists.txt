@@ -116,6 +116,8 @@ add_executable(test_helios
     tests/test_helios.cpp
     editor/editor/Code.h
     editor/editor/Code.cpp
+    editor/panels/OutlinePanel.h
+    editor/panels/OutlinePanel.cpp
     editor/editor/LspCompletionModel.h
     editor/editor/LspCompletionModel.cpp
     editor/core/SnippetManager.h
