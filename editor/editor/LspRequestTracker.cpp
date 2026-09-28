@@ -1,7 +1,7 @@
 #include "LspRequestTracker.h"
 
-LspRequestTracker::LspRequestTracker(QObject *parent)
-    : QObject(parent)
+LspRequestTracker::LspRequestTracker(QObject *parent, int timeoutMs)
+    : QObject(parent), m_timeoutMs(timeoutMs)
 {
 }
 
@@ -21,10 +21,13 @@ std::optional<qint64> LspRequestTracker::track(LspPendingRequest request)
     request.timeout->setSingleShot(true);
     const qint64 id = request.id;
     connect(request.timeout, &QTimer::timeout, this, [this, id]() {
-        emit requestTimedOut(id);
+        const auto it = m_requests.constFind(id);
+        if (it == m_requests.constEnd())
+            return;
+        emit requestTimedOut(id, it->method, it->uri);
     });
     m_requests.insert(request.id, request);
-    request.timeout->start(8000);
+    request.timeout->start(m_timeoutMs);
     return replacedId;
 }
 

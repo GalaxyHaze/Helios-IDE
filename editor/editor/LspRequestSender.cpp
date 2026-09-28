@@ -2,12 +2,26 @@
 
 #include <utility>
 
-LspRequestSender::LspRequestSender(LspRequestSenderCallbacks callbacks)
-    : m_callbacks(std::move(callbacks))
+LspRequestSender::LspRequestSender(LspRequestSenderCallbacks callbacks,
+                                   int requestTimeoutMs)
+    : m_callbacks(std::move(callbacks)),
+      m_tracker(nullptr, requestTimeoutMs)
 {
     QObject::connect(
         &m_tracker, &LspRequestTracker::requestTimedOut, &m_tracker,
-        [this](qint64 id) { cancel(id); });
+        [this](qint64 id, const QString &method, const QString &uri) {
+            if (m_callbacks.logMessage) {
+                QString message =
+                    QStringLiteral("LSP request timed out: %1 (id %2)")
+                        .arg(method)
+                        .arg(id);
+                if (!uri.isEmpty())
+                    message += QStringLiteral(" [") + uri +
+                               QStringLiteral("]");
+                m_callbacks.logMessage(message);
+            }
+            cancel(id);
+        });
 }
 
 qint64 LspRequestSender::nextId()

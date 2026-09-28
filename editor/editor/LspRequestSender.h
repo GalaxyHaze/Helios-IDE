@@ -18,7 +18,8 @@ struct LspRequestSenderCallbacks
 class LspRequestSender
 {
 public:
-    explicit LspRequestSender(LspRequestSenderCallbacks callbacks);
+    explicit LspRequestSender(LspRequestSenderCallbacks callbacks,
+                              int requestTimeoutMs = 8000);
 
     qint64 send(const QString &method, const QJsonObject &params,
                 const QString &uri, int version, bool cancellable,

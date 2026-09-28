@@ -26,7 +26,8 @@ class LspRequestTracker : public QObject
     Q_OBJECT
 
 public:
-    explicit LspRequestTracker(QObject *parent = nullptr);
+    explicit LspRequestTracker(QObject *parent = nullptr,
+                               int timeoutMs = 8000);
 
     // Returns the id of a replaced request, if the new request superseded one.
     std::optional<qint64> track(LspPendingRequest request);
@@ -37,7 +38,8 @@ public:
     void clear();
 
 signals:
-    void requestTimedOut(qint64 id);
+    void requestTimedOut(qint64 id, const QString &method,
+                         const QString &uri);
 
 private:
     void removeFromIndexes(const LspPendingRequest &request);
@@ -45,6 +47,7 @@ private:
 
     QHash<qint64, LspPendingRequest> m_requests;
     QHash<QString, qint64> m_replaceableRequests;
+    int m_timeoutMs = 8000;
 };
 
 #endif

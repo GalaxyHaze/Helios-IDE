@@ -952,6 +952,43 @@ treeMaxDepth = 65
         QVERIFY(tracker.take(4).has_value());
     }
 
+    void testLspRequestSenderSurfacesTimeoutContext() {
+        QList<QJsonObject> messages;
+        QStringList logMessages;
+        LspRequestSender sender({
+            [&messages](const QJsonObject &message) {
+                messages.append(message);
+                return true;
+            },
+            []() { return true; },
+            [&logMessages](const QString &message) {
+                logMessages.append(message);
+            },
+        }, 20);
+
+        const qint64 id = sender.send(
+            QStringLiteral("textDocument/hover"), {},
+            QStringLiteral("file:///main.zith"), 1, true, true, {});
+        QVERIFY(id > 0);
+
+        QTRY_VERIFY_WITH_TIMEOUT(logMessages.size() == 1, 1000);
+        QCOMPARE(logMessages.first(),
+                 QStringLiteral(
+                     "LSP request timed out: textDocument/hover (id %1) "
+                     "[file:///main.zith]")
+                     .arg(id));
+        QCOMPARE(messages.size(), 2);
+        QCOMPARE(messages.last().value(QStringLiteral("method")).toString(),
+                 QStringLiteral("$/cancelRequest"));
+        QCOMPARE(messages.last()
+                     .value(QStringLiteral("params"))
+                     .toObject()
+                     .value(QStringLiteral("id"))
+                     .toVariant()
+                     .toLongLong(),
+                 id);
+    }
+
     void testLspInitializationBuilderSeparatesServerModes() {
         const QJsonObject zith = LspInitializationBuilder::build(
             {QStringLiteral("/tmp/zith-project"),
@@ -2424,6 +2461,37 @@ treeMaxDepth = 65
         QVERIFY(marker.open(QIODevice::ReadOnly | QIODevice::Text));
         const QByteArray body = marker.readAll();
         QCOMPARE(body, expectedBody);
+    }
+
+    void testMainWindowResolvesConfigurationSectionsInRequestOrder() {
+        MainWindow window;
+
+        const QJsonArray request{
+            QJsonObject{{QStringLiteral("section"),
+                         QStringLiteral("lsp")}},
+            QJsonObject{{QStringLiteral("section"),
+                         QStringLiteral("helios.lsp.enabled")}},
+            QJsonObject{{QStringLiteral("section"),
+                         QStringLiteral("unknown.section")}},
+            QJsonObject{{QStringLiteral("section"),
+                         QStringLiteral("editor.tabSize")}},
+        };
+        const QJsonArray response = window.configurationRequest(request);
+        const QJsonObject configuration = window.lspConfiguration();
+
+        QCOMPARE(response.size(), request.size());
+        QCOMPARE(response.at(0), configuration.value(QStringLiteral("lsp")));
+        QCOMPARE(response.at(1),
+                 configuration.value(QStringLiteral("helios"))
+                     .toObject()
+                     .value(QStringLiteral("lsp"))
+                     .toObject()
+                     .value(QStringLiteral("enabled")));
+        QVERIFY(response.at(2).isNull());
+        QCOMPARE(response.at(3),
+                 configuration.value(QStringLiteral("editor"))
+                     .toObject()
+                     .value(QStringLiteral("tabSize")));
     }
 
     void testLspClientReturnsDocumentSymbolsAndOutlineRenders() {

@@ -14,6 +14,7 @@
 #include "WindowLayoutPersistence.h"
 
 class QCloseEvent;
+class TestHelios;
 class QTabWidget;
 class QLabel;
 class QSplitter;
@@ -110,6 +111,8 @@ protected:
     void closeEvent(QCloseEvent *event) override;
 
 private:
+    friend class TestHelios;
+
     bool lspEnabled() const;
     bool cLspEnabled() const;
     QString resolvedCLspPath() const;
