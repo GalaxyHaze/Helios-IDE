@@ -260,8 +260,11 @@ bool VimMotionController::handleKeyPress(QKeyEvent *event)
     case '^': {
         QTextCursor cursor = m_editor->textCursor();
         const QString line = cursor.block().text();
-        cursor.setPosition(cursor.block().position() +
-                           line.indexOf(QRegularExpression("\\S")));
+        const int firstNonWhitespace =
+            line.indexOf(QRegularExpression("\\S"));
+        cursor.setPosition(
+            cursor.block().position() +
+            (firstNonWhitespace < 0 ? 0 : firstNonWhitespace));
         m_editor->setTextCursor(cursor);
         return true;
     }

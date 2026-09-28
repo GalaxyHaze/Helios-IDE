@@ -93,7 +93,20 @@ void VimDocumentOperations::yankLines(int count)
 
 void VimDocumentOperations::changeLines(int count)
 {
-    deleteLines(count);
+    QTextCursor cursor = m_editor->textCursor();
+    const int block = cursor.blockNumber();
+    const int endBlock = qMin(
+        block + count - 1, m_editor->document()->blockCount() - 1);
+    const QTextBlock endBlockText =
+        m_editor->document()->findBlockByNumber(endBlock);
+    const int start = cursor.block().position();
+    const int end = endBlockText.position() + endBlockText.text().size();
+
+    cursor.setPosition(start);
+    cursor.setPosition(end, QTextCursor::KeepAnchor);
+    cursor.removeSelectedText();
+    cursor.setPosition(start);
+    m_editor->setTextCursor(cursor);
 }
 
 void VimDocumentOperations::deleteSelection()

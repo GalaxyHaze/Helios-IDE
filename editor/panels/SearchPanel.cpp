@@ -176,7 +176,7 @@ void SearchPanel::triggerSearch()
 void SearchPanel::triggerReplaceAll()
 {
     const QString needle = m_queryInput->text().trimmed();
-    const QString replacement = m_replaceInput->text().trimmed();
+    const QString replacement = m_replaceInput->text();
     if (rootPath().isEmpty() || needle.isEmpty())
         return;
 

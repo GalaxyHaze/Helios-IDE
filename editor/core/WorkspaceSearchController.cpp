@@ -93,8 +93,9 @@ public:
         flushResults(results);
         QMetaObject::invokeMethod(
             m_controller,
-            [controller = m_controller, totalResults, truncated]() {
-                if (controller)
+            [controller = m_controller, totalResults, truncated,
+             searchToken = m_searchToken, token = m_token]() {
+                if (controller && searchToken->load() == token)
                     emit controller->searchFinished(totalResults, truncated);
             },
             Qt::QueuedConnection);
@@ -116,8 +117,9 @@ private:
         results.clear();
         QMetaObject::invokeMethod(
             m_controller,
-            [controller = m_controller, batch]() {
-                if (controller)
+            [controller = m_controller, batch, searchToken = m_searchToken,
+             token = m_token]() {
+                if (controller && searchToken->load() == token)
                     emit controller->resultsReady(batch);
             },
             Qt::QueuedConnection);
@@ -182,8 +184,9 @@ public:
         QMetaObject::invokeMethod(
             m_controller,
             [controller = m_controller, needle = m_needle,
-             replacement = m_replacement, targets]() {
-                if (controller)
+             replacement = m_replacement, targets,
+             searchToken = m_searchToken, token = m_token]() {
+                if (controller && searchToken->load() == token)
                     emit controller->replaceAllPreviewReady(
                         needle, replacement, targets);
             },

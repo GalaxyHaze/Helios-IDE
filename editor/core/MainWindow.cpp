@@ -347,15 +347,15 @@ MainWindow::MainWindow(QWidget *parent)
     return static_cast<CodeEditor *>(nullptr);
   };
   replaceCallbacks.confirmReplacement =
-      [this](int totalMatches, int fileCount, const QString &needle,
-             const QString &replacement) {
+      [this](const WorkspaceReplaceController::ReplacementConfirmation
+                 &confirmation) {
         const auto answer = QMessageBox::question(
             this, "Replace in workspace",
             QString("Replace %1 matches in %2 files?\n"
                     "\"%3\" -> \"%4\"")
-                .arg(totalMatches)
-                .arg(fileCount)
-                .arg(needle, replacement),
+                .arg(confirmation.totalMatches)
+                .arg(confirmation.fileCount)
+                .arg(confirmation.needle, confirmation.replacement),
             QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel);
         return answer == QMessageBox::Yes;
       };

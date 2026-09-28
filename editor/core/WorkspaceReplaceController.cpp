@@ -27,8 +27,9 @@ void WorkspaceReplaceController::replaceAll(
         totalMatches += target.matches;
 
     if (m_callbacks.confirmReplacement &&
-        !m_callbacks.confirmReplacement(totalMatches, targets.size(), needle,
-                                        replacement))
+        !m_callbacks.confirmReplacement(
+            {totalMatches, static_cast<int>(targets.size()), needle,
+             replacement}))
         return;
 
     int replaced = 0;

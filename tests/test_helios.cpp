@@ -754,6 +754,15 @@ treeMaxDepth = 65
         QKeyEvent escape(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
         QVERIFY(controller.handleKeyPress(&escape));
         QCOMPARE(controller.mode(), VimMotionController::Mode::Normal);
+
+        editor.setPlainText("alpha beta\ngamma delta\n   ");
+        QTextCursor whitespaceLine(
+            editor.document()->findBlockByNumber(2));
+        editor.setTextCursor(whitespaceLine);
+        QKeyEvent caret(QEvent::KeyPress, Qt::Key_AsciiCircum,
+                        Qt::NoModifier, "^");
+        QVERIFY(controller.handleKeyPress(&caret));
+        QCOMPARE(editor.textCursor().positionInBlock(), 0);
     }
 
     void testVimMotionResolver() {
@@ -2088,9 +2097,12 @@ treeMaxDepth = 65
 
     void testLspClientReturnsDocumentSymbolsAndOutlineRenders() {
         const QString serverPath =
-            QStringLiteral("/home/diogo/zith-lsp/build/zith-lsp");
-        if (!QFileInfo::exists(serverPath))
-            QSKIP("zith-lsp build not available");
+            qEnvironmentVariable("HELIOS_ZITH_LSP_PATH");
+        if (serverPath.isEmpty())
+            QSKIP("Set HELIOS_ZITH_LSP_PATH to run the real zith-lsp test");
+        QVERIFY2(QFileInfo(serverPath).isExecutable(),
+                 qPrintable(QStringLiteral("Invalid HELIOS_ZITH_LSP_PATH: %1")
+                                .arg(serverPath)));
 
         QTemporaryDir tempDir;
         QVERIFY(tempDir.isValid());
@@ -3012,6 +3024,45 @@ treeMaxDepth = 65
         QCOMPARE(targets.first().matches, 2);
     }
 
+    void testSearchPanelPreservesReplacementWhitespace() {
+        QTemporaryDir tempDir;
+        QVERIFY(tempDir.isValid());
+
+        QFile source(tempDir.filePath(QStringLiteral("main.zith")));
+        QVERIFY(source.open(QIODevice::WriteOnly | QIODevice::Text));
+        source.write("needle\n");
+        source.close();
+
+        SearchPanel panel([=]() {
+            return WorkspaceSearch::ScanPolicy{{QStringLiteral("zith")}, {}};
+        });
+        panel.setRootPath(tempDir.path());
+
+        const QList<QLineEdit *> inputs = panel.findChildren<QLineEdit *>();
+        QCOMPARE(inputs.size(), 2);
+        inputs.at(0)->setText(QStringLiteral("needle"));
+        inputs.at(1)->setText(QStringLiteral("  replacement  "));
+
+        QString receivedReplacement;
+        connect(&panel, &SearchPanel::replaceAllPreviewReady,
+                [&](const QString &, const QString &replacement,
+                    const QVector<WorkspaceSearch::SearchReplaceTarget> &) {
+                    receivedReplacement = replacement;
+                });
+
+        QPushButton *replaceButton = nullptr;
+        for (QPushButton *button : panel.findChildren<QPushButton *>()) {
+            if (button->text() == QStringLiteral("Replace All")) {
+                replaceButton = button;
+                break;
+            }
+        }
+        QVERIFY(replaceButton);
+        replaceButton->click();
+
+        QTRY_COMPARE(receivedReplacement, QStringLiteral("  replacement  "));
+    }
+
     void testFindReplaceBarFindAndWrap() {
         CodeEditor editor;
         editor.setInitialDocumentText("alpha beta\nbeta gamma\nbeta");
@@ -3108,12 +3159,14 @@ treeMaxDepth = 65
         search.repeat(true, 1);
         QCOMPARE(editor.textCursor().blockNumber(), 2);
 
+        editor.setTextCursor(QTextCursor(editor.document()));
         search.begin(true);
         press(Qt::Key_X, "x");
-        search.reset();
+        QKeyEvent escape(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+        QVERIFY(search.handleKeyPress(&escape));
         QVERIFY(!search.isActive());
-        QKeyEvent enter(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
-        QVERIFY(!search.handleKeyPress(&enter));
+        search.repeat(true, 1);
+        QCOMPARE(editor.textCursor().blockNumber(), 1);
     }
 
     void testVimExpandedCommands() {
@@ -3185,6 +3238,18 @@ treeMaxDepth = 65
         QCOMPARE(editor.toPlainText(),
                  QString("gamma delta\nepsilon"));
 
+        editor.setPlainText("alpha beta\ngamma delta\nepsilon");
+        editor.setTextCursor(QTextCursor(editor.document()));
+        press(Qt::Key_C, "c");
+        press(Qt::Key_C, "c");
+        QCOMPARE(editor.toPlainText(),
+                 QString("\ngamma delta\nepsilon"));
+        QCOMPARE(editor.textCursor().positionInBlock(), 0);
+
+        QKeyEvent exitInsert(QEvent::KeyPress, Qt::Key_Escape,
+                             Qt::NoModifier);
+        QVERIFY(controller.handleKeyPress(&exitInsert));
+        QCOMPARE(controller.mode(), VimMotionController::Mode::Normal);
         press(Qt::Key_Colon, ":");
         press(Qt::Key_W, "w");
         press(Qt::Key_Return, "");
@@ -3266,13 +3331,13 @@ treeMaxDepth = 65
             return path == openPath ? &openEditor : nullptr;
         };
         callbacks.confirmReplacement =
-            [&](int totalMatches, int fileCount, const QString &needle,
-                const QString &replacement) {
+            [&](const WorkspaceReplaceController::ReplacementConfirmation
+                    &confirmation) {
                 confirmCalled = true;
-                confirmedMatches = totalMatches;
-                confirmedFiles = fileCount;
-                confirmedNeedle = needle;
-                confirmedReplacement = replacement;
+                confirmedMatches = confirmation.totalMatches;
+                confirmedFiles = confirmation.fileCount;
+                confirmedNeedle = confirmation.needle;
+                confirmedReplacement = confirmation.replacement;
                 return true;
             };
         callbacks.showStatus = [&](const QString &message, int) {

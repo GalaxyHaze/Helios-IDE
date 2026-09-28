@@ -17,8 +17,15 @@ class WorkspaceReplaceController : public QObject
 
 public:
     using FindOpenEditor = std::function<CodeEditor *(const QString &)>;
+    struct ReplacementConfirmation
+    {
+        int totalMatches = 0;
+        int fileCount = 0;
+        QString needle;
+        QString replacement;
+    };
     using ConfirmReplacement =
-        std::function<bool(int, int, const QString &, const QString &)>;
+        std::function<bool(const ReplacementConfirmation &)>;
     using ShowStatus = std::function<void(const QString &, int)>;
     using RefreshSearch = std::function<void()>;
 

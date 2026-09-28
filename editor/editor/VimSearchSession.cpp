@@ -22,8 +22,11 @@ bool VimSearchSession::handleKeyPress(QKeyEvent *event)
     if (!m_active)
         return false;
 
-    if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter ||
-        event->key() == Qt::Key_Escape) {
+    if (event->key() == Qt::Key_Escape) {
+        reset();
+        return true;
+    }
+    if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) {
         finish();
         return true;
     }
