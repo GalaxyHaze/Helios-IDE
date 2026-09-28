@@ -29,6 +29,7 @@ public:
         const std::function<bool(const QString &, int)> &isCurrentDocument);
     void cancel(qint64 id);
     void cancelForUri(const QString &uri);
+    void cancelCancellableForUri(const QString &uri);
     void clear();
 
 private:

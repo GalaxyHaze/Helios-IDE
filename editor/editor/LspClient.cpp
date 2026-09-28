@@ -422,6 +422,12 @@ void LspClient::notifyConfigurationChanged(const QJsonValue &settings)
                  {"params", QJsonObject{{"settings", settings}}}});
 }
 
+void LspClient::cancelInteractiveRequestsForUri(const QString &uri)
+{
+    if (!uri.isEmpty())
+        m_requestSender.cancelCancellableForUri(uri);
+}
+
 void LspClient::requestCompletion(const QString &uri, int version,
                                   const LspPosition &pos)
 {

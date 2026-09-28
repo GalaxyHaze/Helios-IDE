@@ -80,6 +80,7 @@ public:
     void closeDocument(const QString &uri);
     void saveDocument(const QString &uri);
     void notifyConfigurationChanged(const QJsonValue &settings);
+    void cancelInteractiveRequestsForUri(const QString &uri);
 
     void requestCompletion(const QString &uri, int version, const LspPosition &pos);
     void requestHover(const QString &uri, int version, const LspPosition &pos);

@@ -58,6 +58,19 @@ QList<qint64> LspRequestTracker::cancelForUri(const QString &uri)
     return ids;
 }
 
+QList<qint64> LspRequestTracker::cancelCancellableForUri(
+    const QString &uri)
+{
+    QList<qint64> ids;
+    for (auto it = m_requests.cbegin(); it != m_requests.cend(); ++it) {
+        if (it->uri == uri && it->cancellable)
+            ids.append(it.key());
+    }
+    for (const qint64 id : ids)
+        cancel(id);
+    return ids;
+}
+
 void LspRequestTracker::clear()
 {
     for (auto it = m_requests.begin(); it != m_requests.end(); ++it)

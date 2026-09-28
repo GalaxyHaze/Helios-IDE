@@ -937,6 +937,19 @@ treeMaxDepth = 65
             tracker.cancelForUri(QStringLiteral("file:///main.zith"));
         QCOMPARE(cancelled, QList<qint64>{qint64(2)});
         QVERIFY(!tracker.take(2).has_value());
+
+        QVERIFY(!tracker.track(
+            {3, QStringLiteral("textDocument/hover"),
+             QStringLiteral("file:///main.zith"), 3, true}));
+        QVERIFY(!tracker.track(
+            {4, QStringLiteral("textDocument/rename"),
+             QStringLiteral("file:///main.zith"), 3, false}));
+        QCOMPARE(
+            tracker.cancelCancellableForUri(
+                QStringLiteral("file:///main.zith")),
+            QList<qint64>{qint64(3)});
+        QVERIFY(!tracker.take(3).has_value());
+        QVERIFY(tracker.take(4).has_value());
     }
 
     void testLspInitializationBuilderSeparatesServerModes() {
@@ -2184,6 +2197,36 @@ treeMaxDepth = 65
             [](const QString &, int) { return true; });
         QCOMPARE(logMessages.size(), 1);
         QVERIFY(logMessages.first().contains("server unavailable"));
+
+        const qint64 interactive = sender.send(
+            "textDocument/hover", {}, "file:///main.zith", 7, true, true,
+            {});
+        const qint64 protectedRequest = sender.send(
+            "textDocument/rename", {}, "file:///main.zith", 7, false, true,
+            [&responses](const QJsonObject &response) {
+                responses.append(response);
+            });
+        const int messagesBeforeCancellation = messages.size();
+        sender.cancelCancellableForUri(QStringLiteral("file:///main.zith"));
+        QCOMPARE(messages.size(), messagesBeforeCancellation + 1);
+        QCOMPARE(messages.last().value("method").toString(),
+                 QStringLiteral("$/cancelRequest"));
+        QCOMPARE(messages.last().value("params")
+                     .toObject()
+                     .value("id")
+                     .toVariant()
+                     .toLongLong(),
+                 interactive);
+        QVERIFY(protectedRequest > interactive);
+        sender.handleResponse(
+            {{"jsonrpc", "2.0"},
+             {"id", protectedRequest},
+             {"result", QJsonObject{{"preserved", true}}}},
+            [](const QString &, int) { return true; });
+        QCOMPARE(responses.size(), 2);
+        QVERIFY(responses.last().value("result").toObject()
+                    .value("preserved")
+                    .toBool());
     }
 
     void testLspFeatureRequestRouterUsesCategorizedProtocolSeams() {

@@ -81,6 +81,13 @@ void LspRequestSender::cancelForUri(const QString &uri)
         sendCancellation(id);
 }
 
+void LspRequestSender::cancelCancellableForUri(const QString &uri)
+{
+    const QList<qint64> ids = m_tracker.cancelCancellableForUri(uri);
+    for (const qint64 id : ids)
+        sendCancellation(id);
+}
+
 void LspRequestSender::clear()
 {
     m_tracker.clear();

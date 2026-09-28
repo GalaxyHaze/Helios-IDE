@@ -33,6 +33,7 @@ public:
     std::optional<LspPendingRequest> take(qint64 id);
     std::optional<LspPendingRequest> cancel(qint64 id);
     QList<qint64> cancelForUri(const QString &uri);
+    QList<qint64> cancelCancellableForUri(const QString &uri);
     void clear();
 
 signals:

@@ -43,6 +43,8 @@ void EditorLanguageFeatureController::setClient(LspClient *client)
 
 void EditorLanguageFeatureController::detachClient()
 {
+    if (m_client && m_editor)
+        m_client->cancelInteractiveRequestsForUri(m_editor->fileUri());
     if (m_feedbackPresenter)
         m_feedbackPresenter->detach();
     m_client = nullptr;
@@ -162,6 +164,8 @@ void EditorLanguageFeatureController::handleMouseMove(QMouseEvent *event)
     if (line == m_hoverLine && character == m_hoverCharacter)
         return;
 
+    if (m_client)
+        m_client->cancelInteractiveRequestsForUri(m_editor->fileUri());
     m_hoverLine = line;
     m_hoverCharacter = character;
     QToolTip::hideText();
@@ -171,6 +175,8 @@ void EditorLanguageFeatureController::handleMouseMove(QMouseEvent *event)
 
 void EditorLanguageFeatureController::handleCursorPositionChanged()
 {
+    if (m_client && m_editor)
+        m_client->cancelInteractiveRequestsForUri(m_editor->fileUri());
     if (m_documentHighlightTimer &&
         isAvailable(Feature::DocumentHighlight))
         m_documentHighlightTimer->start();
