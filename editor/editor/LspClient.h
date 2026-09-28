@@ -79,6 +79,7 @@ public:
                             int version);
     void closeDocument(const QString &uri);
     void saveDocument(const QString &uri);
+    void notifyConfigurationChanged(const QJsonValue &settings);
 
     void requestCompletion(const QString &uri, int version, const LspPosition &pos);
     void requestHover(const QString &uri, int version, const LspPosition &pos);

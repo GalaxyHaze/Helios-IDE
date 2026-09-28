@@ -49,6 +49,7 @@ LspRuntimeController::LspRuntimeController(
                         m_settingsPersistence->setUseOnlineZithLsp(enabled);
                     if (m_zithRuntime)
                         m_zithRuntime->setPreferOnline(enabled);
+                    emit configurationChanged();
                     if (m_enabled)
                         ensureRuntime(false);
                 });
@@ -56,6 +57,7 @@ LspRuntimeController::LspRuntimeController(
                 this, [this](bool enabled) {
                     if (m_settingsPersistence)
                         m_settingsPersistence->setCLspEnabled(enabled);
+                    emit configurationChanged();
                     if (m_callbacks.reconcileClangd)
                         m_callbacks.reconcileClangd();
                 });
@@ -63,6 +65,7 @@ LspRuntimeController::LspRuntimeController(
                 [this](const QString &path) {
                     if (m_settingsPersistence)
                         m_settingsPersistence->setCLspPath(path);
+                    emit configurationChanged();
                     if (m_callbacks.reconcileClangd)
                         m_callbacks.reconcileClangd();
                 });
@@ -140,6 +143,7 @@ void LspRuntimeController::disableDependentServices()
 
 void LspRuntimeController::notifyEnabledStateChanged(bool enabled)
 {
+    emit configurationChanged();
     if (m_callbacks.reconcileClangd)
         m_callbacks.reconcileClangd();
     if (m_callbacks.refreshActions)

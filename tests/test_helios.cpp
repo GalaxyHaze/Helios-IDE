@@ -26,6 +26,7 @@
 #include <QShortcut>
 #include <QToolButton>
 #include <QSysInfo>
+#include <QScopeGuard>
 
 #include "../editor/core/TomlSettingsStore.h"
 #include "../editor/core/TomlSettingsCodec.h"
@@ -2303,6 +2304,83 @@ treeMaxDepth = 65
 
         client.stop();
         client.waitForFinishedForTesting(5000);
+    }
+
+    void testLspClientSendsConfigurationChangeNotification() {
+        QTemporaryDir tempDir;
+        QVERIFY(tempDir.isValid());
+
+        const QString markerPath =
+            QDir(tempDir.path()).filePath(QStringLiteral("notification.json"));
+        const QString serverPath =
+            QDir(tempDir.path()).filePath(QStringLiteral("lsp-server"));
+        const QJsonObject settings{
+            {QStringLiteral("editor"),
+             QJsonObject{{QStringLiteral("tabSize"), 4}}}};
+        const QJsonObject notification{
+            {QStringLiteral("jsonrpc"), QStringLiteral("2.0")},
+            {QStringLiteral("method"),
+             QStringLiteral("workspace/didChangeConfiguration")},
+            {QStringLiteral("params"),
+             QJsonObject{{QStringLiteral("settings"), settings}}}};
+        const QByteArray expectedBody =
+            QJsonDocument(notification).toJson(QJsonDocument::Compact);
+        QFile server(serverPath);
+        QVERIFY(server.open(QIODevice::WriteOnly | QIODevice::Text));
+        const QByteArray script =
+            "#!/usr/bin/env python3\n"
+            "import sys\n"
+            "\n"
+            "def read_message():\n"
+            "    headers = {}\n"
+            "    while True:\n"
+            "        line = sys.stdin.buffer.readline()\n"
+            "        if not line:\n"
+            "            return b''\n"
+            "        if line in (b'\\n', b'\\r\\n'):\n"
+            "            break\n"
+            "        key, value = line.decode('ascii').split(':', 1)\n"
+            "        headers[key.lower()] = value.strip()\n"
+            "    return sys.stdin.buffer.read(int(headers['content-length']))\n"
+            "\n"
+            "def send_message(message):\n"
+            "    body = json.dumps(message, separators=(',', ':')).encode()\n"
+            "    sys.stdout.buffer.write(b'Content-Length: ' + str(len(body)).encode() + b'\\r\\n\\r\\n' + body)\n"
+            "    sys.stdout.buffer.flush()\n"
+            "\n"
+            "import json\n"
+            "read_message()\n"
+            "send_message({'jsonrpc': '2.0', 'id': 1, 'result': {'capabilities': {}}})\n"
+            "read_message()\n"
+            "body = read_message()\n"
+            "with open(" +
+            QByteArray("'") +
+            markerPath.toUtf8() +
+            QByteArray("'") +
+            ", 'wb') as marker:\n"
+            "    marker.write(body)\n"
+            "sys.exit(0)\n";
+        server.write(script);
+        server.close();
+        QVERIFY(QFile::setPermissions(
+            serverPath, QFileDevice::ReadOwner | QFileDevice::WriteOwner |
+                            QFileDevice::ExeOwner));
+
+        LspClient client;
+        QSignalSpy initializedSpy(&client, &LspClient::initialized);
+        const auto cleanup = qScopeGuard([&client]() {
+            client.stop();
+            client.waitForFinishedForTesting(5000);
+        });
+        QVERIFY(client.start(serverPath));
+        QTRY_VERIFY_WITH_TIMEOUT(initializedSpy.count() > 0, 5000);
+        client.notifyConfigurationChanged(settings);
+
+        QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(markerPath), 5000);
+        QFile marker(markerPath);
+        QVERIFY(marker.open(QIODevice::ReadOnly | QIODevice::Text));
+        const QByteArray body = marker.readAll();
+        QCOMPARE(body, expectedBody);
     }
 
     void testLspClientReturnsDocumentSymbolsAndOutlineRenders() {

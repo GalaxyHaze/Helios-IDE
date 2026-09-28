@@ -413,6 +413,15 @@ void LspClient::saveDocument(const QString &uri) {
   m_documentProtocol.saveDocument(uri);
 }
 
+void LspClient::notifyConfigurationChanged(const QJsonValue &settings)
+{
+    if (!isReady())
+        return;
+    sendMessage({{"jsonrpc", "2.0"},
+                 {"method", "workspace/didChangeConfiguration"},
+                 {"params", QJsonObject{{"settings", settings}}}});
+}
+
 void LspClient::requestCompletion(const QString &uri, int version,
                                   const LspPosition &pos)
 {

@@ -122,6 +122,8 @@ private:
     QJsonObject applyWorkspaceEditRequest(const QJsonObject &params);
     QJsonValue showMessageRequest(const QJsonObject &params);
     QJsonArray configurationRequest(const QJsonArray &items) const;
+    QJsonObject lspConfiguration() const;
+    void notifyLspConfigurationChanged();
     void configureLspServerRequests(LspClient *client);
 
     QTabWidget *m_tabWidget = nullptr;

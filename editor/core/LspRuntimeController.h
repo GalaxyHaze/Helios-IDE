@@ -62,6 +62,9 @@ public:
     void recordError(const QString &message);
     void clearError();
 
+signals:
+    void configurationChanged();
+
 private:
     void applyEnabledStateToSurfaces(bool enabled);
     void disableDependentServices();

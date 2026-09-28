@@ -94,6 +94,27 @@
 #include <QElapsedTimer>
 #endif
 
+namespace {
+QJsonValue configurationValue(const QJsonObject &root,
+                              const QString &section)
+{
+  if (section.isEmpty())
+    return root;
+
+  QJsonValue value = root;
+  for (const QString &part : section.split(QLatin1Char('.'),
+                                           Qt::SkipEmptyParts)) {
+    if (!value.isObject())
+      return QJsonValue::Null;
+    const QJsonObject object = value.toObject();
+    if (!object.contains(part))
+      return QJsonValue::Null;
+    value = object.value(part);
+  }
+  return value;
+}
+} // namespace
+
 QIcon createHeliosIcon() {
   return QIcon(QStringLiteral(":/icons/helios-icon.svg"));
 }
@@ -301,6 +322,9 @@ MainWindow::MainWindow(QWidget *parent)
   runtimeDependencies.settingsPersistence = &m_lspSettingsPersistence;
   m_lspRuntimeController = new LspRuntimeController(
       std::move(runtimeDependencies), std::move(runtimeCallbacks), this);
+  connect(m_lspRuntimeController,
+          &LspRuntimeController::configurationChanged, this,
+          &MainWindow::notifyLspConfigurationChanged);
   m_editorChrome = new EditorChromeController(
       m_breadcrumbs, m_findReplaceBar, m_outlinePanel,
       [this](const QString &path) {
@@ -1045,17 +1069,64 @@ QJsonValue MainWindow::showMessageRequest(const QJsonObject &params) {
 }
 
 QJsonArray MainWindow::configurationRequest(const QJsonArray &items) const {
+  const QJsonObject configuration = lspConfiguration();
   QJsonArray values;
-  for (const QJsonValue &item : items)
-    Q_UNUSED(item);
-  for (int index = 0; index < items.size(); ++index)
-    values.append(QJsonValue::Null);
+  for (const QJsonValue &item : items) {
+    const QString section =
+        item.toObject().value(QStringLiteral("section")).toString();
+    values.append(configurationValue(configuration, section));
+  }
   return values;
+}
+
+QJsonObject MainWindow::lspConfiguration() const
+{
+  const auto &settings = TomlSettingsStore::instance();
+  const QJsonObject editor{
+      {QStringLiteral("wordWrap"), settings.wordWrap()},
+      {QStringLiteral("vimMotionsEnabled"), settings.vimMotionsEnabled()},
+      {QStringLiteral("tabSize"), 4},
+      {QStringLiteral("insertSpaces"), true}};
+  const QJsonObject lsp{
+      {QStringLiteral("enabled"), settings.lspEnabled()},
+      {QStringLiteral("useOnlineZithLsp"), settings.useOnlineZithLsp()},
+      {QStringLiteral("cFamilyEnabled"), settings.cLspEnabled()}};
+  const QJsonObject zith{
+      {QStringLiteral("enabled"), settings.lspEnabled()},
+      {QStringLiteral("useOnline"), settings.useOnlineZithLsp()}};
+  const QJsonObject clangd{
+      {QStringLiteral("enabled"), settings.cLspEnabled()},
+      {QStringLiteral("path"), settings.cLspPath()},
+      {QStringLiteral("resolvedPath"), resolvedCLspPath()}};
+  return {
+      {QStringLiteral("helios"),
+       QJsonObject{{QStringLiteral("locale"), settings.locale()},
+                   {QStringLiteral("lsp"), lsp},
+                   {QStringLiteral("editor"), editor},
+                   {QStringLiteral("zith"), zith},
+                   {QStringLiteral("clangd"), clangd}}},
+      {QStringLiteral("editor"), editor},
+      {QStringLiteral("lsp"), lsp},
+      {QStringLiteral("zith"), zith},
+      {QStringLiteral("clangd"), clangd}};
+}
+
+void MainWindow::notifyLspConfigurationChanged()
+{
+  const QJsonObject settings = lspConfiguration();
+  if (m_zithLspClient)
+    m_zithLspClient->notifyConfigurationChanged(settings);
+  if (m_clangdClient)
+    m_clangdClient->notifyConfigurationChanged(settings);
 }
 
 void MainWindow::configureLspServerRequests(LspClient *client) {
   if (!client)
     return;
+
+  connect(client, &LspClient::initialized, this, [this, client]() {
+    client->notifyConfigurationChanged(lspConfiguration());
+  });
 
   LspClient::ServerRequestHandlers handlers;
   handlers.applyWorkspaceEdit =
