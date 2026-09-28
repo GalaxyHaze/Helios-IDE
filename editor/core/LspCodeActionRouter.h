@@ -8,6 +8,8 @@
 #include <QObject>
 #include <functional>
 
+class QTabWidget;
+
 class LspCodeActionRouter : public QObject
 {
 public:
@@ -23,17 +25,21 @@ public:
         PresentMenu presentMenu;
     };
 
-    explicit LspCodeActionRouter(QWidget *menuParent,
+    explicit LspCodeActionRouter(QWidget *menuParent, QTabWidget *tabWidget,
                                  Callbacks callbacks,
                                  QObject *parent = nullptr);
 
     void attach(LspClient *client);
 
 private:
-    void handleCodeActions(LspClient *client, const QJsonArray &actions);
+    void handleCodeActions(LspClient *client, const QString &uri, int version,
+                           const QJsonArray &actions);
     QMenu *createMenu(LspClient *client, const QJsonArray &actions);
+    bool isCurrentDocument(LspClient *client, const QString &uri,
+                           int version) const;
 
     QWidget *m_menuParent;
+    QTabWidget *m_tabWidget;
     ApplyWorkspaceEdit m_applyWorkspaceEdit;
     ExecuteWorkspaceCommand m_executeCommand;
     PresentMenu m_presentMenu;

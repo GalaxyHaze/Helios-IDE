@@ -6,6 +6,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
+#include <utility>
 
 namespace
 {
@@ -95,10 +97,91 @@ struct NormalizedEdit
     qsizetype end = 0;
     QString replacement;
 };
+
+bool readVersion(const QJsonObject &object, std::optional<int> *version)
+{
+    if (!version)
+        return false;
+
+    const QJsonValue value = object.value(QStringLiteral("version"));
+    if (!object.contains(QStringLiteral("version")) || value.isNull())
+    {
+        version->reset();
+        return true;
+    }
+
+    if (!value.isDouble())
+        return false;
+
+    const double number = value.toDouble();
+    if (number < 0 || std::floor(number) != number ||
+        number > std::numeric_limits<int>::max())
+        return false;
+
+    *version = value.toInt();
+    return true;
 }
 
-WorkspaceEdit::WorkspaceEdit(QList<Target> targets)
-    : m_targets(std::move(targets))
+bool readLocalUri(const QString &uri)
+{
+    const QUrl url(uri);
+    return url.isLocalFile() && !url.toLocalFile().isEmpty();
+}
+
+bool readTextEdits(const QJsonValue &value,
+                   QList<QPair<LspRange, QString>> *edits)
+{
+    if (!edits || !value.isArray())
+        return false;
+
+    for (const QJsonValue &entry : value.toArray())
+    {
+        if (!entry.isObject())
+            return false;
+
+        const QJsonObject textEdit = entry.toObject();
+        LspRange range;
+        if (!readRange(textEdit.value(QStringLiteral("range")), &range) ||
+            !textEdit.value(QStringLiteral("newText")).isString())
+            return false;
+
+        edits->append(
+            {range, textEdit.value(QStringLiteral("newText")).toString()});
+    }
+    return true;
+}
+
+bool readResourceOptions(const QJsonObject &object, bool *ignoreIfExists,
+                         bool *overwrite)
+{
+    if (!ignoreIfExists || !overwrite)
+        return false;
+
+    *ignoreIfExists = false;
+    *overwrite = false;
+    const QJsonValue optionsValue = object.value(QStringLiteral("options"));
+    if (!object.contains(QStringLiteral("options")))
+        return true;
+    if (!optionsValue.isObject())
+        return false;
+
+    const QJsonObject options = optionsValue.toObject();
+    for (const QString &name : {QStringLiteral("ignoreIfExists"),
+                                QStringLiteral("overwrite")})
+    {
+        if (options.contains(name) && !options.value(name).isBool())
+            return false;
+    }
+    *ignoreIfExists =
+        options.value(QStringLiteral("ignoreIfExists")).toBool(false);
+    *overwrite = options.value(QStringLiteral("overwrite")).toBool(false);
+    return true;
+}
+}
+
+WorkspaceEdit::WorkspaceEdit(QList<Target> targets,
+                             QList<Operation> operations)
+    : m_targets(std::move(targets)), m_operations(std::move(operations))
 {
 }
 
@@ -106,62 +189,167 @@ std::optional<WorkspaceEdit> WorkspaceEdit::fromJson(
     const QJsonObject &edit,
     QString *errorMessage)
 {
-    if (edit.contains(QStringLiteral("documentChanges")) ||
-        !edit.value(QStringLiteral("changes")).isObject())
+    QList<Target> targets;
+    QList<Operation> operations;
+
+    const auto appendTextDocumentEdit =
+        [&targets, &operations](const QString &uri,
+                                const QJsonValue &editsValue,
+                                const std::optional<int> &version,
+                                QString *error) {
+            if (!readLocalUri(uri))
+            {
+                setError(error, QStringLiteral(
+                                    "Workspace edit contains a non-local "
+                                    "URI."));
+                return false;
+            }
+            if (!editsValue.isArray())
+            {
+                setError(error, QStringLiteral(
+                                    "Workspace edit contains invalid text "
+                                    "edits."));
+                return false;
+            }
+
+            QList<QPair<LspRange, QString>> edits;
+            if (!readTextEdits(editsValue, &edits))
+            {
+                setError(error, QStringLiteral(
+                                    "Workspace edit contains invalid text "
+                                    "edits."));
+                return false;
+            }
+
+            WorkspaceEdit::Target target{uri, edits, version};
+            WorkspaceEdit::Operation operation;
+            operation.kind =
+                WorkspaceEdit::Operation::Kind::TextDocumentEdit;
+            operation.uri = uri;
+            operation.edits = edits;
+            operation.version = version;
+            targets.append(target);
+            operations.append(std::move(operation));
+            return true;
+        };
+
+    if (edit.contains(QStringLiteral("changes")))
     {
-        setError(errorMessage, QStringLiteral("Unsupported workspace edit from LSP."));
+        if (!edit.value(QStringLiteral("changes")).isObject())
+        {
+            setError(errorMessage,
+                     QStringLiteral("Workspace edit contains invalid changes."));
+            return std::nullopt;
+        }
+
+        const QJsonObject changes =
+            edit.value(QStringLiteral("changes")).toObject();
+        for (auto iterator = changes.constBegin();
+             iterator != changes.constEnd(); ++iterator)
+        {
+            if (!appendTextDocumentEdit(iterator.key(), iterator.value(),
+                                         std::nullopt, errorMessage))
+                return std::nullopt;
+        }
+    }
+
+    if (edit.contains(QStringLiteral("documentChanges")))
+    {
+        const QJsonValue documentChangesValue =
+            edit.value(QStringLiteral("documentChanges"));
+        if (!documentChangesValue.isArray())
+        {
+            setError(errorMessage, QStringLiteral(
+                                     "Workspace edit contains invalid "
+                                     "document changes."));
+            return std::nullopt;
+        }
+
+        for (const QJsonValue &entry : documentChangesValue.toArray())
+        {
+            if (!entry.isObject())
+            {
+                setError(errorMessage, QStringLiteral(
+                                         "Workspace edit contains invalid "
+                                         "document changes."));
+                return std::nullopt;
+            }
+
+            const QJsonObject object = entry.toObject();
+            const QString kind =
+                object.value(QStringLiteral("kind")).toString();
+            if (!kind.isEmpty())
+            {
+                WorkspaceEdit::Operation operation;
+                if (kind == QLatin1String("create"))
+                {
+                    operation.kind =
+                        WorkspaceEdit::Operation::Kind::CreateFile;
+                    operation.uri =
+                        object.value(QStringLiteral("uri")).toString();
+                }
+                else if (kind == QLatin1String("rename"))
+                {
+                    operation.kind =
+                        WorkspaceEdit::Operation::Kind::RenameFile;
+                    operation.uri =
+                        object.value(QStringLiteral("oldUri")).toString();
+                    operation.newUri =
+                        object.value(QStringLiteral("newUri")).toString();
+                }
+                else if (kind == QLatin1String("delete"))
+                {
+                    operation.kind =
+                        WorkspaceEdit::Operation::Kind::DeleteFile;
+                    operation.uri =
+                        object.value(QStringLiteral("uri")).toString();
+                }
+                else
+                {
+                    setError(errorMessage, QStringLiteral(
+                                             "Workspace edit contains an "
+                                             "unsupported resource operation."));
+                    return std::nullopt;
+                }
+
+                if (!readLocalUri(operation.uri) ||
+                    ((operation.kind ==
+                          WorkspaceEdit::Operation::Kind::RenameFile) &&
+                     !readLocalUri(operation.newUri)) ||
+                    !readResourceOptions(object, &operation.ignoreIfExists,
+                                          &operation.overwrite))
+                {
+                    setError(errorMessage, QStringLiteral(
+                                             "Workspace edit contains an "
+                                             "invalid resource operation."));
+                    return std::nullopt;
+                }
+                operations.append(std::move(operation));
+                continue;
+            }
+
+            const QJsonObject textDocument =
+                object.value(QStringLiteral("textDocument")).toObject();
+            const QString uri =
+                textDocument.value(QStringLiteral("uri")).toString();
+            std::optional<int> version;
+            if (textDocument.isEmpty() ||
+                !readVersion(textDocument, &version) ||
+                !appendTextDocumentEdit(uri, object.value("edits"), version,
+                                         errorMessage))
+                return std::nullopt;
+        }
+    }
+
+    if (!edit.contains(QStringLiteral("changes")) &&
+        !edit.contains(QStringLiteral("documentChanges")))
+    {
+        setError(errorMessage,
+                 QStringLiteral("Workspace edit contains no changes."));
         return std::nullopt;
     }
 
-    QList<Target> targets;
-    const QJsonObject changes = edit.value(QStringLiteral("changes")).toObject();
-    for (auto iterator = changes.constBegin(); iterator != changes.constEnd();
-         ++iterator)
-    {
-        const QUrl url(iterator.key());
-        if (!url.isLocalFile())
-        {
-            setError(errorMessage,
-                     QStringLiteral("Workspace edit contains a non-local URI."));
-            return std::nullopt;
-        }
-
-        if (!iterator.value().isArray())
-        {
-            setError(errorMessage,
-                     QStringLiteral("Workspace edit contains invalid text edits."));
-            return std::nullopt;
-        }
-
-        Target target;
-        target.uri = iterator.key();
-        const QJsonArray edits = iterator.value().toArray();
-        for (const QJsonValue &value : edits)
-        {
-            if (!value.isObject())
-            {
-                setError(errorMessage,
-                         QStringLiteral("Workspace edit contains invalid text edits."));
-                return std::nullopt;
-            }
-
-            const QJsonObject textEdit = value.toObject();
-            LspRange range;
-            if (!readRange(textEdit.value(QStringLiteral("range")), &range) ||
-                !textEdit.value(QStringLiteral("newText")).isString())
-            {
-                setError(errorMessage,
-                         QStringLiteral("Workspace edit contains invalid text edits."));
-                return std::nullopt;
-            }
-
-            target.edits.append({range,
-                                 textEdit.value(QStringLiteral("newText")).toString()});
-        }
-        targets.append(std::move(target));
-    }
-
-    return WorkspaceEdit(std::move(targets));
+    return WorkspaceEdit(std::move(targets), std::move(operations));
 }
 
 std::optional<QString> WorkspaceEdit::applyToText(
@@ -196,6 +384,19 @@ std::optional<QString> WorkspaceEdit::applyToText(
                       return left.start > right.start;
                   return left.end > right.end;
               });
+
+    for (int index = 1; index < normalized.size(); ++index)
+    {
+        const NormalizedEdit &later = normalized.at(index - 1);
+        const NormalizedEdit &earlier = normalized.at(index);
+        if (earlier.end > later.start)
+        {
+            setError(errorMessage,
+                     QStringLiteral("Workspace edit contains overlapping "
+                                    "ranges."));
+            return std::nullopt;
+        }
+    }
 
     QString updated = text;
     for (const NormalizedEdit &edit : normalized)

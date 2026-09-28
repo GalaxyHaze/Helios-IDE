@@ -31,6 +31,30 @@ LspClient::LspClient(QObject *parent)
            [this](const QString &uri, int version) {
                return m_documentProtocol.isCurrentDocument(uri, version);
            },
+           [this](const QJsonObject &params) {
+               return m_serverRequestHandlers.applyWorkspaceEdit
+                          ? m_serverRequestHandlers.applyWorkspaceEdit(params)
+                          : QJsonObject{};
+           },
+           [this](const QJsonObject &params) {
+               return m_serverRequestHandlers.showMessageRequest
+                          ? m_serverRequestHandlers.showMessageRequest(params)
+                          : QJsonValue::Null;
+           },
+           [this](const QJsonArray &items) {
+               if (m_serverRequestHandlers.configuration)
+                   return m_serverRequestHandlers.configuration(items);
+               QJsonArray values;
+               for (int index = 0; index < items.size(); ++index)
+                   values.append(QJsonValue::Null);
+               return values;
+           },
+           [this](const QJsonArray &registrations) {
+               registerDynamicCapabilities(registrations);
+           },
+           [this](const QJsonArray &registrations) {
+               unregisterDynamicCapabilities(registrations);
+           },
            },
           this),
       m_sessionLifecycle(
@@ -50,6 +74,8 @@ LspClient::LspClient(QObject *parent)
            [this]() { m_transport.kill(); },
            [this]() {
                m_capabilities = {};
+               m_dynamicCapabilities.clear();
+               m_dynamicCapabilityMethods.clear();
                m_documentProtocol.clear();
                m_requestSender.clear();
                m_stderrPartial.clear();
@@ -194,39 +220,61 @@ bool LspClient::isRunning() const {
 }
 bool LspClient::isReady() const { return m_sessionLifecycle.isReady(); }
 bool LspClient::supports(Capability capability) const {
+  bool supported = false;
   switch (capability) {
   case Capability::Completion:
-    return m_capabilities.completionProvider;
+    supported = m_capabilities.completionProvider;
+    break;
   case Capability::Hover:
-    return m_capabilities.hoverProvider;
+    supported = m_capabilities.hoverProvider;
+    break;
   case Capability::SignatureHelp:
-    return m_capabilities.signatureHelpProvider;
+    supported = m_capabilities.signatureHelpProvider;
+    break;
   case Capability::Definition:
-    return m_capabilities.definitionProvider;
+    supported = m_capabilities.definitionProvider;
+    break;
   case Capability::Implementation:
-    return m_capabilities.implementationProvider;
+    supported = m_capabilities.implementationProvider;
+    break;
   case Capability::Declaration:
-    return m_capabilities.declarationProvider;
+    supported = m_capabilities.declarationProvider;
+    break;
   case Capability::References:
-    return m_capabilities.referencesProvider;
+    supported = m_capabilities.referencesProvider;
+    break;
   case Capability::DocumentHighlight:
-    return m_capabilities.documentHighlightProvider;
+    supported = m_capabilities.documentHighlightProvider;
+    break;
   case Capability::Rename:
-    return m_capabilities.renameProvider;
+    supported = m_capabilities.renameProvider;
+    break;
   case Capability::DocumentSymbol:
-    return m_capabilities.documentSymbolProvider;
+    supported = m_capabilities.documentSymbolProvider;
+    break;
   case Capability::Formatting:
-    return m_capabilities.formattingProvider;
+    supported = m_capabilities.formattingProvider;
+    break;
   case Capability::FoldingRange:
-    return m_capabilities.foldingRangeProvider;
+    supported = m_capabilities.foldingRangeProvider;
+    break;
   case Capability::CodeAction:
-    return m_capabilities.codeActionProvider;
+    supported = m_capabilities.codeActionProvider;
+    break;
   case Capability::SemanticTokens:
-    return m_capabilities.semanticTokensProvider;
+    supported = m_capabilities.semanticTokensProvider;
+    break;
   case Capability::ExecuteCommand:
-    return m_capabilities.executeCommandProvider;
+    supported = m_capabilities.executeCommandProvider;
+    break;
   }
-  return false;
+  return supported ||
+         m_dynamicCapabilities.contains(capabilityMethod(capability));
+}
+
+void LspClient::setServerRequestHandlers(ServerRequestHandlers handlers)
+{
+  m_serverRequestHandlers = std::move(handlers);
 }
 int LspClient::documentVersion(const QString &uri) const {
   return m_documentProtocol.documentVersion(uri);
@@ -234,6 +282,91 @@ int LspClient::documentVersion(const QString &uri) const {
 
 void LspClient::parseServerCapabilities(const QJsonObject &caps) {
   m_capabilities = LspServerCapabilities::fromJson(caps);
+}
+
+QString LspClient::capabilityMethod(Capability capability)
+{
+  switch (capability)
+  {
+  case Capability::Completion:
+    return QStringLiteral("textDocument/completion");
+  case Capability::Hover:
+    return QStringLiteral("textDocument/hover");
+  case Capability::SignatureHelp:
+    return QStringLiteral("textDocument/signatureHelp");
+  case Capability::Definition:
+    return QStringLiteral("textDocument/definition");
+  case Capability::Implementation:
+    return QStringLiteral("textDocument/implementation");
+  case Capability::Declaration:
+    return QStringLiteral("textDocument/declaration");
+  case Capability::References:
+    return QStringLiteral("textDocument/references");
+  case Capability::DocumentHighlight:
+    return QStringLiteral("textDocument/documentHighlight");
+  case Capability::Rename:
+    return QStringLiteral("textDocument/rename");
+  case Capability::DocumentSymbol:
+    return QStringLiteral("textDocument/documentSymbol");
+  case Capability::Formatting:
+    return QStringLiteral("textDocument/formatting");
+  case Capability::FoldingRange:
+    return QStringLiteral("textDocument/foldingRange");
+  case Capability::CodeAction:
+    return QStringLiteral("textDocument/codeAction");
+  case Capability::SemanticTokens:
+    return QStringLiteral("textDocument/semanticTokens/full");
+  case Capability::ExecuteCommand:
+    return QStringLiteral("workspace/executeCommand");
+  }
+  return {};
+}
+
+void LspClient::registerDynamicCapabilities(
+    const QJsonArray &registrations)
+{
+  for (const auto &value : registrations)
+  {
+    const QJsonObject registration = value.toObject();
+    const QString method =
+        registration.value(QStringLiteral("method")).toString();
+    if (method.isEmpty())
+      continue;
+
+    m_dynamicCapabilities.insert(method);
+    const QString id =
+        registration.value(QStringLiteral("id")).toString();
+    if (!id.isEmpty())
+      m_dynamicCapabilityMethods.insert(id, method);
+  }
+}
+
+void LspClient::unregisterDynamicCapabilities(
+    const QJsonArray &registrations)
+{
+  for (const auto &value : registrations)
+  {
+    const QJsonObject registration = value.toObject();
+    QString method = registration.value(QStringLiteral("method")).toString();
+    const QString id = registration.value(QStringLiteral("id")).toString();
+    if (method.isEmpty() && !id.isEmpty())
+      method = m_dynamicCapabilityMethods.value(id);
+    if (!id.isEmpty())
+      m_dynamicCapabilityMethods.remove(id);
+    if (method.isEmpty())
+      continue;
+
+    bool stillRegistered = false;
+    for (auto it = m_dynamicCapabilityMethods.cbegin();
+         it != m_dynamicCapabilityMethods.cend(); ++it) {
+      if (it.value() == method) {
+        stillRegistered = true;
+        break;
+      }
+    }
+    if (!stillRegistered)
+      m_dynamicCapabilities.remove(method);
+  }
 }
 
 bool LspClient::sendMessage(const QJsonObject &msg) {

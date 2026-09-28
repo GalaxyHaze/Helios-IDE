@@ -951,6 +951,15 @@ treeMaxDepth = 65
                     .value("experimental").toObject()
                     .value("zith").toObject()
                     .value("requestSaveAll").toBool());
+        QVERIFY(zith.value("capabilities").toObject()
+                    .value("workspace").toObject()
+                    .value("workspaceEdit").toObject()
+                    .value("documentChanges").toBool());
+        QCOMPARE(zith.value("capabilities").toObject()
+                     .value("general").toObject()
+                     .value("positionEncodings").toArray().first()
+                     .toString(),
+                 QStringLiteral("utf-16"));
         QCOMPARE(zith.value("initializationOptions").toObject()
                      .value("stdlibPath").toString(),
                  QStringLiteral("/tmp/zith-stdlib"));
@@ -1316,6 +1325,31 @@ treeMaxDepth = 65
                                    {"range", rangeJson}}});
         QCOMPARE(locations.size(), 2);
 
+        const QList<LspSemanticToken> semanticTokens =
+            LspResultDecoder::semanticTokens(
+                QJsonObject{{"data", QJsonArray{1, 2, 4, 3, 1,
+                                                 0, 3, 2, 4, 0}}});
+        QCOMPARE(semanticTokens.size(), 2);
+        QCOMPARE(semanticTokens.first().range.start.line, 1);
+        QCOMPARE(semanticTokens.first().range.start.character, 2);
+        QCOMPARE(semanticTokens.first().range.end.character, 6);
+        QCOMPARE(semanticTokens.at(1).range.start.line, 1);
+        QCOMPARE(semanticTokens.at(1).range.start.character, 5);
+        QCOMPARE(semanticTokens.at(1).tokenType, 4);
+
+        const QList<LspFoldingRange> foldingRanges =
+            LspResultDecoder::foldingRanges(
+                QJsonArray{QJsonObject{{"startLine", 0},
+                                       {"startCharacter", 1},
+                                       {"endLine", 3},
+                                       {"endCharacter", 2}},
+                           QJsonObject{{"startLine", -1}, {"endLine", 4}},
+                           QJsonObject{{"startLine", 4}, {"endLine", 4}}});
+        QCOMPARE(foldingRanges.size(), 1);
+        QCOMPARE(foldingRanges.first().startLine, 0);
+        QCOMPARE(foldingRanges.first().endLine, 3);
+        QCOMPARE(foldingRanges.first().endCharacter, 2);
+
         const QList<LspCompletionItem> items =
             LspResultDecoder::completionItems(
                 QJsonObject{{"items", QJsonArray{
@@ -1362,6 +1396,30 @@ treeMaxDepth = 65
                                        {"source", "zith"}}});
         QCOMPARE(diagnostics.size(), 1);
         QCOMPARE(diagnostics.first().message, QStringLiteral("broken"));
+    }
+
+    void testCodeEditorAppliesAndTogglesLspFoldingRanges() {
+        CodeEditor editor;
+        editor.setInitialDocumentText(
+            QStringLiteral("root {\n"
+                           "  child_one\n"
+                           "  child_two\n"
+                           "}\n"
+                           "tail\n"));
+        editor.setFoldingRanges({{0, 0, 2, 0}});
+        QVERIFY(editor.hasFoldingRangeAtLine(0));
+        QVERIFY(!editor.isFoldedAtLine(0));
+        QVERIFY(editor.document()->findBlockByNumber(1).isVisible());
+
+        editor.toggleFoldAtLine(0);
+        QVERIFY(editor.isFoldedAtLine(0));
+        QVERIFY(!editor.document()->findBlockByNumber(1).isVisible());
+        QVERIFY(!editor.document()->findBlockByNumber(2).isVisible());
+
+        editor.toggleFoldAtLine(0);
+        QVERIFY(!editor.isFoldedAtLine(0));
+        QVERIFY(editor.document()->findBlockByNumber(1).isVisible());
+        QVERIFY(editor.document()->findBlockByNumber(2).isVisible());
     }
 
     void testGitStatusParserExtractsBranchAndPaths() {
@@ -1869,6 +1927,8 @@ treeMaxDepth = 65
 
     void testLspServerMessageDispatcher() {
         QList<QJsonObject> sentMessages;
+        QJsonArray registeredCapabilities;
+        QJsonArray unregisteredCapabilities;
         LspServerMessageDispatcher dispatcher(
             {[&sentMessages](const QJsonObject &message) {
                  sentMessages.append(message);
@@ -1878,6 +1938,24 @@ treeMaxDepth = 65
              [](const QString &uri, int version) {
                  return uri == QStringLiteral("file:///current.cpp") &&
                         version == 3;
+             },
+             [](const QJsonObject &) {
+                 return QJsonObject{{"applied", true}};
+             },
+             [](const QJsonObject &) {
+                 return QJsonObject{{"title", "retry"}};
+             },
+             [](const QJsonArray &items) {
+                 QJsonArray result;
+                 for (const QJsonValue &item : items)
+                     result.append(item.toObject().value("section").toString());
+                 return result;
+             },
+             [&registeredCapabilities](const QJsonArray &registrations) {
+                 registeredCapabilities = registrations;
+             },
+             [&unregisteredCapabilities](const QJsonArray &registrations) {
+                 unregisteredCapabilities = registrations;
              }});
         QSignalSpy diagnosticsSpy(
             &dispatcher, &LspServerMessageDispatcher::diagnosticsReceived);
@@ -1895,6 +1973,60 @@ treeMaxDepth = 65
         QCOMPARE(sentMessages.size(), 1);
         QCOMPARE(sentMessages.first().value("id").toInt(), 7);
         QVERIFY(sentMessages.first().contains("result"));
+
+        dispatcher.dispatch(
+            {{"jsonrpc", "2.0"},
+             {"id", 8},
+             {"method", "workspace/applyEdit"},
+             {"params", QJsonObject{{"edit", QJsonObject{}}}}});
+        QCOMPARE(sentMessages.last().value("id").toInt(), 8);
+        QVERIFY(sentMessages.last().value("result").toObject()
+                    .value("applied").toBool());
+
+        dispatcher.dispatch(
+            {{"jsonrpc", "2.0"},
+             {"id", 9},
+             {"method", "window/showMessageRequest"},
+             {"params", QJsonObject{{"message", "Retry?"}}}});
+        QCOMPARE(sentMessages.last().value("id").toInt(), 9);
+        QCOMPARE(sentMessages.last().value("result").toObject()
+                     .value("title").toString(),
+                 QStringLiteral("retry"));
+
+        dispatcher.dispatch(
+            {{"jsonrpc", "2.0"},
+             {"id", 10},
+             {"method", "workspace/configuration"},
+             {"params",
+              QJsonObject{{"items",
+                           QJsonArray{QJsonObject{{"section", "editor"}},
+                                      QJsonObject{{"section", "files"}}}}}}});
+        QCOMPARE(sentMessages.last().value("id").toInt(), 10);
+        const QJsonArray expectedConfiguration{"editor", "files"};
+        QCOMPARE(sentMessages.last().value("result").toArray(),
+                 expectedConfiguration);
+
+        dispatcher.dispatch(
+            {{"jsonrpc", "2.0"},
+             {"id", 11},
+             {"method", "client/registerCapability"},
+             {"params",
+              QJsonObject{{"registrations",
+                           QJsonArray{QJsonObject{{"id", "hover"},
+                                                  {"method",
+                                                   "textDocument/hover"}}}}}}});
+        QCOMPARE(registeredCapabilities.size(), 1);
+        QCOMPARE(sentMessages.last().value("id").toInt(), 11);
+
+        dispatcher.dispatch(
+            {{"jsonrpc", "2.0"},
+             {"id", 12},
+             {"method", "client/unregisterCapability"},
+             {"params",
+              QJsonObject{{"unregisterations",
+                           QJsonArray{QJsonObject{{"id", "hover"}}}}}}});
+        QCOMPARE(unregisteredCapabilities.size(), 1);
+        QCOMPARE(sentMessages.last().value("id").toInt(), 12);
 
         dispatcher.dispatch(
             {{"jsonrpc", "2.0"},
@@ -1948,6 +2080,31 @@ treeMaxDepth = 65
         QCOMPARE(progressSpy.count(), 1);
         QCOMPARE(progressSpy.at(0).at(1).toString(),
                  QStringLiteral("report"));
+    }
+
+    void testLspClientDynamicCapabilityUnregistersById() {
+        LspClient client;
+
+        client.dispatchMessage(
+            {{"jsonrpc", "2.0"},
+             {"id", 1},
+             {"method", "client/registerCapability"},
+             {"params",
+              QJsonObject{{"registrations",
+                           QJsonArray{QJsonObject{
+                               {"id", "completion-registration"},
+                               {"method", "textDocument/completion"}}}}}}});
+        QVERIFY(client.supports(LspClient::Capability::Completion));
+
+        client.dispatchMessage(
+            {{"jsonrpc", "2.0"},
+             {"id", 2},
+             {"method", "client/unregisterCapability"},
+             {"params",
+              QJsonObject{{"unregisterations",
+                           QJsonArray{QJsonObject{
+                               {"id", "completion-registration"}}}}}}});
+        QVERIFY(!client.supports(LspClient::Capability::Completion));
     }
 
     void testLspRequestSender() {
@@ -3421,13 +3578,52 @@ treeMaxDepth = 65
                  QStringLiteral("alpha X\n"));
     }
 
-    void testWorkspaceEditRejectsUnsupportedForms() {
+    void testWorkspaceEditParsesDocumentChangesAndRejectsInvalidForms() {
         QString error;
 
-        QJsonObject documentChanges;
-        documentChanges.insert("documentChanges", QJsonArray{});
-        QVERIFY(!WorkspaceEdit::fromJson(documentChanges, &error));
-        QCOMPARE(error, QString("Unsupported workspace edit from LSP."));
+        const QString sourceUri =
+            QUrl::fromLocalFile("/tmp/source.zith").toString();
+        const QString createdUri =
+            QUrl::fromLocalFile("/tmp/created.zith").toString();
+        const QString renamedUri =
+            QUrl::fromLocalFile("/tmp/renamed.zith").toString();
+        QJsonObject documentRange{
+            {"start", QJsonObject{{"line", 0}, {"character", 0}}},
+            {"end", QJsonObject{{"line", 0}, {"character", 0}}}};
+        QJsonArray textEdits{
+            QJsonObject{{"range", documentRange}, {"newText", "updated"}}};
+        QJsonObject documentChanges{
+            {"documentChanges",
+             QJsonArray{
+                 QJsonObject{
+                     {"textDocument",
+                      QJsonObject{{"uri", sourceUri}, {"version", 7}}},
+                     {"edits", textEdits}},
+                 QJsonObject{{"kind", "create"}, {"uri", createdUri}},
+                 QJsonObject{{"kind", "rename"},
+                             {"oldUri", createdUri},
+                             {"newUri", renamedUri},
+                             {"options", QJsonObject{{"overwrite", true}}}},
+                 QJsonObject{{"kind", "delete"},
+                             {"uri", renamedUri},
+                             {"options",
+                              QJsonObject{{"ignoreIfExists", true}}}}}}};
+
+        const auto parsed = WorkspaceEdit::fromJson(documentChanges, &error);
+        QVERIFY2(parsed.has_value(), qPrintable(error));
+        QCOMPARE(parsed->operations().size(), 4);
+        QCOMPARE(parsed->targets().size(), 1);
+        QCOMPARE(parsed->targets().first().version, std::optional<int>(7));
+        QCOMPARE(parsed->operations().at(0).kind,
+                 WorkspaceEdit::Operation::Kind::TextDocumentEdit);
+        QCOMPARE(parsed->operations().at(1).kind,
+                 WorkspaceEdit::Operation::Kind::CreateFile);
+        QCOMPARE(parsed->operations().at(2).kind,
+                 WorkspaceEdit::Operation::Kind::RenameFile);
+        QVERIFY(parsed->operations().at(2).overwrite);
+        QCOMPARE(parsed->operations().at(3).kind,
+                 WorkspaceEdit::Operation::Kind::DeleteFile);
+        QVERIFY(parsed->operations().at(3).ignoreIfExists);
 
         error.clear();
         QJsonObject remoteChanges;
@@ -3493,6 +3689,19 @@ treeMaxDepth = 65
         const auto updated = WorkspaceEdit::applyToText("text", edits, &error);
         QVERIFY(!updated.has_value());
         QCOMPARE(error, QString("Workspace edit contains an invalid range."));
+    }
+
+    void testWorkspaceEditRejectsOverlappingRanges() {
+        const QList<QPair<LspRange, QString>> edits = {
+            {{{0, 0}, {0, 3}}, QStringLiteral("first")},
+            {{{0, 2}, {0, 4}}, QStringLiteral("second")}};
+
+        QString error;
+        const auto updated = WorkspaceEdit::applyToText(
+            QStringLiteral("text"), edits, &error);
+        QVERIFY(!updated.has_value());
+        QCOMPARE(error,
+                 QStringLiteral("Workspace edit contains overlapping ranges."));
     }
 
     void testLanguageIdentityClassifiesPaths() {
@@ -4349,9 +4558,11 @@ treeMaxDepth = 65
         OutlinePanel outline;
         CodeEditor editor;
         LspClient client;
+        LspClient foreignClient;
 
         editor.setFilePath(QStringLiteral("/tmp/main.zith"));
         editor.setInitialDocumentText(QStringLiteral("old\n"), 3);
+        editor.setLspClient(&client);
         tabs.addTab(&editor, QStringLiteral("main.zith"));
 
         LspEditorResultRouter router(&tabs, &outline);
@@ -4359,6 +4570,8 @@ treeMaxDepth = 65
 
         const QList<QPair<LspRange, QString>> edits = {
             {LspRange{{0, 0}, {0, 3}}, QStringLiteral("new")}};
+        emit foreignClient.formattingResult(editor.fileUri(), 3, edits);
+        QCOMPARE(editor.toPlainText(), QStringLiteral("old\n"));
         emit client.formattingResult(editor.fileUri(), 2, edits);
         QCOMPARE(editor.toPlainText(), QStringLiteral("old\n"));
 
@@ -4389,12 +4602,15 @@ treeMaxDepth = 65
         CodeEditor first;
         CodeEditor second;
         LspClient client;
+        LspClient foreignClient;
         int showCount = 0;
 
         first.setFilePath(QStringLiteral("/tmp/first.zith"));
         first.setInitialDocumentText(QStringLiteral("first\n"), 4);
         second.setFilePath(QStringLiteral("/tmp/second.zith"));
         second.setInitialDocumentText(QStringLiteral("second\n"), 2);
+        first.setLspClient(&client);
+        second.setLspClient(&client);
         tabs.addTab(&first, QStringLiteral("first.zith"));
         tabs.addTab(&second, QStringLiteral("second.zith"));
         tabs.setCurrentWidget(&first);
@@ -4409,6 +4625,9 @@ treeMaxDepth = 65
         const LspLocation location{
             QUrl::fromLocalFile(QStringLiteral("/tmp/target.zith")).toString(),
             LspRange{{2, 3}, {2, 3}}};
+        emit foreignClient.referencesResult(first.fileUri(), 4, {location});
+        QCOMPARE(references.findChild<QListWidget *>()->count(), 0);
+        QCOMPARE(showCount, 0);
         emit client.referencesResult(first.fileUri(), 3, {location});
         QCOMPARE(references.findChild<QListWidget *>()->count(), 0);
         QCOMPARE(showCount, 0);
@@ -4424,11 +4643,18 @@ treeMaxDepth = 65
 
     void testLspCodeActionRouterBuildsAndExecutesEditActions() {
         QWidget parent;
+        QTabWidget tabs;
+        CodeEditor editor;
         LspClient client;
+        LspClient foreignClient;
         QJsonObject appliedEdit;
         int presentedActions = 0;
         QString presentedTitle;
 
+        editor.setFilePath(QStringLiteral("/tmp/main.zith"));
+        editor.setInitialDocumentText(QStringLiteral("main\n"), 1);
+        editor.setLspClient(&client);
+        tabs.addTab(&editor, QStringLiteral("main.zith"));
         LspCodeActionRouter::Callbacks callbacks;
         callbacks.applyWorkspaceEdit =
             [&appliedEdit](const QJsonObject &edit) { appliedEdit = edit; };
@@ -4441,17 +4667,21 @@ treeMaxDepth = 65
                     menu->actions().first()->trigger();
                 }
             };
-        LspCodeActionRouter router(&parent, std::move(callbacks));
+        LspCodeActionRouter router(&parent, &tabs, std::move(callbacks));
         router.attach(&client);
 
         const QJsonObject edit{{QStringLiteral("changes"),
                                 QJsonObject{{QStringLiteral("file:///tmp/a.zith"),
                                              QJsonArray{}}}}};
+        const QJsonArray actions{
+            QJsonObject{{QStringLiteral("title"),
+                         QStringLiteral("Extract method")},
+                        {QStringLiteral("edit"), edit}}};
+        emit foreignClient.codeActionsResult(editor.fileUri(),
+                                             editor.documentVersion(), actions);
+        QCOMPARE(presentedActions, 0);
         emit client.codeActionsResult(
-            QStringLiteral("file:///tmp/main.zith"), 1,
-            QJsonArray{QJsonObject{{QStringLiteral("title"),
-                                    QStringLiteral("Extract method")},
-                                   {QStringLiteral("edit"), edit}}});
+            editor.fileUri(), editor.documentVersion(), actions);
 
         QCOMPARE(presentedActions, 1);
         QCOMPARE(presentedTitle, QStringLiteral("Extract method"));
@@ -5403,6 +5633,56 @@ treeMaxDepth = 65
                  QStringLiteral("changed\n"));
     }
 
+    void testWorkspaceEditApplierAppliesResourceOperationsTransactionally() {
+        QTemporaryDir tempDir;
+        QVERIFY(tempDir.isValid());
+
+        const QString createdPath =
+            QDir(tempDir.path()).filePath(QStringLiteral("created.zith"));
+        const QString renamedPath =
+            QDir(tempDir.path()).filePath(QStringLiteral("renamed.zith"));
+        const QString deletedPath =
+            QDir(tempDir.path()).filePath(QStringLiteral("deleted.zith"));
+        QFile deletedFile(deletedPath);
+        QVERIFY(deletedFile.open(QIODevice::WriteOnly | QIODevice::Text));
+        deletedFile.write("to delete\n");
+        deletedFile.close();
+
+        const QString createdUri = QUrl::fromLocalFile(createdPath).toString();
+        const QString renamedUri = QUrl::fromLocalFile(renamedPath).toString();
+        const QString deletedUri = QUrl::fromLocalFile(deletedPath).toString();
+        const QJsonObject textEdit{
+            {"range",
+             QJsonObject{
+                 {"start", QJsonObject{{"line", 0}, {"character", 0}}},
+                 {"end", QJsonObject{{"line", 0}, {"character", 0}}}}},
+            {"newText", "created\n"}};
+        const QJsonObject workspaceEdit{
+            {"documentChanges",
+             QJsonArray{
+                 QJsonObject{{"kind", "create"}, {"uri", createdUri}},
+                 QJsonObject{
+                     {"textDocument", QJsonObject{{"uri", createdUri}}},
+                     {"edits", QJsonArray{textEdit}}},
+                 QJsonObject{{"kind", "rename"},
+                             {"oldUri", createdUri},
+                             {"newUri", renamedUri}},
+                 QJsonObject{{"kind", "delete"}, {"uri", deletedUri}}}}};
+
+        QTabWidget tabs;
+        WorkspaceEditApplier applier(&tabs);
+        const auto result = applier.apply(workspaceEdit);
+        QVERIFY2(result.applied, qPrintable(result.error));
+        QVERIFY(!QFileInfo::exists(createdPath));
+        QVERIFY(QFileInfo::exists(renamedPath));
+        QVERIFY(!QFileInfo::exists(deletedPath));
+
+        QFile renamedFile(renamedPath);
+        QVERIFY(renamedFile.open(QIODevice::ReadOnly | QIODevice::Text));
+        QCOMPARE(QString::fromUtf8(renamedFile.readAll()),
+                 QStringLiteral("created\n"));
+    }
+
     void testLspCompletionRouterCombinesOnlyForActiveEditor() {
         QTabWidget tabs;
         CodeEditor editor;
@@ -5412,6 +5692,7 @@ treeMaxDepth = 65
         LspCompleter completer(&model);
 
         editor.setFilePath(QStringLiteral("/tmp/main.zith"));
+        editor.setLspClient(&client);
         tabs.addTab(&editor, QStringLiteral("main.zith"));
 
         LspCompletionRouter::Dependencies dependencies;
@@ -5423,13 +5704,35 @@ treeMaxDepth = 65
                                    []() { return true; });
         router.attach(&client);
 
+        const int currentVersion = editor.documentVersion();
         const LspCompletionItem item{
             QStringLiteral("println"), 3, QStringLiteral("function"),
             QStringLiteral("println"), 1, {}};
-        emit client.completionResults(editor.fileUri(), 1, {item});
+        emit client.completionResults(editor.fileUri(), currentVersion, {item});
 
         QCOMPARE(model.rowCount(), 1);
         QCOMPARE(completer.widget(), static_cast<QWidget *>(&editor));
+
+        emit client.completionResults(editor.fileUri(), currentVersion - 1,
+                                      {LspCompletionItem{QStringLiteral("stale")}});
+        QCOMPARE(model.rowCount(), 1);
+
+        LspCompletionItem resolved = item;
+        resolved.detail = QStringLiteral("resolved documentation");
+        resolved.rawItem = QJsonObject{
+            {"label", QStringLiteral("println")},
+            {"data", QJsonObject{{"id", 7}}},
+            {"detail", resolved.detail}};
+        LspCompletionItem pending = item;
+        pending.rawItem = QJsonObject{
+            {"label", QStringLiteral("println")},
+            {"data", QJsonObject{{"id", 7}}}};
+        model.setItems({pending});
+        emit client.completionResolved(editor.fileUri(), editor.documentVersion(),
+                                       resolved);
+        QCOMPARE(model.data(model.index(0, 0), LspCompletionModel::DetailRole)
+                     .toString(),
+                 resolved.detail);
 
         emit client.completionResults(
             QUrl::fromLocalFile(QStringLiteral("/tmp/other.zith")).toString(),

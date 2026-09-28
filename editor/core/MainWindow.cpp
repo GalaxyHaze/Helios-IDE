@@ -229,7 +229,22 @@ MainWindow::MainWindow(QWidget *parent)
       this);
   m_lspCompletionRouter->attach(m_zithLspClient);
   m_lspCompletionRouter->attach(m_clangdClient);
-  m_workspaceEditApplier = new WorkspaceEditApplier(m_tabWidget, this);
+  WorkspaceEditApplier::Callbacks workspaceEditCallbacks;
+  workspaceEditCallbacks.renameEditor =
+      [this](CodeEditor *editor, const QString &path) {
+        return m_editorSession && m_editorSession->assignPath(editor, path);
+      };
+  workspaceEditCallbacks.closeEditor = [this](CodeEditor *editor) {
+    if (!m_editorSession)
+      return false;
+    m_editorSession->releaseEditor(editor);
+    return true;
+  };
+  m_workspaceEditApplier =
+      new WorkspaceEditApplier(m_tabWidget,
+                               std::move(workspaceEditCallbacks), this);
+  configureLspServerRequests(m_zithLspClient);
+  configureLspServerRequests(m_clangdClient);
   m_zithRuntime->setPreferOnline(
       m_lspSettingsPersistence.useOnlineZithLsp());
 
@@ -304,7 +319,8 @@ MainWindow::MainWindow(QWidget *parent)
       [this](const QString &uri, int version) {
         if (auto *editor = currentEditor()) {
           if (auto *client = lspClientForPath(editor->filePath());
-              client && client->isReady()) {
+              client && client->isReady() &&
+              client->supports(LspClient::Capability::DocumentSymbol)) {
             client->requestDocumentSymbols(uri, version);
           }
         }
@@ -505,7 +521,8 @@ MainWindow::MainWindow(QWidget *parent)
             {});
       };
   m_lspCodeActions =
-      new LspCodeActionRouter(this, std::move(codeActionCallbacks), this);
+      new LspCodeActionRouter(this, m_tabWidget, std::move(codeActionCallbacks),
+                              this);
   m_lspCodeActions->attach(m_zithLspClient);
   m_lspCodeActions->attach(m_clangdClient);
 
@@ -958,4 +975,96 @@ void MainWindow::applyWorkspaceEdit(const QJsonObject &edit) {
       m_workspaceEditApplier->apply(edit);
   if (!result.applied)
     m_statusBarController->showMessage(result.error, 5000);
+}
+
+QJsonObject MainWindow::applyWorkspaceEditRequest(
+    const QJsonObject &params) {
+  if (!m_workspaceEditApplier)
+    return {{"applied", false},
+            {"failureReason", QStringLiteral("Workspace edit unavailable.")}};
+
+  const QJsonObject edit = params.value(QStringLiteral("edit")).toObject();
+  const WorkspaceEditApplier::Result result =
+      m_workspaceEditApplier->apply(edit);
+  if (!result.applied && m_statusBarController)
+    m_statusBarController->showMessage(result.error, 5000);
+
+  QJsonObject response{{QStringLiteral("applied"), result.applied}};
+  if (!result.applied && !result.error.isEmpty())
+    response.insert(QStringLiteral("failureReason"), result.error);
+  return response;
+}
+
+QJsonValue MainWindow::showMessageRequest(const QJsonObject &params) {
+  const QString message = params.value(QStringLiteral("message")).toString();
+  const QJsonArray actions = params.value(QStringLiteral("actions")).toArray();
+  if (actions.isEmpty()) {
+    QMessageBox::information(this, QStringLiteral("Language Server"),
+                             message);
+    return QJsonValue::Null;
+  }
+
+  QMessageBox box(this);
+  const int type = params.value(QStringLiteral("type")).toInt(3);
+  switch (type) {
+  case 1:
+    box.setIcon(QMessageBox::Critical);
+    break;
+  case 2:
+    box.setIcon(QMessageBox::Warning);
+    break;
+  case 4:
+    box.setIcon(QMessageBox::NoIcon);
+    break;
+  default:
+    box.setIcon(QMessageBox::Information);
+    break;
+  }
+  box.setWindowTitle(QStringLiteral("Language Server"));
+  box.setText(message);
+
+  QList<QPair<QPushButton *, QJsonObject>> buttons;
+  for (const QJsonValue &value : actions) {
+    const QJsonObject action = value.toObject();
+    const QString title =
+        action.value(QStringLiteral("title")).toString();
+    if (title.isEmpty())
+      continue;
+    auto *button = box.addButton(title, QMessageBox::AcceptRole);
+    buttons.append({button, action});
+  }
+
+  if (buttons.isEmpty())
+    return QJsonValue::Null;
+  box.exec();
+  for (const auto &button : buttons) {
+    if (box.clickedButton() == button.first)
+      return button.second;
+  }
+  return QJsonValue::Null;
+}
+
+QJsonArray MainWindow::configurationRequest(const QJsonArray &items) const {
+  QJsonArray values;
+  for (const QJsonValue &item : items)
+    Q_UNUSED(item);
+  for (int index = 0; index < items.size(); ++index)
+    values.append(QJsonValue::Null);
+  return values;
+}
+
+void MainWindow::configureLspServerRequests(LspClient *client) {
+  if (!client)
+    return;
+
+  LspClient::ServerRequestHandlers handlers;
+  handlers.applyWorkspaceEdit =
+      [this](const QJsonObject &params) {
+        return applyWorkspaceEditRequest(params);
+      };
+  handlers.showMessageRequest =
+      [this](const QJsonObject &params) { return showMessageRequest(params); };
+  handlers.configuration =
+      [this](const QJsonArray &items) { return configurationRequest(items); };
+  client->setServerRequestHandlers(std::move(handlers));
 }

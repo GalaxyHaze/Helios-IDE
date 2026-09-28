@@ -80,9 +80,21 @@ void LspDocumentCoordinator::synchronize(CodeEditor *editor, bool openDocument)
             editor->toPlainText(),
             editor->documentVersion());
         editor->markLspDocumentSynchronized();
+        if (target->supports(LspClient::Capability::SemanticTokens))
+            target->requestSemanticTokens(editor->fileUri(),
+                                          editor->documentVersion());
+        if (target->supports(LspClient::Capability::FoldingRange))
+            target->requestFoldingRanges(editor->fileUri(),
+                                         editor->documentVersion());
     } else {
         editor->flushPendingLspChanges();
         target->saveDocument(editor->fileUri());
+        if (target->supports(LspClient::Capability::SemanticTokens))
+            target->requestSemanticTokens(editor->fileUri(),
+                                          editor->documentVersion());
+        if (target->supports(LspClient::Capability::FoldingRange))
+            target->requestFoldingRanges(editor->fileUri(),
+                                         editor->documentVersion());
     }
 }
 

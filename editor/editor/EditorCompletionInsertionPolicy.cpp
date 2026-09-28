@@ -19,9 +19,21 @@ EditorCompletionInsertionPolicy::prepare(const QString &line,
         --start;
     }
 
+    return prepareRange(start, cursorPosition, insertText,
+                        insertTextFormat);
+}
+
+EditorCompletionInsertionPolicy::Decision
+EditorCompletionInsertionPolicy::prepareRange(int start, int end,
+                                              const QString &insertText,
+                                              int insertTextFormat)
+{
+    if (start < 0 || end < start)
+        return {};
+
     Decision decision;
     decision.start = start;
-    decision.end = cursorPosition;
+    decision.end = end;
     decision.text = insertTextFormat == 2 ? expandSnippet(insertText)
                                           : insertText;
     decision.valid = true;

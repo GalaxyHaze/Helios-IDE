@@ -9,6 +9,8 @@ public:
     static LspRange range(const QJsonObject &value);
     static LspLocation location(const QJsonObject &value);
     static QList<LspLocation> locations(const QJsonValue &value);
+    static QList<LspSemanticToken> semanticTokens(const QJsonValue &value);
+    static QList<LspFoldingRange> foldingRanges(const QJsonValue &value);
 
     static QList<LspCompletionItem> completionItems(const QJsonValue &value);
     static LspCompletionItem completionItem(const QJsonObject &value,

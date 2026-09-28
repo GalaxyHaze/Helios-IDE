@@ -16,6 +16,9 @@ public:
 
     static Decision prepare(const QString &line, int cursorPosition,
                             const QString &insertText, int insertTextFormat);
+    static Decision prepareRange(int start, int end,
+                                 const QString &insertText,
+                                 int insertTextFormat);
 
 private:
     static QString expandSnippet(const QString &text);

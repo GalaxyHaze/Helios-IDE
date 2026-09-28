@@ -83,14 +83,14 @@ signals:
     void signatureHelpResult(const QString &uri, int version,
                              const LspSignatureHelp &help);
     void semanticTokensResult(const QString &uri, int version,
-                              const QJsonArray &tokens);
+                              const QList<LspSemanticToken> &tokens);
     void formattingResult(
         const QString &uri, int version,
         const QList<QPair<LspRange, QString>> &edits);
     void documentSymbolsResult(const QString &uri, int version,
                                const QJsonArray &symbols);
     void foldingRangesResult(const QString &uri, int version,
-                             const QJsonArray &ranges);
+                             const QList<LspFoldingRange> &ranges);
     void renameResult(const QString &uri, int version,
                       const QJsonObject &edit);
     void codeActionsResult(const QString &uri, int version,

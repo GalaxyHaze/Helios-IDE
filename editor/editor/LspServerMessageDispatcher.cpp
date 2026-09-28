@@ -26,23 +26,85 @@ void LspServerMessageDispatcher::handleServerRequest(
 {
     const QString method = message.value("method").toString();
     const QJsonValue id = message.value("id");
-    if (method == QLatin1String("window/workDoneProgress/create")) {
+    const auto sendResult = [this, &id](const QJsonValue &result) {
         if (m_dependencies.isRunning && m_dependencies.isRunning() &&
             m_dependencies.sendMessage)
             m_dependencies.sendMessage(
-                {{"jsonrpc", "2.0"}, {"id", id}, {"result", QJsonValue::Null}});
+                {{"jsonrpc", "2.0"}, {"id", id}, {"result", result}});
+    };
+    const auto sendError = [this, &id](int code, const QString &text) {
+        if (m_dependencies.isRunning && m_dependencies.isRunning() &&
+            m_dependencies.sendMessage)
+            m_dependencies.sendMessage(
+                {{"jsonrpc", "2.0"},
+                 {"id", id},
+                 {"error", QJsonObject{{"code", code}, {"message", text}}}});
+    };
+
+    if (method == QLatin1String("window/workDoneProgress/create")) {
+        sendResult(QJsonValue::Null);
         return;
     }
 
-    if (m_dependencies.isRunning && m_dependencies.isRunning() &&
-        m_dependencies.sendMessage)
-        m_dependencies.sendMessage(
-            {{"jsonrpc", "2.0"},
-             {"id", id},
-             {"error",
-              QJsonObject{{"code", -32601},
-                          {"message", QStringLiteral("Method not found: ") +
-                                          method}}}});
+    if (method == QLatin1String("workspace/applyEdit")) {
+        if (m_dependencies.applyWorkspaceEdit) {
+            sendResult(m_dependencies.applyWorkspaceEdit(
+                message.value("params").toObject()));
+        }
+        else {
+            sendResult(QJsonObject{
+                {"applied", false},
+                {"failureReason",
+                 QStringLiteral("Workspace edit handling is unavailable.")}});
+        }
+        return;
+    }
+
+    if (method == QLatin1String("window/showMessageRequest")) {
+        const QJsonValue result = m_dependencies.showMessageRequest
+                                      ? m_dependencies.showMessageRequest(
+                                            message.value("params").toObject())
+                                      : QJsonValue::Null;
+        sendResult(result);
+        return;
+    }
+
+    if (method == QLatin1String("workspace/configuration")) {
+        const QJsonArray items =
+            message.value("params").toObject().value("items").toArray();
+        QJsonArray values;
+        if (m_dependencies.configuration)
+            values = m_dependencies.configuration(items);
+        else
+            for (int index = 0; index < items.size(); ++index)
+                values.append(QJsonValue::Null);
+        sendResult(values);
+        return;
+    }
+
+    if (method == QLatin1String("client/registerCapability")) {
+        if (m_dependencies.registerCapability)
+            m_dependencies.registerCapability(
+                message.value("params")
+                    .toObject()
+                    .value("registrations")
+                    .toArray());
+        sendResult(QJsonValue::Null);
+        return;
+    }
+
+    if (method == QLatin1String("client/unregisterCapability")) {
+        if (m_dependencies.unregisterCapability)
+            m_dependencies.unregisterCapability(
+                message.value("params")
+                    .toObject()
+                    .value("unregisterations")
+                    .toArray());
+        sendResult(QJsonValue::Null);
+        return;
+    }
+
+    sendError(-32601, QStringLiteral("Method not found: ") + method);
 }
 
 void LspServerMessageDispatcher::handleNotification(

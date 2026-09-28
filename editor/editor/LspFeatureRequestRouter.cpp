@@ -163,10 +163,10 @@ void LspFeatureRequestRouter::requestDocument(
          [this, feature, uri, version](const QJsonObject &response) {
              const QJsonValue result = response.value("result");
              switch (feature) {
-             case DocumentFeature::SemanticTokens:
-                 emit semanticTokensResult(
-                     uri, version,
-                     result.toObject().value("data").toArray());
+            case DocumentFeature::SemanticTokens:
+                emit semanticTokensResult(
+                    uri, version,
+                    LspResultDecoder::semanticTokens(result));
                  break;
              case DocumentFeature::Formatting:
                  emit formattingResult(
@@ -176,7 +176,8 @@ void LspFeatureRequestRouter::requestDocument(
                  emit documentSymbolsResult(uri, version, result.toArray());
                  break;
              case DocumentFeature::FoldingRanges:
-                 emit foldingRangesResult(uri, version, result.toArray());
+                 emit foldingRangesResult(
+                     uri, version, LspResultDecoder::foldingRanges(result));
                  break;
              }
          });

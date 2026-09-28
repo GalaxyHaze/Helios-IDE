@@ -2,6 +2,7 @@
 #define LSPSERVERMESSAGEDISPATCHER_H
 
 #include <QJsonObject>
+#include <QJsonArray>
 #include <QObject>
 #include <QString>
 
@@ -14,6 +15,11 @@ struct LspServerMessageDispatcherDependencies
     std::function<bool(const QJsonObject &)> sendMessage;
     std::function<bool()> isRunning;
     std::function<bool(const QString &, int)> isCurrentDocument;
+    std::function<QJsonObject(const QJsonObject &)> applyWorkspaceEdit;
+    std::function<QJsonValue(const QJsonObject &)> showMessageRequest;
+    std::function<QJsonArray(const QJsonArray &)> configuration;
+    std::function<void(const QJsonArray &)> registerCapability;
+    std::function<void(const QJsonArray &)> unregisterCapability;
 };
 
 class LspServerMessageDispatcher : public QObject

@@ -25,14 +25,52 @@ void LspCompletionRouter::attach(LspClient *client)
         return;
 
     connect(client, &LspClient::completionResults, this,
-            [this](const QString &uri, int,
+            [this, client](const QString &uri, int version,
                    const QList<LspCompletionItem> &items) {
-                handleCompletion(uri, items);
+                handleCompletion(client, uri, version, items);
             });
+    connect(client, &LspClient::completionResolved, this,
+            [this, client](const QString &uri, int version,
+                   const LspCompletionItem &item) {
+                if (!m_tabWidget || !m_completionModel)
+                    return;
+                auto *editor =
+                    qobject_cast<CodeEditor *>(m_tabWidget->currentWidget());
+                if (!editor || editor->lspClient() != client ||
+                    editor->fileUri() != uri ||
+                    editor->documentVersion() != version) {
+                    return;
+                }
+                m_completionModel->updateItem(item);
+            });
+    if (m_completer) {
+        connect(m_completer,
+                QOverload<const QModelIndex &>::of(
+                    &QCompleter::highlighted),
+                this, [this, client](const QModelIndex &) {
+                    if (!m_tabWidget || !m_completionModel ||
+                        !m_completer)
+                        return;
+                    auto *editor = qobject_cast<CodeEditor *>(
+                        m_tabWidget->currentWidget());
+                    if (!editor || editor->lspClient() != client ||
+                        !client->isReady()) {
+                        return;
+                    }
+                    const LspCompletionItem item =
+                        m_completer->currentItem();
+                    if (!item.rawItem.contains(QStringLiteral("data")))
+                        return;
+                    client->resolveCompletion(editor->fileUri(),
+                                              editor->documentVersion(),
+                                              item.rawItem);
+                });
+    }
 }
 
 void LspCompletionRouter::handleCompletion(
-    const QString &uri, const QList<LspCompletionItem> &items)
+    LspClient *client, const QString &uri, int version,
+    const QList<LspCompletionItem> &items)
 {
     if (m_isEnabled && !m_isEnabled())
         return;
@@ -40,7 +78,8 @@ void LspCompletionRouter::handleCompletion(
         return;
 
     auto *editor = qobject_cast<CodeEditor *>(m_tabWidget->currentWidget());
-    if (!editor || editor->fileUri() != uri)
+    if (!editor || editor->lspClient() != client ||
+        editor->fileUri() != uri || editor->documentVersion() != version)
         return;
 
     QList<LspCompletionItem> all = items;

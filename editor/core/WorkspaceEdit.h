@@ -16,6 +16,26 @@ public:
     {
         QString uri;
         QList<QPair<LspRange, QString>> edits;
+        std::optional<int> version;
+    };
+
+    struct Operation
+    {
+        enum class Kind
+        {
+            TextDocumentEdit,
+            CreateFile,
+            RenameFile,
+            DeleteFile
+        };
+
+        Kind kind = Kind::TextDocumentEdit;
+        QString uri;
+        QString newUri;
+        QList<QPair<LspRange, QString>> edits;
+        std::optional<int> version;
+        bool ignoreIfExists = false;
+        bool overwrite = false;
     };
 
     static std::optional<WorkspaceEdit> fromJson(
@@ -28,11 +48,13 @@ public:
         QString *errorMessage = nullptr);
 
     const QList<Target> &targets() const { return m_targets; }
+    const QList<Operation> &operations() const { return m_operations; }
 
 private:
-    explicit WorkspaceEdit(QList<Target> targets);
+    WorkspaceEdit(QList<Target> targets, QList<Operation> operations);
 
     QList<Target> m_targets;
+    QList<Operation> m_operations;
 };
 
 #endif

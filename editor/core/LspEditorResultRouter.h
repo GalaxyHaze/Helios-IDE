@@ -19,11 +19,19 @@ public:
     void attach(LspClient *client);
 
 private:
-    CodeEditor *currentEditorFor(const QString &uri, int version) const;
-    void handleFormatting(const QString &uri, int version,
+    CodeEditor *currentEditorFor(LspClient *client, const QString &uri,
+                                 int version) const;
+    void handleFormatting(LspClient *client, const QString &uri, int version,
                           const QList<QPair<LspRange, QString>> &edits);
-    void handleDocumentSymbols(const QString &uri, int version,
+    void handleDocumentSymbols(LspClient *client, const QString &uri,
+                               int version,
                                const QJsonArray &symbols);
+    void handleSemanticTokens(LspClient *client, const QString &uri,
+                              int version,
+                              const QList<LspSemanticToken> &tokens);
+    void handleFoldingRanges(LspClient *client, const QString &uri,
+                             int version,
+                             const QList<LspFoldingRange> &ranges);
 
     QTabWidget *m_tabWidget;
     OutlinePanel *m_outlinePanel;

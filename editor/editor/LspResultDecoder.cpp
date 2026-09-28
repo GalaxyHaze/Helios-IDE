@@ -42,6 +42,55 @@ QList<LspLocation> LspResultDecoder::locations(const QJsonValue &value)
     return result;
 }
 
+QList<LspSemanticToken> LspResultDecoder::semanticTokens(
+    const QJsonValue &value)
+{
+    const QJsonArray data =
+        value.isObject() ? value.toObject().value("data").toArray()
+                         : value.toArray();
+    QList<LspSemanticToken> result;
+    int line = 0;
+    int character = 0;
+    for (int index = 0; index + 4 < data.size(); index += 5) {
+        const int deltaLine = data.at(index).toInt();
+        const int deltaStart = data.at(index + 1).toInt();
+        const int length = data.at(index + 2).toInt();
+        if (deltaLine < 0 || deltaStart < 0 || length <= 0)
+            continue;
+
+        line += deltaLine;
+        character = deltaLine == 0 ? character + deltaStart : deltaStart;
+        result.append({{{line, character},
+                        {line, character + length}},
+                       data.at(index + 3).toInt(),
+                       data.at(index + 4).toInt()});
+    }
+    return result;
+}
+
+QList<LspFoldingRange> LspResultDecoder::foldingRanges(
+    const QJsonValue &value)
+{
+    QList<LspFoldingRange> result;
+    for (const QJsonValue &entry : value.toArray()) {
+        const QJsonObject object = entry.toObject();
+        if (!object.contains(QStringLiteral("startLine")) ||
+            !object.contains(QStringLiteral("endLine"))) {
+            continue;
+        }
+        const int startLine = object.value(QStringLiteral("startLine")).toInt(-1);
+        const int endLine = object.value(QStringLiteral("endLine")).toInt(-1);
+        if (startLine < 0 || endLine <= startLine)
+            continue;
+        result.append(
+            {startLine,
+             object.value(QStringLiteral("startCharacter")).toInt(0),
+             endLine,
+             object.value(QStringLiteral("endCharacter")).toInt(0)});
+    }
+    return result;
+}
+
 QList<LspCompletionItem> LspResultDecoder::completionItems(
     const QJsonValue &value)
 {

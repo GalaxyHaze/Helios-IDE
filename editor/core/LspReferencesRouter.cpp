@@ -21,20 +21,20 @@ void LspReferencesRouter::attach(LspClient *client)
         return;
 
     connect(client, &LspClient::referencesResult, this,
-            [this](const QString &uri, int version,
+            [this, client](const QString &uri, int version,
                    const QList<LspLocation> &locations) {
-                handleReferences(uri, version, locations);
+                handleReferences(client, uri, version, locations);
             });
 }
 
-CodeEditor *LspReferencesRouter::currentEditorFor(const QString &uri,
-                                                  int version) const
+CodeEditor *LspReferencesRouter::currentEditorFor(
+    LspClient *client, const QString &uri, int version) const
 {
     if (!m_tabWidget)
         return nullptr;
 
     auto *editor = qobject_cast<CodeEditor *>(m_tabWidget->currentWidget());
-    if (!editor || editor->fileUri() != uri ||
+    if (!editor || editor->lspClient() != client || editor->fileUri() != uri ||
         editor->documentVersion() != version) {
         return nullptr;
     }
@@ -42,9 +42,10 @@ CodeEditor *LspReferencesRouter::currentEditorFor(const QString &uri,
 }
 
 void LspReferencesRouter::handleReferences(
-    const QString &uri, int version, const QList<LspLocation> &locations)
+    LspClient *client, const QString &uri, int version,
+    const QList<LspLocation> &locations)
 {
-    if (!m_referencesPanel || !currentEditorFor(uri, version))
+    if (!m_referencesPanel || !currentEditorFor(client, uri, version))
         return;
 
     m_referencesPanel->setReferences(locations);

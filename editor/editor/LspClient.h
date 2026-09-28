@@ -4,7 +4,9 @@
 #include <QByteArray>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QHash>
 #include <QObject>
+#include <QSet>
 #include <QString>
 #include <functional>
 
@@ -42,6 +44,13 @@ public:
         ExecuteCommand
     };
 
+    struct ServerRequestHandlers
+    {
+        std::function<QJsonObject(const QJsonObject &)> applyWorkspaceEdit;
+        std::function<QJsonValue(const QJsonObject &)> showMessageRequest;
+        std::function<QJsonArray(const QJsonArray &)> configuration;
+    };
+
     explicit LspClient(QObject *parent = nullptr);
     ~LspClient() override;
 
@@ -61,6 +70,7 @@ public:
     int documentVersion(const QString &uri) const;
 
     bool supports(Capability capability) const;
+    void setServerRequestHandlers(ServerRequestHandlers handlers);
 
     void openDocument(const QString &uri, const QString &languageId, const QString &text, int version = 1);
     bool changeDocument(const QString &uri,
@@ -106,10 +116,12 @@ signals:
     void referencesResult(const QString &uri, int version, const QList<LspLocation> &locations);
     void documentHighlightsResult(const QString &uri, int version, const QList<LspRange> &ranges);
     void signatureHelpResult(const QString &uri, int version, const LspSignatureHelp &help);
-    void semanticTokensResult(const QString &uri, int version, const QJsonArray &tokens);
+    void semanticTokensResult(const QString &uri, int version,
+                              const QList<LspSemanticToken> &tokens);
     void formattingResult(const QString &uri, int version, const QList<QPair<LspRange, QString>> &edits);
     void documentSymbolsResult(const QString &uri, int version, const QJsonArray &symbols);
-    void foldingRangesResult(const QString &uri, int version, const QJsonArray &ranges);
+    void foldingRangesResult(const QString &uri, int version,
+                             const QList<LspFoldingRange> &ranges);
     void renameResult(const QString &uri, int version, const QJsonObject &edit);
     void codeActionsResult(const QString &uri, int version, const QJsonArray &actions);
     void saveAllRequested();
@@ -136,6 +148,9 @@ private:
     void cancelRequestsForUri(const QString &uri);
     void recordStderr(const QByteArray &chunk);
     void parseServerCapabilities(const QJsonObject &caps);
+    void registerDynamicCapabilities(const QJsonArray &registrations);
+    void unregisterDynamicCapabilities(const QJsonArray &registrations);
+    static QString capabilityMethod(Capability capability);
     QString unexpectedProcessExitMessage(const LspProcessResult &result) const;
 
     LspProcessTransport m_transport;
@@ -148,6 +163,9 @@ private:
     QStringList m_stderrLines;
 
     LspServerCapabilities m_capabilities;
+    QSet<QString> m_dynamicCapabilities;
+    QHash<QString, QString> m_dynamicCapabilityMethods;
+    ServerRequestHandlers m_serverRequestHandlers;
 };
 
 #endif

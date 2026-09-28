@@ -23,6 +23,49 @@ void EditorDecorationController::setDiagnostics(
     applySelections();
 }
 
+void EditorDecorationController::setSemanticTokens(
+    const QList<LspSemanticToken> &tokens)
+{
+    m_semanticTokens = tokens;
+    updateSemanticTokenSelections();
+    applySelections();
+}
+
+void EditorDecorationController::clearSemanticTokens()
+{
+    m_semanticTokens.clear();
+    m_semanticTokenSelections.clear();
+    applySelections();
+}
+
+void EditorDecorationController::updateSemanticTokenSelections()
+{
+    m_semanticTokenSelections.clear();
+    if (!m_editor || !m_appearance)
+        return;
+
+    const QColor base = m_appearance->appearance().foreground;
+    for (const LspSemanticToken &token : m_semanticTokens) {
+        const int hue = (token.tokenType * 47) % 360;
+        QColor underline = QColor::fromHsv(
+            hue, 120, qBound(80, base.value(), 255));
+        underline.setAlpha(190);
+
+        QTextEdit::ExtraSelection selection;
+        selection.format.setUnderlineStyle(QTextCharFormat::SingleUnderline);
+        selection.format.setUnderlineColor(underline);
+        selection.cursor = m_editor->textCursor();
+        selection.cursor.setPosition(
+            EditorTextEditApplier::offsetForLspPosition(
+                *m_editor->document(), token.range.start));
+        selection.cursor.setPosition(
+            EditorTextEditApplier::offsetForLspPosition(
+                *m_editor->document(), token.range.end),
+            QTextCursor::KeepAnchor);
+        m_semanticTokenSelections.append(selection);
+    }
+}
+
 void EditorDecorationController::setLspHighlightRanges(
     const QList<LspRange> &ranges)
 {
@@ -72,6 +115,7 @@ void EditorDecorationController::refreshCursorDecorations()
 void EditorDecorationController::refreshAppearance()
 {
     updateDiagnosticSelections();
+    updateSemanticTokenSelections();
     updateBracketSelections();
     applySelections();
 }
@@ -104,6 +148,7 @@ void EditorDecorationController::applySelections()
 
     QList<QTextEdit::ExtraSelection> selections;
     selections.append(m_diagnosticSelections);
+    selections.append(m_semanticTokenSelections);
     selections.append(m_bracketSelections);
     selections.append(m_lspHighlightSelections);
     selections.append(m_findSelections);

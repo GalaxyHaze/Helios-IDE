@@ -3,6 +3,7 @@
 
 #include <QMainWindow>
 #include <QIcon>
+#include <QJsonArray>
 #include <QJsonObject>
 #include "ClangdLifecycleCoordinator.h"
 #include "EditorSyntaxController.h"
@@ -118,6 +119,10 @@ private:
     void applyTheme();
     void applyTranslations();
     void applyAppearanceChange();
+    QJsonObject applyWorkspaceEditRequest(const QJsonObject &params);
+    QJsonValue showMessageRequest(const QJsonObject &params);
+    QJsonArray configurationRequest(const QJsonArray &items) const;
+    void configureLspServerRequests(LspClient *client);
 
     QTabWidget *m_tabWidget = nullptr;
     LspClient *m_zithLspClient = nullptr;

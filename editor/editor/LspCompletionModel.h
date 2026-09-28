@@ -27,6 +27,8 @@ public:
 
     void setItems(const QList<LspCompletionItem> &items);
     QString insertTextAt(int row) const;
+    LspCompletionItem itemAt(int row) const;
+    bool updateItem(const LspCompletionItem &item);
 
 private:
     QList<LspCompletionItem> m_items;
@@ -42,6 +44,7 @@ public:
     QString insertText() const;
     int insertTextFormat() const;
     int completionKind() const;
+    LspCompletionItem currentItem() const;
 
 private slots:
     void onHighlighted(const QModelIndex &index);
@@ -51,6 +54,7 @@ private:
     mutable int m_currentKind = 0;
     mutable int m_currentInsertTextFormat = 1;
     mutable QString m_currentInsertText;
+    mutable LspCompletionItem m_currentItem;
 };
 
 #endif // LSPCOMPLETIONMODEL_H

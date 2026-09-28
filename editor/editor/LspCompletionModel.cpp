@@ -54,6 +54,32 @@ QString LspCompletionModel::insertTextAt(int row) const
     return m_items[row].insertText;
 }
 
+LspCompletionItem LspCompletionModel::itemAt(int row) const
+{
+    if (row < 0 || row >= m_items.size())
+        return {};
+    return m_items.at(row);
+}
+
+bool LspCompletionModel::updateItem(const LspCompletionItem &item)
+{
+    for (int row = 0; row < m_items.size(); ++row) {
+        const LspCompletionItem &current = m_items.at(row);
+        const QJsonValue currentData =
+            current.rawItem.value(QStringLiteral("data"));
+        const QJsonValue resolvedData =
+            item.rawItem.value(QStringLiteral("data"));
+        if (current.label != item.label ||
+            (!currentData.isUndefined() && currentData != resolvedData)) {
+            continue;
+        }
+        m_items[row] = item;
+        emit dataChanged(index(row, 0), index(row, 0));
+        return true;
+    }
+    return false;
+}
+
 // ── LspCompleter ─────────────────────────────────────────────────────
 
 LspCompleter::LspCompleter(LspCompletionModel *model, QObject *parent)
@@ -69,6 +95,12 @@ LspCompleter::LspCompleter(LspCompletionModel *model, QObject *parent)
 
     connect(this, QOverload<const QModelIndex &>::of(&QCompleter::highlighted),
             this, &LspCompleter::onHighlighted);
+    connect(model, &QAbstractItemModel::dataChanged, this,
+            [this](const QModelIndex &, const QModelIndex &, const QList<int> &) {
+                const QModelIndex index = currentIndex();
+                if (index.isValid())
+                    onHighlighted(index);
+            });
 }
 
 QString LspCompleter::insertText() const
@@ -86,6 +118,11 @@ int LspCompleter::insertTextFormat() const
     return m_currentInsertTextFormat;
 }
 
+LspCompletionItem LspCompleter::currentItem() const
+{
+    return m_currentItem;
+}
+
 void LspCompleter::onHighlighted(const QModelIndex &index)
 {
     auto *model = qobject_cast<LspCompletionModel *>(completionModel());
@@ -95,4 +132,5 @@ void LspCompleter::onHighlighted(const QModelIndex &index)
     m_currentInsertText = model->data(index, LspCompletionModel::InsertTextRole).toString();
     m_currentKind = model->data(index, LspCompletionModel::KindRole).toInt();
     m_currentInsertTextFormat = model->data(index, LspCompletionModel::InsertTextFormatRole).toInt();
+    m_currentItem = model->itemAt(index.row());
 }

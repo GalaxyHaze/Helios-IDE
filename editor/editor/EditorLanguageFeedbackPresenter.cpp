@@ -38,9 +38,11 @@ void EditorLanguageFeedbackPresenter::attach(LspClient *client)
 
     m_hoverConnection = connect(
         m_client, &LspClient::hoverResult, this,
-        [this](const QString &uri, int,
+        [this](const QString &uri, int version,
                const LspHoverInfo &info) {
-            if (uri != m_editor->fileUri() || info.contents.isEmpty())
+            if (uri != m_editor->fileUri() ||
+                (version >= 0 && version != m_editor->documentVersion()) ||
+                info.contents.isEmpty())
                 return;
 
             QString text = info.contents;
@@ -122,9 +124,11 @@ void EditorLanguageFeedbackPresenter::attach(LspClient *client)
 
     m_signatureConnection = connect(
         m_client, &LspClient::signatureHelpResult, this,
-        [this](const QString &uri, int,
+        [this](const QString &uri, int version,
                const LspSignatureHelp &help) {
-            if (uri != m_editor->fileUri() || help.parameters.isEmpty())
+            if (uri != m_editor->fileUri() ||
+                (version >= 0 && version != m_editor->documentVersion()) ||
+                help.parameters.isEmpty())
                 return;
 
             QString text = help.activeSignature + QStringLiteral("\n\n");

@@ -9,6 +9,7 @@
 #include "../core/SnippetManager.h"
 #include "EditorLanguageFeatureController.h"
 #include "LspCompletionModel.h"
+#include "LspResultDecoder.h"
 #include "VimMotionController.h"
 #include <QAbstractItemView>
 #include <QContextMenuEvent>
@@ -208,6 +209,9 @@ void CodeEditor::detachLspClient() {
   m_documentSyncController.discardPendingChanges();
   if (m_decorationController)
     m_decorationController->clearLspHighlights();
+  if (m_decorationController)
+    m_decorationController->clearSemanticTokens();
+  clearFoldingRanges();
   clearDiagnostics();
 }
 
@@ -224,7 +228,12 @@ void CodeEditor::setCompleter(LspCompleter *completer) {
     connect(m_completer, QOverload<const QString &>::of(&QCompleter::activated),
             this, [this](const QString &text) {
               if (m_completer->widget() == this) {
-                onCompletionSelected(text, m_completer->insertTextFormat());
+                const LspCompletionItem item = m_completer->currentItem();
+                if (!item.label.isEmpty())
+                    applyCompletionItem(item);
+                else
+                    onCompletionSelected(text,
+                                         m_completer->insertTextFormat());
               }
             });
   }
@@ -242,6 +251,99 @@ void CodeEditor::clearDiagnostics() {
   m_diagnostics.clear();
   if (m_decorationController)
     m_decorationController->setDiagnostics({});
+}
+
+void CodeEditor::setSemanticTokens(
+    const QList<LspSemanticToken> &tokens) {
+  if (m_decorationController)
+    m_decorationController->setSemanticTokens(tokens);
+}
+
+void CodeEditor::clearSemanticTokens() {
+  if (m_decorationController)
+    m_decorationController->clearSemanticTokens();
+}
+
+void CodeEditor::setFoldingRanges(
+    const QList<LspFoldingRange> &ranges) {
+  clearFoldingRanges();
+  m_foldingRanges = ranges;
+  lineNumberArea->update();
+}
+
+void CodeEditor::clearFoldingRanges() {
+  for (auto it = m_hiddenLineCounts.cbegin();
+       it != m_hiddenLineCounts.cend(); ++it) {
+    QTextBlock block = document()->findBlockByNumber(it.key());
+    if (!block.isValid())
+      continue;
+    block.setVisible(true);
+    block.setLineCount(it.value());
+  }
+  m_hiddenLineCounts.clear();
+  document()->markContentsDirty(0, document()->characterCount());
+  viewport()->update();
+  lineNumberArea->update();
+}
+
+bool CodeEditor::hasFoldingRangeAtLine(int line) const
+{
+  for (const LspFoldingRange &range : m_foldingRanges) {
+    if (range.startLine == line)
+      return true;
+  }
+  return false;
+}
+
+bool CodeEditor::isFoldedAtLine(int line) const
+{
+  for (const LspFoldingRange &range : m_foldingRanges) {
+    if (range.startLine != line)
+      continue;
+    const QTextBlock firstHidden =
+        document()->findBlockByNumber(range.startLine + 1);
+    return firstHidden.isValid() && !firstHidden.isVisible();
+  }
+  return false;
+}
+
+void CodeEditor::toggleFoldAtLine(int line)
+{
+  const LspFoldingRange *selected = nullptr;
+  for (const LspFoldingRange &range : m_foldingRanges) {
+    if (range.startLine != line)
+      continue;
+    if (!selected || range.endLine > selected->endLine)
+      selected = &range;
+  }
+  if (!selected)
+    return;
+
+  const QTextBlock firstHidden =
+      document()->findBlockByNumber(selected->startLine + 1);
+  const bool unfold = firstHidden.isValid() && !firstHidden.isVisible();
+  const int lastLine =
+      qMin(selected->endLine, document()->blockCount() - 1);
+  for (int currentLine = selected->startLine + 1;
+       currentLine <= lastLine; ++currentLine) {
+    QTextBlock block = document()->findBlockByNumber(currentLine);
+    if (!block.isValid())
+      continue;
+    if (unfold) {
+      block.setVisible(true);
+      block.setLineCount(m_hiddenLineCounts.value(
+          currentLine, qMax(1, block.lineCount())));
+      m_hiddenLineCounts.remove(currentLine);
+    } else if (block.isVisible()) {
+      m_hiddenLineCounts.insert(currentLine,
+                                qMax(1, block.lineCount()));
+      block.setVisible(false);
+      block.setLineCount(0);
+    }
+  }
+  document()->markContentsDirty(0, document()->characterCount());
+  viewport()->update();
+  lineNumberArea->update();
 }
 
 void CodeEditor::setLspHighlightRanges(const QList<LspRange> &ranges) {
@@ -306,7 +408,16 @@ void CodeEditor::lineNumberAreaPaintEvent(QPaintEvent *event) {
       f.setBold(isCurrent);
       painter.setFont(f);
 
-      painter.drawText(0, top, lineNumberArea->width() - 8,
+      const bool foldable = hasFoldingRangeAtLine(blockNumber);
+      if (foldable) {
+        painter.setPen(editorAppearance().lineNumber);
+        painter.drawText(0, top, 8, fontMetrics().height(), Qt::AlignCenter,
+                         isFoldedAtLine(blockNumber) ? QStringLiteral(">")
+                                                     : QStringLiteral("v"));
+        painter.setPen(isCurrent ? editorAppearance().gutterActive
+                                 : editorAppearance().lineNumber);
+      }
+      painter.drawText(foldable ? 8 : 0, top, lineNumberArea->width() - 8,
                        fontMetrics().height(), Qt::AlignRight, number);
     }
 
@@ -320,6 +431,22 @@ void CodeEditor::lineNumberAreaPaintEvent(QPaintEvent *event) {
   painter.setPen(editorAppearance().border);
   int w = lineNumberArea->width();
   painter.drawLine(w - 1, event->rect().top(), w - 1, event->rect().bottom());
+}
+
+void LineNumberArea::mousePressEvent(QMouseEvent *event)
+{
+  if (event && event->button() == Qt::LeftButton &&
+      event->position().x() < 12) {
+    const QTextCursor cursor =
+        codeEditor->cursorForPosition(
+            QPoint(1, qRound(event->position().y())));
+    if (codeEditor->hasFoldingRangeAtLine(cursor.blockNumber())) {
+      codeEditor->toggleFoldAtLine(cursor.blockNumber());
+      event->accept();
+      return;
+    }
+  }
+  QWidget::mousePressEvent(event);
 }
 
 // ── Key Handling ─────────────────────────────────────────────────────
@@ -534,6 +661,61 @@ void CodeEditor::onCompletionSelected(const QString &insertText,
   setTextCursor(cursor);
 }
 
+void CodeEditor::applyCompletionItem(const LspCompletionItem &item)
+{
+  const QJsonObject raw = item.rawItem;
+  const QJsonObject textEdit = raw.value(QStringLiteral("textEdit"))
+                                   .toObject();
+  if (textEdit.isEmpty()) {
+    onCompletionSelected(item.insertText, item.insertTextFormat);
+    return;
+  }
+
+  QJsonObject rangeValue = textEdit.value(QStringLiteral("range")).toObject();
+  if (rangeValue.isEmpty())
+    rangeValue = textEdit.value(QStringLiteral("replace")).toObject();
+  if (rangeValue.isEmpty()) {
+    onCompletionSelected(item.insertText, item.insertTextFormat);
+    return;
+  }
+
+  const LspRange range = LspResultDecoder::range(rangeValue);
+  const QString newText =
+      textEdit.value(QStringLiteral("newText")).toString(item.insertText);
+  const auto mainDecision = EditorCompletionInsertionPolicy::prepareRange(
+      offsetForLspPosition(range.start), offsetForLspPosition(range.end),
+      newText, item.insertTextFormat);
+  if (!mainDecision.valid)
+    return;
+
+  QList<EditorTextEditApplier::TextEdit> edits =
+      LspResultDecoder::textEdits(
+          raw.value(QStringLiteral("additionalTextEdits")));
+  const int mainStart =
+      EditorTextEditApplier::offsetForLspPosition(*document(), range.start);
+  const int mainEnd =
+      EditorTextEditApplier::offsetForLspPosition(*document(), range.end);
+  int cursorOffset = mainStart + mainDecision.text.size();
+  for (const auto &edit : edits) {
+    const int editStart =
+        EditorTextEditApplier::offsetForLspPosition(*document(),
+                                                    edit.first.start);
+    const int editEnd =
+        EditorTextEditApplier::offsetForLspPosition(*document(),
+                                                    edit.first.end);
+    if (editStart < mainEnd && mainStart < editEnd)
+      return;
+    if (editEnd <= mainStart)
+      cursorOffset += edit.second.size() - (editEnd - editStart);
+  }
+  edits.append({range, mainDecision.text});
+  EditorTextEditApplier::apply(*document(), edits);
+
+  QTextCursor cursor(document());
+  cursor.setPosition(qBound(0, cursorOffset, document()->characterCount() - 1));
+  setTextCursor(cursor);
+}
+
 void CodeEditor::triggerSignatureHelp() {
   if (m_languageFeatures)
     m_languageFeatures->triggerSignatureHelp();
@@ -568,6 +750,9 @@ void CodeEditor::onDocumentContentsChanged(int position, int charsRemoved,
   clearDiagnostics();
   if (m_decorationController)
     m_decorationController->clearLspHighlights();
+  if (m_decorationController)
+    m_decorationController->clearSemanticTokens();
+  clearFoldingRanges();
 }
 
 void CodeEditor::flushDocumentChanges() {

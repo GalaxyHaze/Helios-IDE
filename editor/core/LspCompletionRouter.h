@@ -31,7 +31,7 @@ public:
     void attach(LspClient *client);
 
 private:
-    void handleCompletion(const QString &uri,
+    void handleCompletion(LspClient *client, const QString &uri, int version,
                           const QList<LspCompletionItem> &items);
 
     QTabWidget *m_tabWidget;

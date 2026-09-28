@@ -10,8 +10,14 @@ QJsonObject LspInitializationBuilder::build(
 {
     const bool isClangd = options.initMode == QLatin1String("clangd");
     const QJsonObject textDocument{
+        {"synchronization",
+         QJsonObject{{"dynamicRegistration", true},
+                     {"willSave", true},
+                     {"willSaveWaitUntil", false},
+                     {"didSave", true}}},
         {"completion",
          QJsonObject{
+             {"dynamicRegistration", true},
              {"completionItem",
               QJsonObject{
                   {"snippetSupport", true},
@@ -19,30 +25,54 @@ QJsonObject LspInitializationBuilder::build(
                    QJsonObject{{"properties",
                                 QJsonArray{"detail", "documentation"}}}}}}}},
         {"hover",
-         QJsonObject{{"contentFormat", QJsonArray{"markdown", "plaintext"}}}},
-        {"definition", QJsonObject{}},
-        {"declaration", QJsonObject{}},
-        {"implementation", QJsonObject{}},
-        {"references", QJsonObject{}},
-        {"documentHighlight", QJsonObject{}},
+         QJsonObject{{"dynamicRegistration", true},
+                     {"contentFormat",
+                      QJsonArray{"markdown", "plaintext"}}}},
+        {"definition", QJsonObject{{"dynamicRegistration", true}}},
+        {"declaration", QJsonObject{{"dynamicRegistration", true}}},
+        {"implementation", QJsonObject{{"dynamicRegistration", true}}},
+        {"references", QJsonObject{{"dynamicRegistration", true}}},
+        {"documentHighlight", QJsonObject{{"dynamicRegistration", true}}},
         {"documentSymbol",
-         QJsonObject{{"hierarchicalDocumentSymbolSupport", true}}},
-        {"rename", QJsonObject{}},
-        {"formatting", QJsonObject{}},
-        {"foldingRange", QJsonObject{}},
-        {"codeAction", QJsonObject{}},
-        {"semanticTokens", QJsonObject{{"requests", QJsonObject{{"full", true}}},
-                                       {"formats", QJsonArray{"relative"}}}}};
+         QJsonObject{{"dynamicRegistration", true},
+                     {"hierarchicalDocumentSymbolSupport", true}}},
+        {"rename", QJsonObject{{"dynamicRegistration", true}}},
+        {"formatting", QJsonObject{{"dynamicRegistration", true}}},
+        {"foldingRange", QJsonObject{{"dynamicRegistration", true}}},
+        {"codeAction", QJsonObject{{"dynamicRegistration", true}}},
+        {"semanticTokens",
+         QJsonObject{{"dynamicRegistration", true},
+                     {"requests", QJsonObject{{"full", true}}},
+                     {"formats", QJsonArray{"relative"}}}}};
 
-    QJsonObject params{{"processId", QJsonValue::Null},
-                       {"capabilities",
-                        QJsonObject{{"textDocument", textDocument}}}};
+    const QJsonObject workspaceEdit{
+        {QStringLiteral("documentChanges"), true},
+        {QStringLiteral("resourceOperations"),
+         QJsonArray{QStringLiteral("create"), QStringLiteral("rename"),
+                    QStringLiteral("delete")}},
+        {QStringLiteral("failureHandling"), QStringLiteral("transactional")}};
+    const QJsonObject workspaceCapabilities{
+        {QStringLiteral("applyEdit"), true},
+        {QStringLiteral("configuration"), true},
+        {QStringLiteral("didChangeConfiguration"),
+         QJsonObject{{QStringLiteral("dynamicRegistration"), true}}},
+        {QStringLiteral("workspaceEdit"), workspaceEdit}};
+
+    QJsonObject params{
+        {QStringLiteral("processId"), QJsonValue::Null},
+        {QStringLiteral("capabilities"),
+         QJsonObject{{QStringLiteral("general"),
+                      QJsonObject{{QStringLiteral("positionEncodings"),
+                                   QJsonArray{QStringLiteral("utf-16")}}}},
+                     {QStringLiteral("workspace"), workspaceCapabilities},
+                     {QStringLiteral("textDocument"), textDocument}}}};
     if (!isClangd) {
-        params["capabilities"] =
-            QJsonObject{{"textDocument", textDocument},
-                        {"experimental",
-                         QJsonObject{{"zith",
-                                      QJsonObject{{"requestSaveAll", true}}}}}};
+        QJsonObject capabilities = params.value("capabilities").toObject();
+        capabilities.insert(
+            QStringLiteral("experimental"),
+            QJsonObject{{QStringLiteral("zith"),
+                         QJsonObject{{QStringLiteral("requestSaveAll"), true}}}});
+        params.insert(QStringLiteral("capabilities"), capabilities);
     }
 
     const QString root = options.workspaceRoot.isEmpty()

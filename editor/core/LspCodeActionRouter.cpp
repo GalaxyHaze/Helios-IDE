@@ -1,13 +1,18 @@
 #include "LspCodeActionRouter.h"
 
+#include "../editor/Code.h"
+
 #include <QCursor>
+#include <QTabWidget>
 #include <memory>
 #include <utility>
 
 LspCodeActionRouter::LspCodeActionRouter(
-    QWidget *menuParent, Callbacks callbacks, QObject *parent)
+    QWidget *menuParent, QTabWidget *tabWidget, Callbacks callbacks,
+    QObject *parent)
     : QObject(parent),
       m_menuParent(menuParent),
+      m_tabWidget(tabWidget),
       m_applyWorkspaceEdit(std::move(callbacks.applyWorkspaceEdit)),
       m_executeCommand(std::move(callbacks.executeCommand)),
       m_presentMenu(std::move(callbacks.presentMenu))
@@ -20,15 +25,17 @@ void LspCodeActionRouter::attach(LspClient *client)
         return;
 
     connect(client, &LspClient::codeActionsResult, this,
-            [this, client](const QString &, int, const QJsonArray &actions) {
-                handleCodeActions(client, actions);
+            [this, client](const QString &uri, int version,
+                           const QJsonArray &actions) {
+                handleCodeActions(client, uri, version, actions);
             });
 }
 
 void LspCodeActionRouter::handleCodeActions(LspClient *client,
+                                            const QString &uri, int version,
                                             const QJsonArray &actions)
 {
-    if (actions.isEmpty())
+    if (actions.isEmpty() || !isCurrentDocument(client, uri, version))
         return;
 
     std::unique_ptr<QMenu> menu(createMenu(client, actions));
@@ -36,6 +43,16 @@ void LspCodeActionRouter::handleCodeActions(LspClient *client,
         m_presentMenu(menu.get());
     else
         menu->exec(QCursor::pos());
+}
+
+bool LspCodeActionRouter::isCurrentDocument(
+    LspClient *client, const QString &uri, int version) const
+{
+    if (!m_tabWidget)
+        return false;
+    auto *editor = qobject_cast<CodeEditor *>(m_tabWidget->currentWidget());
+    return editor && editor->lspClient() == client &&
+           editor->fileUri() == uri && editor->documentVersion() == version;
 }
 
 QMenu *LspCodeActionRouter::createMenu(LspClient *client,

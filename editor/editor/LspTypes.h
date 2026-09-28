@@ -35,6 +35,21 @@ struct LspDiagnostic
     QString source;
 };
 
+struct LspSemanticToken
+{
+    LspRange range;
+    int tokenType = 0;
+    int modifiers = 0;
+};
+
+struct LspFoldingRange
+{
+    int startLine = 0;
+    int startCharacter = 0;
+    int endLine = 0;
+    int endCharacter = 0;
+};
+
 struct LspCompletionItem
 {
     QString label;

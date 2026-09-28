@@ -27,8 +27,9 @@ public:
     void attach(LspClient *client);
 
 private:
-    CodeEditor *currentEditorFor(const QString &uri, int version) const;
-    void handleReferences(const QString &uri, int version,
+    CodeEditor *currentEditorFor(LspClient *client, const QString &uri,
+                                 int version) const;
+    void handleReferences(LspClient *client, const QString &uri, int version,
                           const QList<LspLocation> &locations);
 
     QTabWidget *m_tabWidget = nullptr;

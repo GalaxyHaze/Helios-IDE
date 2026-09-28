@@ -4,6 +4,7 @@
 #include "EditorLanguageRequestContext.h"
 #include "EditorDocumentSyncController.h"
 #include "LspTypes.h"
+#include <QHash>
 #include <QList>
 #include <QMap>
 #include <QPlainTextEdit>
@@ -47,11 +48,18 @@ public:
 
   void setDiagnostics(const QList<LspDiagnostic> &diagnostics);
   void clearDiagnostics();
+  void setSemanticTokens(const QList<LspSemanticToken> &tokens);
+  void clearSemanticTokens();
+  void setFoldingRanges(const QList<LspFoldingRange> &ranges);
+  void clearFoldingRanges();
   void setLspHighlightRanges(const QList<LspRange> &ranges);
 
   void updateDiagnosticDisplay();
 
   void lineNumberAreaPaintEvent(QPaintEvent *event);
+  void toggleFoldAtLine(int line);
+  bool hasFoldingRangeAtLine(int line) const;
+  bool isFoldedAtLine(int line) const;
   int lineNumberAreaWidth();
 
   void goToLine(int line, int character = 0);
@@ -99,6 +107,7 @@ private slots:
 
 private:
   void triggerCompletion();
+  void applyCompletionItem(const LspCompletionItem &item);
   void triggerSignatureHelp();
   void autoIndent();
   bool handleAutoClose(QChar ch);
@@ -114,6 +123,8 @@ private:
   bool m_suppressDocumentSync = false;
 
   QList<LspDiagnostic> m_diagnostics;
+  QList<LspFoldingRange> m_foldingRanges;
+  QHash<int, int> m_hiddenLineCounts;
   EditorAppearanceController *m_appearanceController = nullptr;
   EditorDecorationController *m_decorationController = nullptr;
   VimMotionController *m_vimController = nullptr;
@@ -135,6 +146,7 @@ protected:
   void paintEvent(QPaintEvent *event) override {
     codeEditor->lineNumberAreaPaintEvent(event);
   }
+  void mousePressEvent(QMouseEvent *event) override;
 
 private:
   CodeEditor *codeEditor;
