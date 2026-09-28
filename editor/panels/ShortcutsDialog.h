@@ -18,9 +18,6 @@ private slots:
     void applyTranslations();
 
 private:
-    void initializeShortcutTree();
-    void updateShortcutTexts();
-
     QLabel *m_titleLabel = nullptr;
     QLabel *m_hintLabel = nullptr;
     QTreeWidget *m_shortcutsTree = nullptr;

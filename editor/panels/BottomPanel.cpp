@@ -115,6 +115,7 @@ void BottomPanel::clearCurrent()
         m_references->clearReferences();
         break;
     case Tab::Diagnostics:
+        m_diagnostics->clear();
         break;
     }
 }

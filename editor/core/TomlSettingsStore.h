@@ -6,6 +6,8 @@
 #include <QStringList>
 #include <QObject>
 
+#include "TomlSettingsCodec.h"
+
 class TomlSettingsStore : public QObject
 {
     Q_OBJECT
@@ -139,7 +141,7 @@ public:
     void setSearchExcludedDirs(const QStringList &dirs);
 
     bool wordWrap() const { return m_wordWrap; }
-    void setWordWrap(bool wrap) { m_wordWrap = wrap; save(); }
+    void setWordWrap(bool wrap);
 
     int sidebarWidth() const { return m_sidebarWidth; }
     void setSidebarWidth(int width) { m_sidebarWidth = width; save(); }
@@ -159,6 +161,9 @@ public:
     QStringList recentProjects() const { return m_recentProjects; }
     void setRecentProjects(const QStringList &projects) { m_recentProjects = projects; save(); }
     void addRecentProject(const QString &project);
+
+signals:
+    void editorPreferencesChanged();
 
 private:
 #ifdef HELIOS_UNIT_TESTING
@@ -194,6 +199,8 @@ private:
     QString m_mainWindowStateBase64;
     QStringList m_recentProjects;
 
+    TomlSettingsSnapshot snapshot() const;
+    void applySnapshot(const TomlSettingsSnapshot &snapshot);
     QString filePath() const;
 };
 

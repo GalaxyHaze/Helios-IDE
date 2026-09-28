@@ -4,8 +4,6 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonDocument>
-#include <QJsonObject>
-#include <QJsonValue>
 #include <QDebug>
 #include <QResource>
 #include <QStandardPaths>
@@ -49,127 +47,11 @@ QString ThemeManager::findThemeFile(const QString &themeName)
 
 void ThemeManager::setFallbackTheme(bool dark)
 {
+    const ThemeDefinition definition = ThemeDefinitionParser::fallback(dark);
+    m_palette = definition.palette;
+    m_customColors = definition.customColors;
+    m_syntaxStyles = definition.syntaxStyles;
     m_isDark = dark;
-    m_customColors.clear();
-    setFallbackSyntaxStyles();
-
-    if (dark) {
-        m_palette.setColor(QPalette::Window, QColor("#11131a"));
-        m_palette.setColor(QPalette::WindowText, QColor("#e6e9f2"));
-        m_palette.setColor(QPalette::Base, QColor("#141720"));
-        m_palette.setColor(QPalette::AlternateBase, QColor("#1d2230"));
-        m_palette.setColor(QPalette::ToolTipBase, QColor("#252b3a"));
-        m_palette.setColor(QPalette::ToolTipText, QColor("#edf0fa"));
-        m_palette.setColor(QPalette::Text, QColor("#d9deeb"));
-        m_palette.setColor(QPalette::Button, QColor("#202638"));
-        m_palette.setColor(QPalette::ButtonText, QColor("#e6e9f2"));
-        m_palette.setColor(QPalette::BrightText, QColor("#ff7a90"));
-        m_palette.setColor(QPalette::Link, QColor("#8fa2ff"));
-        m_palette.setColor(QPalette::Highlight, QColor("#3b5ccc"));
-        m_palette.setColor(QPalette::HighlightedText, QColor("#ffffff"));
-
-        m_customColors["sidebar"] = QColor("#0e1016");
-        m_customColors["sidebarBorder"] = QColor("#272d3d");
-        m_customColors["sidebarHover"] = QColor("#20283a");
-        m_customColors["sidebarActive"] = QColor("#1d2537");
-        m_customColors["sidebarActiveBorder"] = QColor("#8fa2ff");
-        m_customColors["tabWidgetPane"] = QColor("#141720");
-        m_customColors["tabBarBg"] = QColor("#11131a");
-        m_customColors["tabBg"] = QColor("#11131a");
-        m_customColors["tabFg"] = QColor("#8991a5");
-        m_customColors["tabBorder"] = QColor("#272d3d");
-        m_customColors["tabSelectedFg"] = QColor("#f1f3fb");
-        m_customColors["tabHoverBg"] = QColor("#1d2532");
-        m_customColors["treeBg"] = QColor("#141720");
-        m_customColors["treeFg"] = QColor("#d1d7e5");
-        m_customColors["treeHover"] = QColor("#27324a");
-        m_customColors["treeSelected"] = QColor("#32436a");
-        m_customColors["treeSelectedFg"] = QColor("#ffffff");
-        m_customColors["treeBranch"] = QColor("#141720");
-        m_customColors["editorBg"] = QColor("#1b1e2a");
-        m_customColors["editorFg"] = QColor("#e6e9f2");
-        m_customColors["editorLineNumber"] = QColor("#687188");
-        m_customColors["editorCurrentLine"] = QColor("#23293a");
-        m_customColors["editorSelection"] = QColor("#354b83");
-        m_customColors["gutterBg"] = QColor("#151821");
-        m_customColors["gutterActive"] = QColor("#aab8ff");
-        m_customColors["bracketBg"] = QColor("#41537c");
-        m_customColors["bracketFg"] = QColor("#ffffff");
-        m_customColors["diagnosticError"] = QColor("#ff7a90");
-        m_customColors["diagnosticWarning"] = QColor("#f1c77a");
-        m_customColors["diagnosticInfo"] = QColor("#70c9f0");
-        m_customColors["diagnosticUnknown"] = QColor("#aeb8ce");
-    } else {
-        m_palette.setColor(QPalette::Window, QColor("#e9edf2"));
-        m_palette.setColor(QPalette::WindowText, QColor("#263043"));
-        m_palette.setColor(QPalette::Base, QColor("#f3f5f7"));
-        m_palette.setColor(QPalette::AlternateBase, QColor("#e2e7ed"));
-        m_palette.setColor(QPalette::ToolTipBase, QColor("#f7f8fa"));
-        m_palette.setColor(QPalette::ToolTipText, QColor("#263043"));
-        m_palette.setColor(QPalette::Text, QColor("#2f3a4d"));
-        m_palette.setColor(QPalette::Button, QColor("#dde4ec"));
-        m_palette.setColor(QPalette::ButtonText, QColor("#283448"));
-        m_palette.setColor(QPalette::BrightText, QColor("#c4495f"));
-        m_palette.setColor(QPalette::Link, QColor("#3f64bd"));
-        m_palette.setColor(QPalette::Highlight, QColor("#3f6fa3"));
-        m_palette.setColor(QPalette::HighlightedText, QColor("#ffffff"));
-
-        m_customColors["sidebar"] = QColor("#e3e8ee");
-        m_customColors["sidebarBorder"] = QColor("#c4ccd7");
-        m_customColors["sidebarHover"] = QColor("#d5dde7");
-        m_customColors["sidebarActive"] = QColor("#cbd7e5");
-        m_customColors["sidebarActiveBorder"] = QColor("#4b6fae");
-        m_customColors["tabWidgetPane"] = QColor("#f3f5f7");
-        m_customColors["tabBarBg"] = QColor("#e9edf2");
-        m_customColors["tabBg"] = QColor("#e9edf2");
-        m_customColors["tabFg"] = QColor("#627087");
-        m_customColors["tabBorder"] = QColor("#c4ccd7");
-        m_customColors["tabSelectedFg"] = QColor("#263043");
-        m_customColors["tabHoverBg"] = QColor("#dce3eb");
-        m_customColors["treeBg"] = QColor("#e9edf2");
-        m_customColors["treeFg"] = QColor("#2f3a4d");
-        m_customColors["treeHover"] = QColor("#d4dee9");
-        m_customColors["treeSelected"] = QColor("#bfcfe2");
-        m_customColors["treeSelectedFg"] = QColor("#1e2a3d");
-        m_customColors["treeBranch"] = QColor("#e9edf2");
-        m_customColors["editorBg"] = QColor("#f8fafb");
-        m_customColors["editorFg"] = QColor("#263043");
-        m_customColors["editorLineNumber"] = QColor("#8793a5");
-        m_customColors["editorCurrentLine"] = QColor("#eaf0f5");
-        m_customColors["editorSelection"] = QColor("#b8cbe2");
-        m_customColors["gutterBg"] = QColor("#edf1f5");
-        m_customColors["gutterActive"] = QColor("#3f64a6");
-        m_customColors["bracketBg"] = QColor("#c8d7e9");
-        m_customColors["bracketFg"] = QColor("#1d2a40");
-        m_customColors["diagnosticError"] = QColor("#c4495f");
-        m_customColors["diagnosticWarning"] = QColor("#ab701d");
-        m_customColors["diagnosticInfo"] = QColor("#2e739b");
-        m_customColors["diagnosticUnknown"] = QColor("#637088");
-    }
-}
-
-void ThemeManager::setFallbackSyntaxStyles()
-{
-    m_syntaxStyles = {
-        {"comment", {QColor("#6A5A8A"), false, true}},
-        {"string", {QColor("#a6d189"), false, false}},
-        {"number", {QColor("#04a5e5"), true, false}},
-        {"type", {QColor("#ca9ee6"), true, false}},
-        {"control", {QColor("#e64553"), true, false}},
-        {"declaration", {QColor("#8839ef"), true, false}},
-        {"storage", {QColor("#81c8be"), false, false}},
-        {"async", {QColor("#a6d189"), true, false}},
-        {"exception", {QColor("#df8e1d"), true, false}},
-        {"keyword", {QColor("#eff1f5"), false, false}},
-        {"jump", {QColor("#f38ba8"), true, false}},
-        {"preprocessor", {QColor("#c9cbff"), false, false}},
-        {"literal", {QColor("#dd7878"), true, false}},
-        {"logicalOperator", {QColor("#d20f39"), true, false}},
-        {"operator", {QColor("#7287fd"), false, false}},
-        {"otherOperator", {QColor("#179299"), false, false}},
-        {"bracket", {QColor("#ea999c"), false, false}},
-        {"punctuation", {QColor("#a5adce"), false, false}}
-    };
 }
 
 bool ThemeManager::loadTheme(const QString &themeName)
@@ -240,53 +122,16 @@ bool ThemeManager::loadThemeDocument(const QJsonDocument &doc,
                                      const QString &themeName,
                                      bool fallbackDark)
 {
-    QJsonObject obj = doc.object();
-    QPalette pal;
-    QJsonObject palObj = obj.value("palette").toObject();
+    const std::optional<ThemeDefinition> definition =
+        ThemeDefinitionParser::parse(doc, fallbackDark);
+    if (!definition.has_value())
+        return false;
 
-    auto parseColor = [](const QJsonObject &o, const QString &k, const QString &def) -> QColor {
-        QString hex = o.value(k).toString(def);
-        return QColor(hex);
-    };
-
-    pal.setColor(QPalette::Window, parseColor(palObj, "window", fallbackDark ? "#11131a" : "#e9edf2"));
-    pal.setColor(QPalette::WindowText, parseColor(palObj, "windowText", fallbackDark ? "#e6e9f2" : "#263043"));
-    pal.setColor(QPalette::Base, parseColor(palObj, "base", fallbackDark ? "#141720" : "#f3f5f7"));
-    pal.setColor(QPalette::AlternateBase, parseColor(palObj, "alternateBase", fallbackDark ? "#1d2230" : "#e2e7ed"));
-    pal.setColor(QPalette::ToolTipBase, parseColor(palObj, "toolTipBase", fallbackDark ? "#252b3a" : "#f7f8fa"));
-    pal.setColor(QPalette::ToolTipText, parseColor(palObj, "toolTipText", fallbackDark ? "#edf0fa" : "#263043"));
-    pal.setColor(QPalette::Text, parseColor(palObj, "text", fallbackDark ? "#d9deeb" : "#2f3a4d"));
-    pal.setColor(QPalette::Button, parseColor(palObj, "button", fallbackDark ? "#202638" : "#dde4ec"));
-    pal.setColor(QPalette::ButtonText, parseColor(palObj, "buttonText", fallbackDark ? "#e6e9f2" : "#283448"));
-    pal.setColor(QPalette::BrightText, parseColor(palObj, "brightText", fallbackDark ? "#ff7a90" : "#c4495f"));
-    pal.setColor(QPalette::Link, parseColor(palObj, "link", fallbackDark ? "#8fa2ff" : "#3f64bd"));
-    pal.setColor(QPalette::Highlight, parseColor(palObj, "highlight", fallbackDark ? "#3b5ccc" : "#3f6fa3"));
-    pal.setColor(QPalette::HighlightedText, parseColor(palObj, "highlightedText", "#ffffff"));
-    QMap<QString, QColor> customColors;
-    QJsonObject custObj = obj.value("custom").toObject();
-    for (auto it = custObj.begin(); it != custObj.end(); ++it) {
-        const QColor color(it.value().toString());
-        if (color.isValid())
-            customColors.insert(it.key(), color);
-    }
-
-    QMap<QString, SyntaxStyle> syntaxStyles;
-    const QJsonObject syntaxObj = obj.value("syntax").toObject();
-    for (auto it = syntaxObj.begin(); it != syntaxObj.end(); ++it) {
-        const QJsonObject styleObj = it.value().toObject();
-        const QColor color(styleObj.value("color").toString());
-        if (color.isValid())
-            syntaxStyles.insert(it.key(), {color, styleObj.value("bold").toBool(),
-                                            styleObj.value("italic").toBool()});
-    }
-
-    m_palette = pal;
-    m_customColors = customColors;
-    setFallbackSyntaxStyles();
-    for (auto it = syntaxStyles.cbegin(); it != syntaxStyles.cend(); ++it)
-        m_syntaxStyles.insert(it.key(), it.value());
+    m_palette = definition->palette;
+    m_customColors = definition->customColors;
+    m_syntaxStyles = definition->syntaxStyles;
     m_currentThemeName = themeName;
-    m_isDark = isDarkPalette(pal);
+    m_isDark = isDarkPalette(m_palette);
     m_currentThemeWasLoaded = true;
     m_hasValidTheme = true;
 

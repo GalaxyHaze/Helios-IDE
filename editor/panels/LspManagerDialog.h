@@ -1,6 +1,9 @@
 #ifndef LSPMANAGERDIALOG_H
 #define LSPMANAGERDIALOG_H
 
+#include "../core/LspRuntimePresentationState.h"
+#include "../core/LspRuntimePresentationModel.h"
+
 #include <QDialog>
 
 class QCheckBox;
@@ -20,17 +23,9 @@ public:
     void setUseOnlineZithLsp(bool enabled);
     void setCLspEnabled(bool enabled);
     void setCLspPath(const QString &path);
-    void setCLspInfo(const QString &status,
-                     const QString &resolvedPath,
-                     const QString &message);
-    void setRuntimeInfo(const QString &status,
-                        const QString &tag,
-                        const QString &lspPath,
-                        const QString &stdlibPath,
-                        const QString &cachePath);
-    void setLspDiagnostics(const QString &connection,
-                           const QString &syncMode,
-                           const QString &lastError);
+    void setCLspInfo(const ClangdInfo &info);
+    void setRuntimeInfo(const LspRuntimeInfo &info);
+    void setLspDiagnostics(const LspDiagnosticsInfo &info);
     void appendLspLog(const QString &line);
     void clearLspLog();
 
@@ -47,8 +42,7 @@ private slots:
     void applyTranslations();
 
 private:
-    void updateRuntimeInfoDisplay();
-    void updateDiagnosticsDisplay();
+    void applyLspPresentation();
 
     QLabel *m_titleLabel = nullptr;
     QLabel *m_hintLabel = nullptr;
@@ -90,14 +84,7 @@ private:
     QCheckBox *m_lspEnabledCheck = nullptr;
     QCheckBox *m_useOnlineZithLspCheck = nullptr;
 
-    QString m_rawStatus;
-    QString m_rawTag;
-    QString m_rawLspPath;
-    QString m_rawStdlibPath;
-    QString m_rawCachePath;
-    QString m_rawConnection;
-    QString m_rawSyncMode;
-    QString m_rawLastError;
+    LspRuntimePresentationModel m_lspPresentation;
 };
 
 #endif

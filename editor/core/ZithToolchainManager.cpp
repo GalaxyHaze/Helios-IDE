@@ -1,43 +1,30 @@
 #include "ZithToolchainManager.h"
 
 #include <QDir>
-#include <QFile>
 #include <QFileInfo>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
-#include <QProcess>
-#include <QStandardPaths>
-#include <QSysInfo>
 #include <QUrl>
-#include <QVersionNumber>
 
 namespace
 {
-constexpr int kNetworkTimeoutMs = 5000;
 constexpr auto kLatestReleaseUrl =
     "https://api.github.com/repos/GalaxyHaze/Zith-Lang/releases/latest";
 constexpr auto kLspOverrideEnv = "HELIOS_ZITH_LSP_PATH";
 constexpr auto kStdlibOverrideEnv = "HELIOS_ZITH_STDLIB_PATH";
-// Local development checkouts used by the compiler and language server.
-constexpr auto kLocalLspPath = "/home/diogo/zith-lsp/build/zith-lsp";
-constexpr auto kLocalStdlibPath = "/home/diogo/Zith/stdlib";
-
-QVersionNumber releaseVersion(const QString &tag)
-{
-    QString normalized = tag.trimmed();
-    if (normalized.startsWith('v'))
-        normalized.remove(0, 1);
-    return QVersionNumber::fromString(normalized);
-}
 }
 
 ZithToolchainManager::ZithToolchainManager(QObject *parent)
-    : QObject(parent), m_networkManager(new QNetworkAccessManager(this))
+    : QObject(parent),
+      m_runtimeInstaller(m_runtimeCatalog),
+      m_assetDownloader(new ZithRuntimeAssetDownloader(this)),
+      m_networkManager(new QNetworkAccessManager(this))
 {
+    connect(m_assetDownloader, &ZithRuntimeAssetDownloader::finished, this,
+            &ZithToolchainManager::onAssetDownloadFinished);
+    connect(m_assetDownloader, &ZithRuntimeAssetDownloader::failed, this,
+            &ZithToolchainManager::onAssetDownloadFailed);
 }
 
 void ZithToolchainManager::ensureLatest(bool preferCached)
@@ -48,21 +35,13 @@ void ZithToolchainManager::ensureLatest(bool preferCached)
     if (tryUseEnvironmentOverrides())
         return;
 
-    const QFileInfo localLsp(kLocalLspPath);
-    const QFileInfo localStdlib(kLocalStdlibPath);
-    if (!m_preferOnline && localLsp.isExecutable() && localStdlib.isDir()) {
-        emit statusChanged(QStringLiteral("Using local Zith development runtime."));
-        finishWithResolvedRuntime(kLocalLspPath, kLocalStdlibPath, QStringLiteral("local"));
-        QString staleError;
-        removeStaleLocalRuntimeCache(&staleError);
-        return;
-    }
-
-    const QFileInfo localCache(releaseRootPath(QStringLiteral("local")));
+    const QFileInfo localCache(
+        m_runtimeCatalog.releaseRootPath(QStringLiteral("local")));
     if (localCache.exists()) {
         emit statusChanged(QStringLiteral("Ignoring outdated local runtime cache."));
         QString staleError;
-        if (!removeStaleLocalRuntimeCache(&staleError) && !staleError.isEmpty()) {
+        if (!m_runtimeCatalog.removeStaleLocalRuntimeCache(&staleError) &&
+            !staleError.isEmpty()) {
             emit statusChanged(staleError);
         }
     }
@@ -95,22 +74,17 @@ void ZithToolchainManager::cancel()
         m_latestReleaseReply = nullptr;
     }
 
-    if (m_assetReply) {
-        QObject::disconnect(m_assetReply, nullptr, this, nullptr);
-        m_assetReply->abort();
-        m_assetReply->deleteLater();
-        m_assetReply = nullptr;
-    }
+    m_assetDownloader->cancel();
 }
 
 QString ZithToolchainManager::runtimeCacheRootPath() const
 {
-    return cacheRootPath();
+    return m_runtimeCatalog.cacheRootPath();
 }
 
 bool ZithToolchainManager::clearCachedRuntime(QString *errorMessage) const
 {
-    const QString root = cacheRootPath();
+    const QString root = m_runtimeCatalog.cacheRootPath();
     const QFileInfo rootInfo(root);
     if (!rootInfo.exists()) {
         return true;
@@ -147,93 +121,50 @@ void ZithToolchainManager::onLatestReleaseFinished()
         return;
     }
 
-    const QJsonDocument document = QJsonDocument::fromJson(payload);
-    if (!document.isObject()) {
-        fallbackToInstalledRuntime("Latest Zith release response was not valid JSON.");
-        return;
-    }
-
-    const QJsonObject root = document.object();
-    ReleaseInfo release;
-    release.tag = root.value("tag_name").toString().trimmed();
-    const QJsonArray assets = root.value("assets").toArray();
-    for (const QJsonValue &assetValue : assets) {
-        const QJsonObject assetObject = assetValue.toObject();
-        const QString name = assetObject.value("name").toString();
-        const QString downloadUrl = assetObject.value("browser_download_url").toString();
-        if (name.isEmpty() || downloadUrl.isEmpty())
-            continue;
-        release.assets.append({name, QUrl(downloadUrl)});
-    }
-
-    if (release.tag.isEmpty()) {
-        fallbackToInstalledRuntime("Latest Zith release did not expose a tag.");
+    QString parseError;
+    const auto release = ZithReleaseCatalog::parse(payload, &parseError);
+    if (!release) {
+        fallbackToInstalledRuntime(parseError);
         return;
     }
 
     QString lspPath;
     QString stdlibPath;
-    if (resolveInstalledRelease(release.tag, &lspPath, &stdlibPath)) {
-        emit statusChanged(QString("Zith runtime %1 is already installed.").arg(release.tag));
+    if (resolveInstalledRelease(release->tag, &lspPath, &stdlibPath)) {
+        emit statusChanged(QString("Zith runtime %1 is already installed.").arg(release->tag));
         if (!m_hasResolvedRuntime || !m_preferCached)
-            finishWithResolvedRuntime(lspPath, stdlibPath, release.tag);
+            finishWithResolvedRuntime(lspPath, stdlibPath, release->tag);
         return;
     }
 
-    const ReleaseAsset lspAsset = findLspAsset(release);
-    const ReleaseAsset stdlibAsset = findStdlibAsset(release);
-    if (lspAsset.name.isEmpty() || stdlibAsset.name.isEmpty()) {
+    const auto lspAsset = ZithReleaseCatalog::findLspAsset(*release);
+    const auto stdlibAsset = ZithReleaseCatalog::findStdlibAsset(*release);
+    if (!lspAsset || !stdlibAsset) {
         fallbackToInstalledRuntime(
             QString("Latest Zith release %1 is missing a compatible LSP or stdlib asset.")
-                .arg(release.tag));
+                .arg(release->tag));
         return;
     }
 
-    m_pendingTag = release.tag;
-    queueDownload(DownloadKind::LspBinary, lspAsset);
-    queueDownload(DownloadKind::StdlibArchive, stdlibAsset);
+    m_pendingTag = release->tag;
+    queueDownload(ZithRuntimeAssetKind::LspBinary, *lspAsset);
+    queueDownload(ZithRuntimeAssetKind::StdlibArchive, *stdlibAsset);
 
-    emit statusChanged(QString("Downloading Zith runtime %1...").arg(release.tag));
+    emit statusChanged(QString("Downloading Zith runtime %1...").arg(release->tag));
     startNextDownload();
 }
 
 void ZithToolchainManager::onAssetDownloadFinished()
 {
-    QNetworkReply *reply = m_assetReply;
-    m_assetReply = nullptr;
-
-    if (!reply || m_pendingDownloads.isEmpty())
+    if (m_pendingDownloads.isEmpty())
         return;
 
     PendingDownload current = m_pendingDownloads.takeFirst();
-    const QByteArray payload = reply->readAll();
-    const QString errorString = reply->error() == QNetworkReply::NoError
-        ? QString()
-        : reply->errorString();
-    reply->deleteLater();
-
-    if (!errorString.isEmpty()) {
-        QFile::remove(current.temporaryPath);
-        fallbackToInstalledRuntime("Failed to download " + current.asset.name + ": " + errorString);
-        return;
-    }
-
-    QFile file(current.temporaryPath);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        fallbackToInstalledRuntime("Failed to write " + current.asset.name + " to cache.");
-        return;
-    }
-
-    if (file.write(payload) != payload.size()) {
-        file.close();
-        QFile::remove(current.temporaryPath);
-        fallbackToInstalledRuntime("Incomplete write while caching " + current.asset.name + ".");
-        return;
-    }
-    file.close();
 
     QString installError;
-    if (!installDownloadedAsset(current, m_pendingTag, &installError)) {
+    if (!m_runtimeInstaller.install(
+            {current.kind, current.temporaryPath, m_pendingTag},
+            &installError)) {
         QFile::remove(current.temporaryPath);
         fallbackToInstalledRuntime(installError);
         return;
@@ -263,34 +194,39 @@ void ZithToolchainManager::onAssetDownloadFinished()
     }
 }
 
+void ZithToolchainManager::onAssetDownloadFailed(const QString &message)
+{
+    if (m_pendingDownloads.isEmpty())
+        return;
+
+    QFile::remove(m_pendingDownloads.first().temporaryPath);
+    m_pendingDownloads.clear();
+    fallbackToInstalledRuntime(message);
+}
+
 bool ZithToolchainManager::tryUseEnvironmentOverrides()
 {
-    const QString lspPath = QString::fromLocal8Bit(qgetenv(kLspOverrideEnv)).trimmed();
-    const QString stdlibPath = QString::fromLocal8Bit(qgetenv(kStdlibOverrideEnv)).trimmed();
+    const auto result = ZithRuntimeOverrideResolver::resolve(
+        QString::fromLocal8Bit(qgetenv(kLspOverrideEnv)),
+        QString::fromLocal8Bit(qgetenv(kStdlibOverrideEnv)));
 
-    if (lspPath.isEmpty() && stdlibPath.isEmpty())
+    if (result.action == ZithRuntimeOverrideResolver::Action::NotConfigured)
         return false;
 
-    if (lspPath.isEmpty() || stdlibPath.isEmpty()) {
-        emit statusChanged(
-            "Ignoring partial Zith overrides. Set both HELIOS_ZITH_LSP_PATH and "
-            "HELIOS_ZITH_STDLIB_PATH to override the managed runtime.");
+    if (result.action ==
+        ZithRuntimeOverrideResolver::Action::IgnoreAndContinue) {
+        emit statusChanged(result.message);
         return false;
     }
 
-    const QFileInfo lspInfo(lspPath);
-    if (!lspInfo.exists() || !lspInfo.isExecutable()) {
-        emit failed("Configured HELIOS_ZITH_LSP_PATH does not point to an executable file.");
+    if (result.action == ZithRuntimeOverrideResolver::Action::Fail) {
+        emit failed(result.message);
         return true;
     }
 
-    if (!QFileInfo(stdlibPath).isDir()) {
-        emit failed("Configured HELIOS_ZITH_STDLIB_PATH does not point to a directory.");
-        return true;
-    }
-
-    emit statusChanged("Using Zith runtime from environment overrides.");
-    finishWithResolvedRuntime(lspPath, stdlibPath, "environment");
+    emit statusChanged(result.message);
+    finishWithResolvedRuntime(result.runtime.lspPath,
+                              result.runtime.stdlibPath, "environment");
     return true;
 }
 
@@ -300,7 +236,7 @@ void ZithToolchainManager::requestLatestRelease()
     request.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("Helios"));
     request.setRawHeader("Accept", "application/vnd.github+json");
     request.setRawHeader("X-GitHub-Api-Version", "2022-11-28");
-    request.setTransferTimeout(kNetworkTimeoutMs);
+    request.setTransferTimeout(5000);
 
     m_latestReleaseReply = m_networkManager->get(request);
     connect(m_latestReleaseReply, &QNetworkReply::finished,
@@ -314,19 +250,16 @@ void ZithToolchainManager::startNextDownload()
 
     const PendingDownload &current = m_pendingDownloads.first();
 
-    QNetworkRequest request(current.asset.downloadUrl);
-    request.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("Helios"));
-    request.setTransferTimeout(kNetworkTimeoutMs);
-
-    m_assetReply = m_networkManager->get(request);
-    connect(m_assetReply, &QNetworkReply::finished,
-            this, &ZithToolchainManager::onAssetDownloadFinished);
+    m_assetDownloader->start({current.asset.downloadUrl, current.asset.name,
+                              current.temporaryPath});
 }
 
-void ZithToolchainManager::queueDownload(DownloadKind kind, const ReleaseAsset &asset)
+void ZithToolchainManager::queueDownload(ZithRuntimeAssetKind kind,
+                                         const ReleaseAsset &asset)
 {
-    const QString tempRoot = QDir(cacheRootPath()).filePath("downloads");
-    ensureDirectory(tempRoot);
+    const QString tempRoot =
+        QDir(m_runtimeCatalog.cacheRootPath()).filePath("downloads");
+    QDir().mkpath(tempRoot);
 
     PendingDownload download;
     download.kind = kind;
@@ -358,274 +291,34 @@ void ZithToolchainManager::finishWithResolvedRuntime(const QString &lspPath,
     emit ready(lspPath, stdlibPath, tag);
 }
 
-bool ZithToolchainManager::resolveInstalledRelease(const QString &tag,
-                                                   QString *lspPath,
-                                                   QString *stdlibPath) const
+bool ZithToolchainManager::resolveInstalledRelease(
+    const QString &tag,
+    QString *lspPath,
+    QString *stdlibPath) const
 {
-    if (!isReleaseDirectoryName(tag))
+    const auto resolved = m_runtimeCatalog.resolveInstalledRelease(tag);
+    if (!resolved)
         return false;
-
-    const QString resolvedLspPath = lspInstallPath(tag);
-    const QString resolvedStdlibPath = stdlibInstallPath(tag);
-    const QFileInfo lspInfo(resolvedLspPath);
-    const QFileInfo stdlibInfo(resolvedStdlibPath);
-
-    if (!lspInfo.exists() || !lspInfo.isFile() || !lspInfo.isExecutable())
-        return false;
-
-    if (!stdlibInfo.exists() || !stdlibInfo.isDir())
-        return false;
-
-    const QDir stdlibDir(resolvedStdlibPath);
-    const QStringList entries = stdlibDir.entryList(QDir::AllEntries | QDir::NoDotAndDotDot);
-    if (entries.isEmpty())
-        return false;
-
     if (lspPath)
-        *lspPath = resolvedLspPath;
+        *lspPath = resolved->lspPath;
     if (stdlibPath)
-        *stdlibPath = resolvedStdlibPath;
+        *stdlibPath = resolved->stdlibPath;
     return true;
 }
 
-bool ZithToolchainManager::resolveNewestInstalledRelease(QString *lspPath,
-                                                         QString *stdlibPath,
-                                                         QString *tag) const
+bool ZithToolchainManager::resolveNewestInstalledRelease(
+    QString *lspPath,
+    QString *stdlibPath,
+    QString *tag) const
 {
-    const QDir cacheDir(cacheRootPath());
-    const QFileInfoList entries = cacheDir.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot);
-
-    QString bestTag;
-    QVersionNumber bestVersion;
-    bool found = false;
-
-    for (const QFileInfo &entry : entries) {
-        QString candidateLsp;
-        QString candidateStdlib;
-        if (!resolveInstalledRelease(entry.fileName(), &candidateLsp, &candidateStdlib))
-            continue;
-
-        const QVersionNumber version = releaseVersion(entry.fileName());
-        if (!found || version > bestVersion) {
-            found = true;
-            bestVersion = version;
-            bestTag = entry.fileName();
-            if (lspPath)
-                *lspPath = candidateLsp;
-            if (stdlibPath)
-                *stdlibPath = candidateStdlib;
-        }
-    }
-
+    const auto resolved = m_runtimeCatalog.resolveNewestInstalledRelease();
+    if (!resolved)
+        return false;
+    if (lspPath)
+        *lspPath = resolved->paths.lspPath;
+    if (stdlibPath)
+        *stdlibPath = resolved->paths.stdlibPath;
     if (tag)
-        *tag = bestTag;
-    return found;
-}
-
-bool ZithToolchainManager::isReleaseDirectoryName(const QString &directoryName) const
-{
-    return directoryName.startsWith(QLatin1Char('v')) &&
-        !releaseVersion(directoryName).isNull();
-}
-
-bool ZithToolchainManager::removeStaleLocalRuntimeCache(QString *errorMessage)
-{
-    const QString localCache = releaseRootPath(QStringLiteral("local"));
-    const QFileInfo localCacheInfo(localCache);
-    if (!localCacheInfo.exists())
-        return true;
-
-    QDir localCacheDir(localCache);
-    if (!localCacheDir.removeRecursively()) {
-        if (errorMessage != nullptr) {
-            *errorMessage = QString(
-                "Failed to remove the stale local Zith runtime cache at %1.")
-                                .arg(localCache);
-        }
-        return false;
-    }
-
-    emit statusChanged(QStringLiteral("Removing stale local Zith runtime cache."));
+        *tag = resolved->tag;
     return true;
-}
-
-bool ZithToolchainManager::installDownloadedAsset(const PendingDownload &download,
-                                                  const QString &tag,
-                                                  QString *errorMessage) const
-{
-    const QString releaseRoot = releaseRootPath(tag);
-    if (!ensureDirectory(releaseRoot)) {
-        if (errorMessage)
-            *errorMessage = "Failed to create the Zith runtime cache directory.";
-        return false;
-    }
-
-    if (download.kind == DownloadKind::LspBinary) {
-        const QString destination = lspInstallPath(tag);
-        QFile::remove(destination);
-        if (!QFile::copy(download.temporaryPath, destination)) {
-            if (errorMessage)
-                *errorMessage = "Failed to install the downloaded Zith LSP binary.";
-            return false;
-        }
-
-        QFile::setPermissions(destination,
-                              QFileDevice::ReadOwner | QFileDevice::WriteOwner |
-                                  QFileDevice::ExeOwner | QFileDevice::ReadGroup |
-                                  QFileDevice::ExeGroup | QFileDevice::ReadOther |
-                                  QFileDevice::ExeOther);
-        return true;
-    }
-
-    const QString destination = stdlibInstallPath(tag);
-    QDir(destination).removeRecursively();
-    if (!ensureDirectory(destination)) {
-        if (errorMessage)
-            *errorMessage = "Failed to create the stdlib cache directory.";
-        return false;
-    }
-
-    if (!extractArchive(download.temporaryPath, destination, errorMessage)) {
-        QDir(destination).removeRecursively();
-        return false;
-    }
-
-    return true;
-}
-
-bool ZithToolchainManager::extractArchive(const QString &archivePath,
-                                          const QString &destinationDir,
-                                          QString *errorMessage) const
-{
-#ifdef Q_OS_WIN
-    return runProcess(
-        "powershell",
-        {"-NoProfile", "-NonInteractive", "-Command",
-         QString("Expand-Archive -LiteralPath '%1' -DestinationPath '%2' -Force")
-             .arg(QString(archivePath).replace('\'', "''"),
-                  QString(destinationDir).replace('\'', "''"))},
-        errorMessage);
-#else
-    return runProcess("tar", {"-xzf", archivePath, "-C", destinationDir}, errorMessage);
-#endif
-}
-
-bool ZithToolchainManager::runProcess(const QString &program,
-                                      const QStringList &arguments,
-                                      QString *errorMessage) const
-{
-    QProcess process;
-    process.start(program, arguments);
-
-    if (!process.waitForStarted()) {
-        if (errorMessage)
-            *errorMessage = QString("Failed to start %1 while preparing the Zith runtime.")
-                                .arg(program);
-        return false;
-    }
-
-    if (!process.waitForFinished()) {
-        if (errorMessage)
-            *errorMessage = QString("%1 did not finish while preparing the Zith runtime.")
-                                .arg(program);
-        return false;
-    }
-
-    if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
-        if (errorMessage) {
-            const QString stdErr = QString::fromLocal8Bit(process.readAllStandardError()).trimmed();
-            *errorMessage = stdErr.isEmpty()
-                ? QString("%1 failed while preparing the Zith runtime.").arg(program)
-                : stdErr;
-        }
-        return false;
-    }
-
-    return true;
-}
-
-bool ZithToolchainManager::ensureDirectory(const QString &path) const
-{
-    QDir dir;
-    return dir.mkpath(path);
-}
-
-QString ZithToolchainManager::cacheRootPath() const
-{
-    if (!m_cacheRootOverride.isEmpty())
-        return m_cacheRootOverride;
-
-    QString root = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
-    if (root.isEmpty())
-        root = QDir::homePath() + "/.helios";
-    return QDir(root).filePath("zith-runtime");
-}
-
-QString ZithToolchainManager::releaseRootPath(const QString &tag) const
-{
-    return QDir(cacheRootPath()).filePath(tag);
-}
-
-QString ZithToolchainManager::lspInstallPath(const QString &tag) const
-{
-#ifdef Q_OS_WIN
-    return QDir(releaseRootPath(tag)).filePath("zith-lsp.exe");
-#else
-    return QDir(releaseRootPath(tag)).filePath("zith-lsp");
-#endif
-}
-
-QString ZithToolchainManager::stdlibInstallPath(const QString &tag) const
-{
-    return QDir(releaseRootPath(tag)).filePath("stdlib");
-}
-
-QString ZithToolchainManager::lspAssetNameForCurrentPlatform() const
-{
-#ifdef Q_OS_WIN
-    return isArm64Architecture() ? "zith-lsp-windows-arm64.exe"
-                                 : "zith-lsp-windows-amd64.exe";
-#elif defined(Q_OS_MACOS)
-    return "zith-lsp-macos-universal";
-#else
-    return isArm64Architecture() ? "zith-lsp-linux-arm64"
-                                 : "zith-lsp-linux-amd64";
-#endif
-}
-
-QString ZithToolchainManager::stdlibAssetSuffixForCurrentPlatform() const
-{
-#ifdef Q_OS_WIN
-    return ".zip";
-#else
-    return ".tar.gz";
-#endif
-}
-
-ZithToolchainManager::ReleaseAsset ZithToolchainManager::findLspAsset(
-    const ReleaseInfo &release) const
-{
-    const QString expectedName = lspAssetNameForCurrentPlatform();
-    for (const ReleaseAsset &asset : release.assets) {
-        if (asset.name == expectedName)
-            return asset;
-    }
-    return {};
-}
-
-ZithToolchainManager::ReleaseAsset ZithToolchainManager::findStdlibAsset(
-    const ReleaseInfo &release) const
-{
-    const QString expectedSuffix = stdlibAssetSuffixForCurrentPlatform();
-    for (const ReleaseAsset &asset : release.assets) {
-        if (asset.name.startsWith("zithc-stdlib-") && asset.name.endsWith(expectedSuffix))
-            return asset;
-    }
-    return {};
-}
-
-bool ZithToolchainManager::isArm64Architecture()
-{
-    const QString arch = QSysInfo::currentCpuArchitecture().toLower();
-    return arch.contains("arm64") || arch.contains("aarch64");
 }

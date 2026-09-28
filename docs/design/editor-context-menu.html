@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Helios editor context menu</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: #0a1015;
+      color: #dce8ef;
+      font: 14px/1.5 ui-sans-serif, system-ui, sans-serif;
+    }
+    .stage {
+      position: relative;
+      width: min(920px, calc(100% - 36px));
+      min-height: 560px;
+      padding: 70px 8%;
+      overflow: hidden;
+      background: #121a22;
+      border: 1px solid #314856;
+      border-radius: 14px;
+      box-shadow: 0 26px 80px rgba(0,0,0,.3);
+    }
+    .crumb {
+      color: #80d8e8;
+      font-size: 12px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    .code {
+      margin-top: 52px;
+      color: #b7c8d1;
+      font: 16px/2 ui-monospace, SFMono-Regular, monospace;
+    }
+    .kw { color: #d9a8ff; }
+    .fn { color: #8fe1ef; }
+    .focus {
+      padding: 3px 5px;
+      background: #315878;
+      border-radius: 4px;
+    }
+    .menu {
+      position: absolute;
+      top: 158px;
+      left: 47%;
+      width: 250px;
+      padding: 7px;
+      background: #1b2934;
+      border: 1px solid #4a6876;
+      border-radius: 9px;
+      box-shadow: 0 18px 45px rgba(0,0,0,.42);
+    }
+    .item {
+      display: flex;
+      justify-content: space-between;
+      padding: 9px 11px;
+      border-radius: 5px;
+      color: #dce8ef;
+    }
+    .item:hover { background: #315878; }
+    .item.disabled { color: #6f818c; }
+    .separator { height: 1px; margin: 6px 4px; background: #314856; }
+    .hint {
+      margin-top: 45px;
+      max-width: 430px;
+      color: #8da3af;
+    }
+    @media (max-width: 680px) {
+      .stage { padding: 40px 24px; min-height: 650px; }
+      .menu { top: 275px; left: 24px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="stage">
+    <div class="crumb">workspace / src / compiler / main.zith</div>
+    <div class="code">
+      <div><span class="kw">fn</span> <span class="fn">parseModule</span>(source) {</div>
+      <div>  <span class="kw">let</span> tokens = lex(source);</div>
+      <div>  <span class="kw">return</span> <span class="focus">parse(tokens)</span>;</div>
+      <div>}</div>
+    </div>
+    <nav class="menu" aria-label="Editor context menu preview">
+      <div class="item">Go to definition <span>F12</span></div>
+      <div class="item disabled">Go to declaration</div>
+      <div class="item">Find usages</div>
+      <div class="separator"></div>
+      <div class="item">Rename symbol</div>
+      <div class="item disabled">Extract method</div>
+      <div class="separator"></div>
+      <div class="item">Format document</div>
+      <div class="item">Copy symbol</div>
+    </nav>
+    <p class="hint">Actions stay close to the symbol under the cursor. Disabled
+      language actions remain visible so the editor explains capability state
+      instead of changing the menu shape.</p>
+  </main>
+</body>
+</html>

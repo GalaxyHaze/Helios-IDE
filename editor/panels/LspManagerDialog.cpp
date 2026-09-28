@@ -246,58 +246,43 @@ void LspManagerDialog::setCLspPath(const QString &path)
     m_cLspPathEdit->setText(path);
 }
 
-void LspManagerDialog::setCLspInfo(const QString &status,
-                                   const QString &resolvedPath,
-                                   const QString &message)
+void LspManagerDialog::setCLspInfo(const ClangdInfo &info)
 {
-    m_cLspStatusValue->setText(status.isEmpty() ? "Unavailable" : status);
-    m_cLspPathValue->setText(resolvedPath.isEmpty() ? "Unavailable" : resolvedPath);
-    m_cLspMessageValue->setText(message.isEmpty() ? QString() : message);
+    m_lspPresentation.setClangdInfo(info);
+    applyLspPresentation();
 }
 
-void LspManagerDialog::setRuntimeInfo(const QString &status,
-                                      const QString &tag,
-                                      const QString &lspPath,
-                                      const QString &stdlibPath,
-                                      const QString &cachePath)
+void LspManagerDialog::setRuntimeInfo(const LspRuntimeInfo &info)
 {
-    m_rawStatus = status;
-    m_rawTag = tag;
-    m_rawLspPath = lspPath;
-    m_rawStdlibPath = stdlibPath;
-    m_rawCachePath = cachePath;
-    updateRuntimeInfoDisplay();
+    m_lspPresentation.setRuntimeInfo(info);
+    applyLspPresentation();
 }
 
-void LspManagerDialog::updateRuntimeInfoDisplay()
+void LspManagerDialog::setLspDiagnostics(const LspDiagnosticsInfo &info)
 {
-    auto &tr = TranslationManager::instance();
-    const QString unav = tr.translate("lsp.val_unavailable");
-    m_runtimeStatusValue->setText(m_rawStatus.isEmpty() ? unav : m_rawStatus);
-    m_runtimeTagValue->setText(m_rawTag.isEmpty() ? unav : m_rawTag);
-    m_runtimeLspPathValue->setText(m_rawLspPath.isEmpty() ? unav : m_rawLspPath);
-    m_runtimeStdlibPathValue->setText(m_rawStdlibPath.isEmpty() ? unav : m_rawStdlibPath);
-    m_runtimeCachePathValue->setText(m_rawCachePath.isEmpty() ? unav : m_rawCachePath);
+    m_lspPresentation.setDiagnostics(info);
+    applyLspPresentation();
 }
 
-void LspManagerDialog::setLspDiagnostics(const QString &connection,
-                                         const QString &syncMode,
-                                         const QString &lastError)
+void LspManagerDialog::applyLspPresentation()
 {
-    m_rawConnection = connection;
-    m_rawSyncMode = syncMode;
-    m_rawLastError = lastError;
-    updateDiagnosticsDisplay();
-}
+    const LspRuntimeInfo runtime = m_lspPresentation.displayRuntimeInfo();
+    m_runtimeStatusValue->setText(runtime.status);
+    m_runtimeTagValue->setText(runtime.tag);
+    m_runtimeLspPathValue->setText(runtime.lspPath);
+    m_runtimeStdlibPathValue->setText(runtime.stdlibPath);
+    m_runtimeCachePathValue->setText(runtime.cachePath);
 
-void LspManagerDialog::updateDiagnosticsDisplay()
-{
-    auto &tr = TranslationManager::instance();
-    const QString unknown = tr.translate("lsp.val_unknown");
-    const QString none = tr.translate("lsp.val_none");
-    m_lspConnectionValue->setText(m_rawConnection.isEmpty() ? unknown : m_rawConnection);
-    m_lspSyncModeValue->setText(m_rawSyncMode.isEmpty() ? unknown : m_rawSyncMode);
-    m_lspLastErrorValue->setText(m_rawLastError.isEmpty() ? none : m_rawLastError);
+    const LspDiagnosticsInfo diagnostics =
+        m_lspPresentation.displayDiagnostics();
+    m_lspConnectionValue->setText(diagnostics.connection);
+    m_lspSyncModeValue->setText(diagnostics.syncMode);
+    m_lspLastErrorValue->setText(diagnostics.lastError);
+
+    const ClangdInfo clangd = m_lspPresentation.displayClangdInfo();
+    m_cLspStatusValue->setText(clangd.status);
+    m_cLspPathValue->setText(clangd.resolvedPath);
+    m_cLspMessageValue->setText(clangd.message);
 }
 
 void LspManagerDialog::appendLspLog(const QString &line)
@@ -426,7 +411,5 @@ void LspManagerDialog::applyTranslations()
     m_labelCLspStatus->setText(tr.translate("lsp.c_status"));
     m_labelCLspPath->setText(tr.translate("lsp.c_resolved_path"));
     m_labelCLspMessage->setText(tr.translate("lsp.c_message"));
-
-    updateRuntimeInfoDisplay();
-    updateDiagnosticsDisplay();
+    applyLspPresentation();
 }

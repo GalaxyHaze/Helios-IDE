@@ -1,15 +1,16 @@
 #ifndef GITPANEL_H
 #define GITPANEL_H
 
+#include "../core/GitRepositorySession.h"
+
 #include <QWidget>
-#include <QProcess>
 
 class QLabel;
 class QLineEdit;
 class QListWidget;
 class QListWidgetItem;
 class QPushButton;
-class QTimer;
+class GitStatusListPresenter;
 
 class GitPanel : public QWidget
 {
@@ -19,7 +20,7 @@ public:
     explicit GitPanel(QWidget *parent = nullptr);
 
     void setRootPath(const QString &path);
-    QString rootPath() const { return m_rootPath; }
+    QString rootPath() const;
     void applyTheme();
 
 public slots:
@@ -34,36 +35,18 @@ private slots:
     void unstageSelected();
     void commitChanges();
     void onItemActivated(QListWidgetItem *item);
-    void onGitProcessFinished(int exitCode, QProcess::ExitStatus exitStatus);
-    void onGitProcessError(QProcess::ProcessError error);
+    void onStateChanged(const GitRepositoryState &state);
+    void onSessionMessage(const QString &message, bool isError);
+    void onCommitSucceeded();
 
 private:
-    enum class GitOperation {
-        None,
-        Status,
-        Remote,
-        Stage,
-        Unstage,
-        Commit,
-        Init,
-        ConnectToGithub
-    };
-
-    void startGitOperation(GitOperation operation, const QStringList &args);
     void setBusy(bool busy);
-    void handleOperationFinished(GitOperation operation,
-                                 const QString &stdOut,
-                                 const QString &stdErr,
-                                 bool success);
-    void loadStatusOutput(const QString &output);
+    void renderStatusSnapshot();
     QStringList selectedRelativePaths() const;
     void setSummaryMessage(const QString &message, bool isError = false);
 
-    QString m_rootPath;
-    QProcess *m_gitProcess = nullptr;
-    QTimer *m_gitTimeoutTimer = nullptr;
-    GitOperation m_activeOperation = GitOperation::None;
-    GitOperation m_pendingOperation = GitOperation::None;
+    GitRepositorySession *m_session = nullptr;
+    GitStatusListPresenter *m_statusPresenter = nullptr;
     QLabel *m_summaryLabel = nullptr;
     QLabel *m_branchLabel = nullptr;
     QListWidget *m_statusList = nullptr;
@@ -75,7 +58,7 @@ private:
     QPushButton *m_initButton = nullptr;
     QPushButton *m_connectGithubButton = nullptr;
     QPushButton *m_refreshButton = nullptr;
-    int m_pendingFileCount = 0;
+    GitRepositoryState m_repositoryState;
     void initRepository();
     void connectToGithub();
 };

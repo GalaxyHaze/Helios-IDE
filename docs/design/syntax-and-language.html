@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Helios Syntax and Language Identity</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --canvas: #101318;
+      --surface: #181d25;
+      --surface-alt: #222936;
+      --border: #394455;
+      --text: #edf2f7;
+      --muted: #9aa8b8;
+      --accent: #70d6c2;
+      --zith: #f4c06b;
+      --cfamily: #8bb8ff;
+      --plain: #aeb8c4;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 32px;
+      background:
+        radial-gradient(circle at 12% 0%, #263846 0, transparent 34%),
+        linear-gradient(145deg, var(--canvas), #0b0e12);
+      color: var(--text);
+      font: 15px/1.5 ui-sans-serif, sans-serif;
+    }
+
+    main { max-width: 980px; margin: 0 auto; }
+    .eyebrow {
+      color: var(--accent);
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    h1 { margin: 8px 0 10px; font-size: clamp(30px, 6vw, 56px); }
+    .intro { max-width: 660px; color: var(--muted); }
+    .workspace {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: 1px;
+      margin-top: 28px;
+      border: 1px solid var(--border);
+      background: var(--border);
+      box-shadow: 0 24px 80px #0008;
+    }
+    aside, section { background: var(--surface); }
+    aside { padding: 18px; }
+    aside h2 { margin-top: 0; font-size: 13px; color: var(--muted); }
+    .language {
+      padding: 12px;
+      margin-top: 10px;
+      border-left: 3px solid;
+      background: var(--surface-alt);
+    }
+    .language strong { display: block; }
+    .zith { border-color: var(--zith); }
+    .cfamily { border-color: var(--cfamily); }
+    .plain { border-color: var(--plain); }
+    section { min-width: 0; }
+    .tabs {
+      display: flex;
+      gap: 2px;
+      padding: 8px 10px 0;
+      background: #12161d;
+    }
+    .tab { padding: 10px 14px; color: var(--muted); }
+    .tab.active { color: var(--text); background: var(--surface); }
+    pre {
+      margin: 0;
+      padding: 26px;
+      min-height: 260px;
+      overflow: auto;
+      background: #131820;
+      font: 14px/1.8 ui-monospace, monospace;
+    }
+    .kw { color: #d99cff; }
+    .type { color: var(--cfamily); }
+    .str { color: var(--zith); }
+    .comment { color: #718195; }
+    .status {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 14px;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .status b { color: var(--accent); }
+    @media (max-width: 700px) {
+      body { padding: 18px; }
+      .workspace { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="eyebrow">Helios / design preview</div>
+    <h1>Language made visible, not loud.</h1>
+    <p class="intro">
+      The syntax layer follows document identity. The status strip confirms the
+      same identity while the editor remains the primary surface.
+    </p>
+    <div class="workspace">
+      <aside>
+        <h2>Identity map</h2>
+        <div class="language zith"><strong>Zith</strong><span>Warm syntax accents</span></div>
+        <div class="language cfamily"><strong>C / C++</strong><span>Cool syntax accents</span></div>
+        <div class="language plain"><strong>Plain text</strong><span>Neutral treatment</span></div>
+      </aside>
+      <section>
+        <div class="tabs">
+          <div class="tab active">main.zith</div>
+          <div class="tab">lexer.hpp</div>
+        </div>
+        <pre><span class="kw">fn</span> <span class="type">main</span>() {
+  <span class="kw">let</span> greeting = <span class="str">"hello, helios"</span>
+  <span class="comment">// language identity drives this treatment</span>
+  print(greeting)
+}</pre>
+        <div class="status"><span>Ln 4, Col 15</span><span><b>Zith</b> · Normal</span></div>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

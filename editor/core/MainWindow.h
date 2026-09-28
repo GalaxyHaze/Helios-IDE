@@ -2,43 +2,78 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
-#include <QMap>
-#include <QList>
 #include <QIcon>
 #include <QJsonObject>
-#include <QSyntaxHighlighter>
-#include "../widgets/ActivityBar.h"
-#include "../panels/SearchPanel.h"
-#include "RunOutputCollector.h"
+#include "ClangdLifecycleCoordinator.h"
+#include "EditorSyntaxController.h"
+#include "LanguageIdentity.h"
+#include "LspDocumentCoordinator.h"
+#include "LspSettingsPersistence.h"
+#include "ShellCommand.h"
+#include "WindowLayoutPersistence.h"
 
 class QCloseEvent;
 class QTabWidget;
 class QLabel;
 class QSplitter;
 class QStackedWidget;
-class QMenu;
-class QAction;
 class QTimer;
 class CodeEditor;
 class LspClient;
+class LspClientEventSource;
 class LspCompletionModel;
 class LspCompleter;
+class ActivityBar;
+class ApplicationThemeController;
+class EditorLspActionController;
+class EditorInteractionController;
+class EditorTabCloseController;
+class EditorSessionController;
+class EditorFileController;
+class LspEditorLifecycleController;
+class LspEditorResultRouter;
+class LspCompletionRouter;
+class LspReferencesRouter;
+class LspCodeActionRouter;
+class LocationNavigator;
+class EditorChromeController;
+class EditorWorkspacePresentationController;
+class WorkspaceCommandAvailabilityController;
+class WorkspacePanelPresentationController;
+class WorkspaceReplaceController;
+class WorkspaceNavigationController;
 class DiagnosticsPanel;
 class ReferencesPanel;
 class CompilerPanel;
 class BreadcrumbsBar;
 class FindReplaceBar;
 class FileTreePanel;
+class SearchPanel;
 class ContextManager;
+class ContextNavigationController;
+class ContextWorkspaceController;
+class WorkspaceRootController;
+class WorkspaceRootInteractionController;
+class LanguageServiceFeedbackController;
+class LanguageServiceWorkspaceController;
+class SidebarController;
+class LspRuntimePresentationController;
+class LspRuntimeController;
+class LspRuntimeEventController;
+class LspLogPresenter;
 class SnippetManager;
 class GitPanel;
 class SettingsPanel;
+class WorkspaceCommandController;
+class WorkspaceEditApplier;
+class WindowLayoutController;
+class ZithRuntimeLifecycleCoordinator;
+class StatusBarController;
+class ShellCommandSurface;
+class ShellTranslationController;
+class ShellDialogController;
 class BottomPanel;
-class ShortcutsDialog;
-class PreferencesDialog;
-class VimHelpDialog;
 class LspManagerDialog;
-class ZithToolchainManager;
 class WelcomeWidget;
 class OutlinePanel;
 struct Context;
@@ -50,11 +85,7 @@ class MainWindow : public QMainWindow
     Q_OBJECT
 
 public:
-    enum class EditorLanguage {
-        Zith,
-        CFamily,
-        PlainText
-    };
+    using EditorLanguage = LanguageIdentity::Language;
 
 public:
     explicit MainWindow(QWidget *parent = nullptr);
@@ -62,95 +93,37 @@ public:
 
 private slots:
     CodeEditor *createTab(bool makeCurrent = true);
-    void connectEditorSignals(CodeEditor *editor);
-    void newFile();
-    void newProject();
-    void openFile();
-    void openFolder();
-    void saveFile();
-    void toggleFileTree(bool show);
     void saveContextState();
-    void restoreContextState(const Context &ctx);
     CodeEditor *currentEditor() const;
-    void setSidebarMode(ActivityBar::Mode mode);
-    void setBottomPanelVisible(bool visible);
-    void applyEditorPreferences(CodeEditor *editor);
-    void setAppFontFamily(const QString &family);
-    void setAppFontSize(int pointSize);
-    void setWordWrapEnabled(bool enabled);
-    void loadUiPreferences();
-    void saveUiPreferences() const;
-    void updateEditorChrome(CodeEditor *editor);
     void releaseEditor(CodeEditor *editor);
-    void setLspStatus(const QString &text, const QString &color);
-    void onFrontendStatusReceived(const QJsonObject &status);
-    void onMetricsReceived(const QJsonObject &metrics);
-    void onReplaceAllPreviewReady(const QString &needle,
-                                  const QString &replacement,
-                                  const QVector<SearchReplaceTarget> &targets);
-    void applyWorkspaceReplace(const QString &needle,
-                               const QString &replacement,
-                               const QVector<SearchReplaceTarget> &targets);
-    void handleVimCommand(const QString &command);
-    void ensureLspRuntime(bool preferCached);
-    void startLspRuntime(const QString &lspPath,
-                         const QString &stdlibPath,
-                         const QString &tag);
-    void updateSettingsRuntimeInfo();
-    void updateLspDiagnostics();
-    void clearRuntimeCache();
-    void setLspEnabled(bool enabled);
     void applyWorkspaceEdit(const QJsonObject &edit);
     void saveAllForLsp();
-    bool canExecuteLspWorkspaceCommand() const;
     void updateRunActionsEnabled();
-    void runBuild();
-    void runCheckFile();
-    void runProject();
-    void stopRunningTask();
-    void onWorkDoneProgressReceived(const QString &token, const QString &kind,
-                                    const QString &message);
     void appendPublishedDiagnostics();
-    void onLspCommandResult(const QString &command, bool success,
-                            const QJsonValue &result);
 
     void applyThemeAndLanguage();
-    void updateCentralWidgetState();
-    void showPreferences();
-    void showSettingsPanel();
-    void showShortcutsDialog();
-    void showLspManagerDialog();
-    void showVimHelpDialog();
+    void handleShellCommand(ShellCommand command);
+    void applyEditorPreferences();
 
 protected:
     void closeEvent(QCloseEvent *event) override;
 
 private:
-    void setWorkspaceRoot(const QString &path);
     bool lspEnabled() const;
     bool cLspEnabled() const;
     QString resolvedCLspPath() const;
-    EditorLanguage languageForPath(const QString &path) const;
-    QString lspLanguageId(EditorLanguage language) const;
     LspClient *lspClientForPath(const QString &path) const;
-    LspClient *lspClientForLanguage(EditorLanguage language) const;
-    LspClient *lspClientForEditor(CodeEditor *editor) const;
-    bool shouldUseLspForPath(const QString &path) const;
     bool isZithEditor(CodeEditor *editor) const;
-    bool isCFamilyEditor(CodeEditor *editor) const;
-    void syncEditorWithLsp(CodeEditor *editor, bool openDocument);
-    void closeEditorWithLsp(CodeEditor *editor);
     void updateClangdLifecycle();
-    void updateClangdRuntimeInfo();
     void applyTheme();
     void applyTranslations();
     void applyAppearanceChange();
-    void applyLanguageForEditor(CodeEditor *editor, const QString &path);
 
     QTabWidget *m_tabWidget = nullptr;
-    QMap<CodeEditor*, QSyntaxHighlighter*> m_highlighters;
     LspClient *m_zithLspClient = nullptr;
     LspClient *m_clangdClient = nullptr;
+    LspClientEventSource *m_zithLspEvents = nullptr;
+    LspClientEventSource *m_clangdEvents = nullptr;
     LspCompletionModel *m_completionModel = nullptr;
     LspCompleter *m_completer = nullptr;
     DiagnosticsPanel *m_diagnosticsPanel = nullptr;
@@ -164,78 +137,62 @@ private:
     SearchPanel *m_searchPanel = nullptr;
     GitPanel *m_gitPanel = nullptr;
     SettingsPanel *m_settingsPanel = nullptr;
-    ShortcutsDialog *m_shortcutsDialog = nullptr;
-    PreferencesDialog *m_preferencesDialog = nullptr;
-    VimHelpDialog *m_vimHelpDialog = nullptr;
-    LspManagerDialog *m_lspManagerDialog = nullptr;
+    ShellDialogController *m_shellDialogs = nullptr;
     ContextManager *m_contextManager = nullptr;
+    ContextNavigationController *m_contextNavigation = nullptr;
+    ContextWorkspaceController *m_contextWorkspace = nullptr;
+    WorkspaceRootController *m_workspaceRoot = nullptr;
+    WorkspaceRootInteractionController *m_workspaceRootInteraction =
+        nullptr;
+    LanguageServiceFeedbackController *m_languageServiceFeedback = nullptr;
+    LanguageServiceWorkspaceController *m_languageServices = nullptr;
+    SidebarController *m_sidebarController = nullptr;
+    LspRuntimePresentationController *m_lspPresentation = nullptr;
+    LspLogPresenter *m_lspLogPresenter = nullptr;
+    LspRuntimeController *m_lspRuntimeController = nullptr;
+    LspRuntimeEventController *m_lspRuntimeEvents = nullptr;
     SnippetManager *m_snippetManager = nullptr;
-    ZithToolchainManager *m_zithToolchainManager = nullptr;
-    QString m_lastLspError;
-    QString m_clangdError;
-    bool m_initialContextSetup;
-    bool m_replacingWorkspaceRoot = false;
+    ZithRuntimeLifecycleCoordinator *m_zithRuntime = nullptr;
+    LspDocumentCoordinator m_lspDocuments;
+    ClangdLifecycleCoordinator m_clangdLifecycle;
+    EditorSyntaxController m_editorSyntax;
+    StatusBarController *m_statusBarController = nullptr;
+    TomlLspSettingsPersistence m_lspSettingsPersistence;
+    TomlWindowLayoutPersistence m_windowLayoutPersistence;
+    WindowLayoutController *m_windowLayout = nullptr;
+    ApplicationThemeController *m_themeController = nullptr;
+    EditorInteractionController *m_editorInteraction = nullptr;
+    EditorTabCloseController *m_editorTabClose = nullptr;
+    EditorSessionController *m_editorSession = nullptr;
+    EditorFileController *m_editorFiles = nullptr;
+    EditorLspActionController *m_editorLspActions = nullptr;
+    LspEditorLifecycleController *m_lspEditorLifecycle = nullptr;
+    LspEditorResultRouter *m_lspEditorResults = nullptr;
+    LspCompletionRouter *m_lspCompletionRouter = nullptr;
+    LspReferencesRouter *m_lspReferencesRouter = nullptr;
+    LspCodeActionRouter *m_lspCodeActions = nullptr;
+    LocationNavigator *m_locationNavigator = nullptr;
+    EditorChromeController *m_editorChrome = nullptr;
+    EditorWorkspacePresentationController *m_workspacePresentation = nullptr;
     QSplitter *m_splitter;
-    int m_fileTreeWidth = 280;
-    bool m_fileTreeAnimating = false;
-    QString m_appFontFamily = "System Default";
-    int m_appFontSize = 13;
-    bool m_wordWrapEnabled = false;
-    QLabel *m_lspLabel = nullptr;
-    QLabel *m_vimLabel = nullptr;
-    QLabel *m_contextLabel = nullptr;
-    QLabel *m_errorLabel = nullptr;
-    QLabel *m_posLabel = nullptr;
-    QLabel *m_indentLabel = nullptr;
-    QLabel *m_encodingLabel = nullptr;
-    QLabel *m_langLabel = nullptr;
-    QString m_runtimeStatusText;
-    QString m_runtimeTag;
-    QString m_activeProgressToken;
-    QString m_lspLabelColor;
-    QString m_activeLspPath;
-    QString m_activeStdlibPath;
-    QString m_activeCLspPath;
-    QString m_activeWorkspaceRoot;
     QString m_appliedTheme;
     QString m_appliedLocale;
-    QList<qint64> m_lspRestartTimes;
-    QTimer *m_outlineSymbolsTimer = nullptr;
-    QString m_outlineSymbolsUri;
-    int m_outlineSymbolsVersion = -1;
-    QString m_outlineRequestedUri;
-    int m_outlineRequestedVersion = -1;
-    RunOutputCollector m_runOutput;
+    WorkspaceCommandController *m_workspaceCommands = nullptr;
+    WorkspaceCommandAvailabilityController *m_workspaceCommandAvailability =
+        nullptr;
+    WorkspacePanelPresentationController *m_workspacePanelPresentation =
+        nullptr;
+    WorkspaceReplaceController *m_workspaceReplace = nullptr;
+    WorkspaceNavigationController *m_workspaceNavigation = nullptr;
+    WorkspaceEditApplier *m_workspaceEditApplier = nullptr;
 
     WelcomeWidget *m_welcomeWidget = nullptr;
     OutlinePanel *m_outlinePanel = nullptr;
     QStackedWidget *m_centralStackedWidget = nullptr;
 
-    QMenu *m_fileMenu = nullptr;
-    QMenu *m_toolsMenu = nullptr;
-    QMenu *m_viewMenu = nullptr;
-    QMenu *m_helpMenu = nullptr;
-
-    QAction *m_newAct = nullptr;
-    QAction *m_newWinAct = nullptr;
-    QAction *m_newProjAct = nullptr;
-    QAction *m_openAct = nullptr;
-    QAction *m_saveAct = nullptr;
-    QAction *m_exitAct = nullptr;
-    QAction *m_buildAct = nullptr;
-    QAction *m_checkAct = nullptr;
-    QAction *m_formatDocAct = nullptr;
-    QAction *m_runAct = nullptr;
-    QAction *m_stopAct = nullptr;
-    QAction *m_restartLspAct = nullptr;
-    QAction *m_gettingStartedAct = nullptr;
-    QAction *m_preferencesAct = nullptr;
-    QAction *m_outlineToggleAct = nullptr;
-    QAction *m_bottomToggleAct = nullptr;
+    ShellCommandSurface *m_commandSurface = nullptr;
+    ShellTranslationController *m_translationController = nullptr;
     BottomPanel *m_bottomPanel = nullptr;
-    QAction *m_shortcutsAct = nullptr;
-    QAction *m_lspManagerAct = nullptr;
-    QAction *m_vimHelpAct = nullptr;
 };
 
 #endif

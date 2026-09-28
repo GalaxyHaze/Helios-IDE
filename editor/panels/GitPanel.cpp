@@ -1,24 +1,20 @@
 #include "GitPanel.h"
+#include "GitPanelPresentationModel.h"
+#include "GitStatusListPresenter.h"
 #include "../core/ThemeManager.h"
 
 #include <QAbstractItemView>
-#include <QColor>
-#include <QDir>
-#include <QFileInfo>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
-#include <QProcess>
 #include <QPushButton>
 #include <QVBoxLayout>
 #include <QInputDialog>
-#include <QTimer>
 
 namespace {
 constexpr int kPanelMargin = 8;
 constexpr int kPanelSpacing = 8;
-constexpr int kGitTimeoutMs = 10000;
 }
 
 
@@ -95,6 +91,7 @@ GitPanel::GitPanel(QWidget *parent)
     m_statusList = new QListWidget;
     m_statusList->setSelectionMode(QAbstractItemView::ExtendedSelection);
     layout->addWidget(m_statusList, 1);
+    m_statusPresenter = new GitStatusListPresenter(m_statusList, this);
 
     connect(m_refreshButton, &QPushButton::clicked, this, &GitPanel::refreshStatus);
     connect(m_initButton, &QPushButton::clicked, this, &GitPanel::initRepository);
@@ -107,25 +104,13 @@ GitPanel::GitPanel(QWidget *parent)
     connect(m_statusList, &QListWidget::itemActivated, this, &GitPanel::onItemActivated);
     connect(m_statusList, &QListWidget::itemClicked, this, &GitPanel::onItemActivated);
 
-    m_gitProcess = new QProcess(this);
-    m_gitProcess->setProcessChannelMode(QProcess::SeparateChannels);
-    connect(m_gitProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
-            this, &GitPanel::onGitProcessFinished);
-    connect(m_gitProcess, &QProcess::errorOccurred,
-            this, &GitPanel::onGitProcessError);
-
-    m_gitTimeoutTimer = new QTimer(this);
-    m_gitTimeoutTimer->setSingleShot(true);
-    m_gitTimeoutTimer->setInterval(kGitTimeoutMs);
-    connect(m_gitTimeoutTimer, &QTimer::timeout, this, [this]() {
-        if (!m_gitProcess || m_gitProcess->state() == QProcess::NotRunning)
-            return;
-
-        m_gitProcess->kill();
-        m_pendingOperation = GitOperation::Status;
-        setBusy(false);
-        setSummaryMessage("Timed out while running Git.", true);
-    });
+    m_session = new GitRepositorySession(this);
+    connect(m_session, &GitRepositorySession::stateChanged,
+            this, &GitPanel::onStateChanged);
+    connect(m_session, &GitRepositorySession::messageChanged,
+            this, &GitPanel::onSessionMessage);
+    connect(m_session, &GitRepositorySession::commitSucceeded,
+            this, &GitPanel::onCommitSucceeded);
 
     connect(&ThemeManager::instance(), &ThemeManager::themeChanged,
             this, &GitPanel::applyTheme);
@@ -134,8 +119,12 @@ GitPanel::GitPanel(QWidget *parent)
 
 void GitPanel::setRootPath(const QString &path)
 {
-    m_rootPath = path;
-    refreshStatus();
+    m_session->setRootPath(path);
+}
+
+QString GitPanel::rootPath() const
+{
+    return m_session ? m_session->rootPath() : QString();
 }
 
 void GitPanel::applyTheme()
@@ -144,8 +133,6 @@ void GitPanel::applyTheme()
     const QString bg = tm.semanticColor(ThemeManager::SemanticRole::Surface).name();
     const QString border = tm.semanticColor(ThemeManager::SemanticRole::Border).name();
     const QString text = tm.semanticColor(ThemeManager::SemanticRole::Text).name();
-    const QString muted = tm.semanticColor(ThemeManager::SemanticRole::TextMuted).name();
-    const QString faint = tm.semanticColor(ThemeManager::SemanticRole::TextFaint).name();
     const QString inputBg = tm.semanticColor(ThemeManager::SemanticRole::InputBg).name();
     const QString buttonBg = tm.semanticColor(ThemeManager::SemanticRole::ButtonBg).name();
     const QString buttonHover = tm.semanticColor(ThemeManager::SemanticRole::ButtonHover).name();
@@ -154,8 +141,6 @@ void GitPanel::applyTheme()
     const QString onAccent = tm.semanticColor(ThemeManager::SemanticRole::OnAccent).name();
     const QString hover = tm.semanticColor(ThemeManager::SemanticRole::Hover).name();
     const QString selected = tm.semanticColor(ThemeManager::SemanticRole::Selected).name();
-    const QString selectedText =
-        tm.semanticColor(ThemeManager::SemanticRole::SelectedText).name();
     const QString success = tm.semanticColor(ThemeManager::SemanticRole::Success).name();
     const QString info = tm.semanticColor(ThemeManager::SemanticRole::Info).name();
 
@@ -218,52 +203,26 @@ void GitPanel::applyTheme()
                 "QListWidget::item:hover { background: %5; }")
             .arg(bg, text, border, selected, hover));
 
-    for (int i = 0; i < m_statusList->count(); ++i) {
-        QWidget *rowWidget = m_statusList->itemWidget(m_statusList->item(i));
-        if (!rowWidget)
-            continue;
-
-        const QList<QLabel *> labels = rowWidget->findChildren<QLabel *>();
-        for (QLabel *label : labels) {
-            if (label->objectName() == QStringLiteral("gitStatusName")) {
-                label->setStyleSheet(
-                    QString("font-size: 12px; color: %1;").arg(text));
-            } else if (label->objectName() == QStringLiteral("gitStatusPath")) {
-                label->setStyleSheet(
-                    QString("font-size: 11px; color: %1;").arg(faint));
-            } else {
-                label->setStyleSheet({});
-            }
-        }
-    }
+    if (m_statusPresenter)
+        m_statusPresenter->applyTheme();
 }
 
 
 void GitPanel::refreshStatus()
 {
-    if (m_activeOperation != GitOperation::None) {
-        m_pendingOperation = GitOperation::Status;
-        return;
-    }
-
-    m_statusList->clear();
+    if (m_statusPresenter)
+        m_statusPresenter->clear();
+    m_repositoryState = {};
+    m_repositoryState.rootPath = m_session->rootPath();
     m_initButton->hide();
     m_connectGithubButton->hide();
-
-    if (m_rootPath.isEmpty()) {
-        m_branchLabel->setText("No Repo");
-        setSummaryMessage("Open a project inside a Git repository.");
-        return;
-    }
-
     m_branchLabel->setText("...");
-    startGitOperation(GitOperation::Status, {"status", "--short", "--branch"});
+    m_session->refresh();
 }
 
 void GitPanel::stageAll()
 {
-    m_pendingFileCount = m_statusList->count();
-    startGitOperation(GitOperation::Stage, {"add", "--all"});
+    m_session->stageAll();
 }
 
 void GitPanel::stageSelected()
@@ -274,10 +233,7 @@ void GitPanel::stageSelected()
         return;
     }
 
-    m_pendingFileCount = relativePaths.size();
-    QStringList args = {"add", "--"};
-    args.append(relativePaths);
-    startGitOperation(GitOperation::Stage, args);
+    m_session->stage(relativePaths);
 }
 
 void GitPanel::unstageSelected()
@@ -288,10 +244,7 @@ void GitPanel::unstageSelected()
         return;
     }
 
-    m_pendingFileCount = relativePaths.size();
-    QStringList args = {"restore", "--staged", "--"};
-    args.append(relativePaths);
-    startGitOperation(GitOperation::Unstage, args);
+    m_session->unstage(relativePaths);
 }
 
 void GitPanel::commitChanges()
@@ -302,7 +255,7 @@ void GitPanel::commitChanges()
         return;
     }
 
-    startGitOperation(GitOperation::Commit, {"commit", "-m", message});
+    m_session->commit(message);
 }
 
 void GitPanel::onItemActivated(QListWidgetItem *item)
@@ -315,244 +268,33 @@ void GitPanel::onItemActivated(QListWidgetItem *item)
         emit fileActivated(path);
 }
 
-void GitPanel::startGitOperation(GitOperation operation, const QStringList &args)
+void GitPanel::onStateChanged(const GitRepositoryState &state)
 {
-    if (m_rootPath.isEmpty()) {
-        setSummaryMessage("Open a project inside a Git repository.", true);
+    m_repositoryState = state;
+    const GitPanelPresentationState presentation =
+        GitPanelPresentationModel::fromRepositoryState(state);
+    setBusy(presentation.busy);
+    m_initButton->setVisible(presentation.showInitializeButton);
+    m_connectGithubButton->setVisible(presentation.showConnectButton);
+    m_branchLabel->setText(presentation.branchLabel);
+    setSummaryMessage(presentation.summaryMessage);
+
+    if (!presentation.showStatusList) {
+        if (m_statusPresenter)
+            m_statusPresenter->clear();
         return;
     }
 
-    if (m_activeOperation != GitOperation::None) {
-        m_pendingOperation = GitOperation::Status;
-        return;
-    }
-
-    if (!m_gitProcess || !m_gitTimeoutTimer)
+    if (!m_statusPresenter)
         return;
 
-    m_activeOperation = operation;
-    m_gitProcess->setWorkingDirectory(m_rootPath);
-    m_gitProcess->start("git", args);
-
-    setBusy(true);
-    m_gitTimeoutTimer->start();
-}
-
-void GitPanel::onGitProcessError(QProcess::ProcessError error)
-{
-    if (error != QProcess::FailedToStart)
-        return;
-
-    m_gitTimeoutTimer->stop();
-    const GitOperation failedOperation = m_activeOperation;
-    m_activeOperation = GitOperation::None;
-    setSummaryMessage("Failed to start Git.", true);
-    setBusy(false);
-    if (failedOperation != GitOperation::None)
-        QTimer::singleShot(0, this, &GitPanel::refreshStatus);
-}
-
-void GitPanel::onGitProcessFinished(int exitCode, QProcess::ExitStatus exitStatus)
-{
-    if (!m_gitProcess || m_activeOperation == GitOperation::None)
-        return;
-
-    m_gitTimeoutTimer->stop();
-    const QString stdOut = QString::fromUtf8(m_gitProcess->readAllStandardOutput()).trimmed();
-    const QString stdErr = QString::fromUtf8(m_gitProcess->readAllStandardError()).trimmed();
-    const GitOperation finishedOperation = m_activeOperation;
-    m_activeOperation = GitOperation::None;
-
-    const bool success = exitStatus == QProcess::NormalExit && exitCode == 0;
-    handleOperationFinished(finishedOperation, stdOut, stdErr, success);
-
-    if (m_pendingOperation != GitOperation::None) {
-        const GitOperation pending = m_pendingOperation;
-        m_pendingOperation = GitOperation::None;
-        if (pending == GitOperation::Status) {
-            refreshStatus();
-        }
-    } else if (finishedOperation != GitOperation::Status
-               && finishedOperation != GitOperation::Remote) {
-        QTimer::singleShot(0, this, &GitPanel::refreshStatus);
-    }
-}
-
-void GitPanel::handleOperationFinished(GitOperation operation,
-                                       const QString &stdOut,
-                                       const QString &stdErr,
-                                       bool success)
-{
-    switch (operation) {
-    case GitOperation::Status:
-        m_branchLabel->setText("No Repo");
-        if (!success) {
-            setSummaryMessage(stdErr.isEmpty()
-                ? "Current workspace is not a Git repository."
-                : stdErr,
-                true);
-            m_initButton->show();
-            break;
-        }
-
-        loadStatusOutput(stdOut);
-        startGitOperation(GitOperation::Remote, {"remote"});
-        break;
-
-    case GitOperation::Remote:
-        if (success && stdOut.contains("origin"))
-            m_connectGithubButton->hide();
-        else
-            m_connectGithubButton->show();
-        break;
-
-    case GitOperation::Stage:
-        if (success) {
-            const int count = m_pendingFileCount > 0 ? m_pendingFileCount
-                                                     : m_statusList->count();
-            setSummaryMessage(QString("Staged %1 file(s).").arg(count));
-        } else {
-            setSummaryMessage(stdErr.isEmpty() ? "Failed to stage files." : stdErr, true);
-        }
-        m_pendingFileCount = 0;
-        break;
-
-    case GitOperation::Unstage:
-        if (success) {
-            setSummaryMessage(QString("Unstaged %1 file(s).").arg(m_pendingFileCount));
-        } else {
-            setSummaryMessage(stdErr.isEmpty() ? "Failed to unstage selected files." : stdErr,
-                              true);
-        }
-        m_pendingFileCount = 0;
-        break;
-
-    case GitOperation::Commit:
-        if (success) {
-            m_commitInput->clear();
-            setSummaryMessage(stdOut.simplified().isEmpty()
-                ? "Commit created successfully."
-                : stdOut.simplified());
-        } else {
-            setSummaryMessage(stdErr.isEmpty() ? "Commit failed." : stdErr, true);
-        }
-        break;
-
-    case GitOperation::Init:
-        setSummaryMessage(!success && !stdErr.isEmpty() ? stdErr
-                                                        : "Repository initialized.",
-                          !success);
-        break;
-
-    case GitOperation::ConnectToGithub:
-        setSummaryMessage(!success && !stdErr.isEmpty() ? stdErr
-                                                        : "Remote 'origin' added.",
-                          !success);
-        break;
-
-    case GitOperation::None:
-        break;
-    }
-
-    if (m_activeOperation == GitOperation::None)
-        setBusy(false);
-}
-
-void GitPanel::loadStatusOutput(const QString &output)
-{
-    auto &tm = ThemeManager::instance();
-    const QStringList lines = output.split('\n', Qt::SkipEmptyParts);
-    if (lines.isEmpty()) {
-        setSummaryMessage("Repository is clean.");
-        return;
-    }
-
-    int changedFiles = 0;
-    for (const QString &line : lines) {
-        if (line.startsWith("##")) {
-            const QString branchLine = line.mid(3).trimmed();
-            m_branchLabel->setText(branchLine.isEmpty() ? "No Branch" : branchLine);
-            continue;
-        }
-
-        const QString statusStr = line.left(2);
-        QString relativePath = line.mid(3).trimmed();
-        const qsizetype renameArrow = relativePath.indexOf(" -> ");
-        if (renameArrow >= 0)
-            relativePath = relativePath.mid(renameArrow + 4).trimmed();
-
-        auto *item = new QListWidgetItem();
-        const QString absolutePath = QDir(m_rootPath).filePath(relativePath);
-        if (QFileInfo::exists(absolutePath))
-            item->setData(Qt::UserRole, absolutePath);
-        item->setData(Qt::UserRole + 1, relativePath);
-        item->setSizeHint(QSize(0, 26));
-        m_statusList->addItem(item);
-
-        QWidget *rowWidget = new QWidget;
-        QHBoxLayout *rowLayout = new QHBoxLayout(rowWidget);
-        rowLayout->setContentsMargins(6, 2, 6, 2);
-        rowLayout->setSpacing(8);
-
-        QLabel *badge = new QLabel(statusStr.trimmed());
-        badge->setObjectName(QStringLiteral("gitStatusBadge"));
-        badge->setAlignment(Qt::AlignCenter);
-        badge->setFixedSize(20, 16);
-
-        QString badgeBg = tm.semanticColor(ThemeManager::SemanticRole::ButtonBg).name();
-        QString badgeFg = tm.semanticColor(ThemeManager::SemanticRole::ButtonText).name();
-        if (statusStr.contains("M")) {
-            badgeBg = tm.semanticColor(ThemeManager::SemanticRole::Warning).name();
-            badgeFg = tm.semanticColor(ThemeManager::SemanticRole::OnAccent).name();
-        } else if (statusStr.contains("A")) {
-            badgeBg = tm.semanticColor(ThemeManager::SemanticRole::Success).name();
-            badgeFg = tm.semanticColor(ThemeManager::SemanticRole::OnAccent).name();
-        } else if (statusStr.contains("D")) {
-            badgeBg = tm.semanticColor(ThemeManager::SemanticRole::Error).name();
-            badgeFg = tm.semanticColor(ThemeManager::SemanticRole::OnAccent).name();
-        } else if (statusStr.contains("?")) {
-            badgeBg = tm.semanticColor(ThemeManager::SemanticRole::Info).name();
-            badgeFg = tm.semanticColor(ThemeManager::SemanticRole::OnAccent).name();
-        }
-
-        badge->setStyleSheet(QString("background: %1; color: %2; border-radius: 4px; font-size: 10px; font-weight: bold; font-family: monospace;").arg(badgeBg, badgeFg));
-        rowLayout->addWidget(badge);
-
-        QLabel *nameLabel = new QLabel(QFileInfo(relativePath).fileName());
-        nameLabel->setObjectName(QStringLiteral("gitStatusName"));
-        nameLabel->setStyleSheet("font-size: 12px;");
-        rowLayout->addWidget(nameLabel);
-
-        QLabel *pathLabel = new QLabel(QFileInfo(relativePath).path());
-        pathLabel->setObjectName(QStringLiteral("gitStatusPath"));
-        pathLabel->setStyleSheet("font-size: 11px;");
-        rowLayout->addWidget(pathLabel, 1);
-
-        m_statusList->setItemWidget(item, rowWidget);
-
-        ++changedFiles;
-    }
-
-    if (changedFiles == 0) {
-        setSummaryMessage("Repository is clean.");
-    } else {
-        setSummaryMessage(
-            QString("%1 changed file(s). Select files to stage.")
-                .arg(changedFiles));
-    }
+    m_statusPresenter->render(m_repositoryState);
 }
 
 QStringList GitPanel::selectedRelativePaths() const
 {
-    QStringList relativePaths;
-    const QList<QListWidgetItem *> items = m_statusList->selectedItems();
-    for (QListWidgetItem *item : items) {
-        const QString relativePath = item->data(Qt::UserRole + 1).toString();
-        if (!relativePath.isEmpty())
-            relativePaths << relativePath;
-    }
-    relativePaths.removeDuplicates();
-    return relativePaths;
+    return m_statusPresenter ? m_statusPresenter->selectedRelativePaths()
+                             : QStringList();
 }
 
 void GitPanel::setSummaryMessage(const QString &message, bool isError)
@@ -577,9 +319,19 @@ void GitPanel::setBusy(bool busy)
     m_connectGithubButton->setEnabled(!busy);
 }
 
+void GitPanel::onSessionMessage(const QString &message, bool isError)
+{
+    setSummaryMessage(message, isError);
+}
+
+void GitPanel::onCommitSucceeded()
+{
+    m_commitInput->clear();
+}
+
 void GitPanel::initRepository()
 {
-    startGitOperation(GitOperation::Init, {"init", "-b", "main"});
+    m_session->initializeRepository();
 }
 
 void GitPanel::connectToGithub()
@@ -592,6 +344,5 @@ void GitPanel::connectToGithub()
     if (!ok || url.trimmed().isEmpty())
         return;
 
-    startGitOperation(GitOperation::ConnectToGithub,
-                      {"remote", "add", "origin", url.trimmed()});
+    m_session->connectToRemote(url);
 }

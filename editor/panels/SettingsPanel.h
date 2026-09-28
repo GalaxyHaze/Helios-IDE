@@ -1,6 +1,9 @@
 #ifndef SETTINGSPANEL_H
 #define SETTINGSPANEL_H
 
+#include "../core/LspRuntimePresentationState.h"
+#include "../core/LspRuntimePresentationModel.h"
+
 #include <QWidget>
 
 class QCheckBox;
@@ -17,33 +20,15 @@ class SettingsPanel : public QWidget
 public:
     explicit SettingsPanel(QWidget *parent = nullptr);
 
-    void setFontFamily(const QString &family);
-    void setFontSize(int pointSize);
-    void setWordWrapEnabled(bool enabled);
-    void setTheme(const QString &themeName);
-    void setLocale(const QString &locale);
     void setLspEnabled(bool enabled);
 
-    void setRuntimeInfo(const QString &status,
-                        const QString &tag,
-                        const QString &lspPath,
-                        const QString &stdlibPath,
-                        const QString &cachePath);
-    void setLspDiagnostics(const QString &connection,
-                           const QString &syncMode,
-                           const QString &lastError);
-    void setCLspInfo(const QString &status,
-                     const QString &path,
-                     const QString &message);
+    void setRuntimeInfo(const LspRuntimeInfo &info);
+    void setLspDiagnostics(const LspDiagnosticsInfo &info);
+    void setCLspInfo(const ClangdInfo &info);
     void appendLspLog(const QString &line);
     void clearLspLog();
 
 signals:
-    void fontFamilyChanged(const QString &family);
-    void fontSizeChanged(int pointSize);
-    void wordWrapChanged(bool enabled);
-    void themeChanged(const QString &themeName);
-    void localeChanged(const QString &locale);
     void openPreferencesRequested();
     void openShortcutsRequested();
     void openLspManagerRequested();
@@ -56,8 +41,7 @@ private slots:
     void applyTranslations();
 
 private:
-    void initializeShortcutTree();
-    void updateShortcutTexts();
+    void applyLspPresentation();
 
     QLabel *m_titleLabel = nullptr;
     QWidget *m_preferencesCard = nullptr;
@@ -89,6 +73,7 @@ private:
     QCheckBox *m_lspEnabledCheck = nullptr;
     QTabWidget *m_tabWidget = nullptr;
     QTreeWidget *m_shortcutsTree = nullptr;
+    LspRuntimePresentationModel m_lspPresentation;
 };
 
 #endif

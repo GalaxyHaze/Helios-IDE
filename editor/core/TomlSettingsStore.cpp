@@ -1,10 +1,9 @@
 #include "TomlSettingsStore.h"
-#include <QStandardPaths>
+
 #include <QDir>
 #include <QFile>
-#include <QTextStream>
 #include <QFileInfo>
-#include <QDebug>
+#include <QStandardPaths>
 
 TomlSettingsStore::TomlSettingsStore(QObject *parent)
     : QObject(parent)
@@ -24,287 +23,190 @@ QString TomlSettingsStore::filePath() const
     if (!m_overrideDir.isEmpty())
         return QDir(m_overrideDir).filePath("settings.toml");
 #endif
-    QString dir = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
-    return QDir(dir).filePath("settings.toml");
+    const QString directory =
+        QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
+    return QDir(directory).filePath("settings.toml");
 }
 
 void TomlSettingsStore::load()
 {
-    QString path = filePath();
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+    QFile file(filePath());
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
         return;
-    }
 
-    bool legacyFontFamilySeen = false;
-    bool legacyFontSizeSeen = false;
-    bool editorFontFamilySeen = false;
-    bool editorFontSizeSeen = false;
-    QTextStream in(&file);
-    while (!in.atEnd()) {
-        QString line = in.readLine().trimmed();
-        if (line.isEmpty() || line.startsWith('#') || line.startsWith('['))
-            continue;
-
-        int eqIdx = line.indexOf('=');
-        if (eqIdx == -1)
-            continue;
-
-        QString key = line.left(eqIdx).trimmed();
-        QString val = line.mid(eqIdx + 1).trimmed();
-
-        if (key == "theme") {
-            if (val.startsWith('"') && val.endsWith('"') && val.length() >= 2)
-                m_theme = val.mid(1, val.length() - 2);
-        } else if (key == "customThemePath") {
-            if (val.startsWith('"') && val.endsWith('"') && val.length() >= 2)
-                m_customThemePath = val.mid(1, val.length() - 2);
-        } else if (key == "locale") {
-            if (val.startsWith('"') && val.endsWith('"') && val.length() >= 2)
-                m_locale = val.mid(1, val.length() - 2);
-        } else if (key == "fontFamily") {
-            legacyFontFamilySeen = true;
-            if (val.startsWith('"') && val.endsWith('"') && val.length() >= 2) m_uiFontFamily = val.mid(1, val.length() - 2); else m_uiFontFamily = val.trimmed();
-        } else if (key == "fontSize") {
-            legacyFontSizeSeen = true;
-            m_uiFontSize = val.toInt();
-            if (m_uiFontSize < 6) m_uiFontSize = 13;
-        } else if (key == "uiFontFamily") {
-            if (val.startsWith('"') && val.endsWith('"') && val.length() >= 2) m_uiFontFamily = val.mid(1, val.length() - 2);
-        } else if (key == "uiFontSize") {
-            m_uiFontSize = val.toInt();
-            if (m_uiFontSize < 6) m_uiFontSize = 13;
-        } else if (key == "editorFontFamily") {
-            editorFontFamilySeen = true;
-            if (val.startsWith('"') && val.endsWith('"') && val.length() >= 2) m_editorFontFamily = val.mid(1, val.length() - 2);
-        } else if (key == "editorFontSize") {
-            editorFontSizeSeen = true;
-            m_editorFontSize = val.toInt();
-            if (m_editorFontSize < 6) m_editorFontSize = 13;
-        } else if (key == "renderingStrategy") {
-            if (val.startsWith('"') && val.endsWith('"') && val.length() >= 2) m_renderingStrategy = val.mid(1, val.length() - 2);
-        } else if (key == "uiScale") {
-            m_uiScale = val.toInt();
-            if (m_uiScale < 75 || m_uiScale > 200) m_uiScale = 100;
-        } else if (key == "vimMotionsEnabled") {
-            m_vimMotionsEnabled = (val == "true");
-        } else if (key == "wordWrap") {
-            m_wordWrap = (val == "true");
-        } else if (key == "searchTextExtensions") {
-            m_searchTextExtensions.clear();
-            if (val.startsWith('[') && val.endsWith(']')) {
-                const QString content = val.mid(1, val.length() - 2).trimmed();
-                if (!content.isEmpty()) {
-                    const QStringList items = content.split(',', Qt::SkipEmptyParts);
-                    for (const QString &item : items) {
-                        QString clean = item.trimmed();
-                        if (clean.startsWith('"') && clean.endsWith('"') && clean.length() >= 2)
-                            clean = clean.mid(1, clean.length() - 2);
-                        if (!clean.isEmpty())
-                            m_searchTextExtensions.append(clean);
-                    }
-                }
-            }
-        } else if (key == "searchExcludedDirs") {
-            m_searchExcludedDirs.clear();
-            if (val.startsWith('[') && val.endsWith(']')) {
-                const QString content = val.mid(1, val.length() - 2).trimmed();
-                if (!content.isEmpty()) {
-                    const QStringList items = content.split(',', Qt::SkipEmptyParts);
-                    for (const QString &item : items) {
-                        QString clean = item.trimmed();
-                        if (clean.startsWith('"') && clean.endsWith('"') && clean.length() >= 2)
-                            clean = clean.mid(1, clean.length() - 2);
-                        if (!clean.isEmpty())
-                            m_searchExcludedDirs.append(clean);
-                    }
-                }
-            }
-        } else if (key == "sidebarWidth") {
-            m_sidebarWidth = val.toInt();
-            if (m_sidebarWidth < 50) m_sidebarWidth = 280;
-        } else if (key == "sidebarVisible") {
-            m_sidebarVisible = (val == "true");
-        } else if (key == "outlineVisible") {
-            m_outlineVisible = (val == "true");
-        } else if (key == "treeMaxDepth") {
-            m_treeMaxDepth = val.toInt();
-            if (m_treeMaxDepth < 1 || m_treeMaxDepth > 64) m_treeMaxDepth = 12;
-        } else if (key == "onboardingDismissed") {
-            m_onboardingDismissed = (val == "true");
-        } else if (key == "lspEnabled") {
-            m_lspEnabled = (val == "true");
-        } else if (key == "useOnlineZithLsp") {
-            m_useOnlineZithLsp = (val == "true");
-        } else if (key == "cLspEnabled") {
-            m_cLspEnabled = (val == "true");
-        } else if (key == "cLspPath") {
-            if (val.startsWith('"') && val.endsWith('"') && val.length() >= 2)
-                m_cLspPath = val.mid(1, val.length() - 2);
-        } else if (key == "mainWindowGeometry") {
-            if (val.startsWith('"') && val.endsWith('"') && val.length() >= 2)
-                m_mainWindowGeometryBase64 = val.mid(1, val.length() - 2);
-        } else if (key == "mainWindowState") {
-            if (val.startsWith('"') && val.endsWith('"') && val.length() >= 2)
-                m_mainWindowStateBase64 = val.mid(1, val.length() - 2);
-        } else if (key == "recentProjects") {
-            m_recentProjects.clear();
-            if (val.startsWith('[') && val.endsWith(']')) {
-                QString content = val.mid(1, val.length() - 2).trimmed();
-                if (!content.isEmpty()) {
-                    QStringList items = content.split(',');
-                    for (const QString &item : items) {
-                        QString clean = item.trimmed();
-                        if (clean.startsWith('"') && clean.endsWith('"') && clean.length() >= 2) {
-                            clean = clean.mid(1, clean.length() - 2);
-                            if (!clean.isEmpty()) {
-                                m_recentProjects.append(clean);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    if (legacyFontFamilySeen && !editorFontFamilySeen)
-        m_editorFontFamily = m_uiFontFamily;
-    if (legacyFontSizeSeen && !editorFontSizeSeen)
-        m_editorFontSize = m_uiFontSize;
+    const TomlSettingsSnapshot loaded =
+        TomlSettingsCodec::parse(QString::fromUtf8(file.readAll()),
+                                 snapshot());
+    applySnapshot(loaded);
 }
 
 void TomlSettingsStore::save()
 {
-    QString path = filePath();
-    QFileInfo info(path);
+    const QString path = filePath();
+    const QFileInfo info(path);
     QDir().mkpath(info.absolutePath());
 
     QFile file(path);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
         return;
-    }
 
-    QTextStream out(&file);
-    out << "# Helios configuration file\n\n";
+    file.write(TomlSettingsCodec::serialize(snapshot()).toUtf8());
+}
 
-    out << "[editor]\n";
-    out << "editorFontFamily = \"" << m_editorFontFamily << "\"\n";
-    out << "editorFontSize = " << m_editorFontSize << "\n";
-    out << "renderingStrategy = \"" << m_renderingStrategy << "\"\n";
-    out << "wordWrap = " << (m_wordWrap ? "true" : "false") << "\n\n";
+TomlSettingsSnapshot TomlSettingsStore::snapshot() const
+{
+    TomlSettingsSnapshot result;
+    result.theme = m_theme;
+    result.customThemePath = m_customThemePath;
+    result.locale = m_locale;
+    result.uiFontFamily = m_uiFontFamily;
+    result.uiFontSize = m_uiFontSize;
+    result.editorFontFamily = m_editorFontFamily;
+    result.editorFontSize = m_editorFontSize;
+    result.renderingStrategy = m_renderingStrategy;
+    result.uiScale = m_uiScale;
+    result.vimMotionsEnabled = m_vimMotionsEnabled;
+    result.wordWrap = m_wordWrap;
+    result.searchTextExtensions = m_searchTextExtensions;
+    result.searchExcludedDirs = m_searchExcludedDirs;
+    result.sidebarWidth = m_sidebarWidth;
+    result.sidebarVisible = m_sidebarVisible;
+    result.outlineVisible = m_outlineVisible;
+    result.treeMaxDepth = m_treeMaxDepth;
+    result.onboardingDismissed = m_onboardingDismissed;
+    result.lspEnabled = m_lspEnabled;
+    result.useOnlineZithLsp = m_useOnlineZithLsp;
+    result.cLspEnabled = m_cLspEnabled;
+    result.cLspPath = m_cLspPath;
+    result.mainWindowGeometryBase64 = m_mainWindowGeometryBase64;
+    result.mainWindowStateBase64 = m_mainWindowStateBase64;
+    result.recentProjects = m_recentProjects;
+    return result;
+}
 
-    out << "[search]\n";
-    out << "searchTextExtensions = [";
-    for (int i = 0; i < m_searchTextExtensions.size(); ++i) {
-        out << "\"" << m_searchTextExtensions[i] << "\"";
-        if (i < m_searchTextExtensions.size() - 1)
-            out << ", ";
-    }
-    out << "]\n";
-    out << "searchExcludedDirs = [";
-    for (int i = 0; i < m_searchExcludedDirs.size(); ++i) {
-        out << "\"" << m_searchExcludedDirs[i] << "\"";
-        if (i < m_searchExcludedDirs.size() - 1)
-            out << ", ";
-    }
-    out << "]\n\n";
-
-    out << "[ui]\n";
-    out << "theme = \"" << m_theme << "\"\n";
-    out << "customThemePath = \"" << m_customThemePath << "\"\n";
-    out << "locale = \"" << m_locale << "\"\n";
-    out << "uiFontFamily = \"" << m_uiFontFamily << "\"\n";
-    out << "uiFontSize = " << m_uiFontSize << "\n";
-    out << "uiScale = " << m_uiScale << "\n";
-    out << "sidebarWidth = " << m_sidebarWidth << "\n";
-    out << "sidebarVisible = " << (m_sidebarVisible ? "true" : "false") << "\n";
-    out << "outlineVisible = " << (m_outlineVisible ? "true" : "false") << "\n";
-    out << "treeMaxDepth = " << m_treeMaxDepth << "\n";
-    out << "onboardingDismissed = " << (m_onboardingDismissed ? "true" : "false") << "\n\n";
-
-    out << "[lsp]\n";
-    out << "lspEnabled = " << (m_lspEnabled ? "true" : "false") << "\n";
-    out << "useOnlineZithLsp = " << (m_useOnlineZithLsp ? "true" : "false")
-        << "\n\n";
-
-    out << "[cLsp]\n";
-    out << "cLspEnabled = " << (m_cLspEnabled ? "true" : "false") << "\n";
-    out << "cLspPath = \"" << m_cLspPath << "\"\n\n";
-
-    out << "[main window]\n";
-    out << "mainWindowGeometry = \"" << m_mainWindowGeometryBase64 << "\"\n";
-    out << "mainWindowState = \"" << m_mainWindowStateBase64 << "\"\n\n";
-
-    out << "[vim]\n";
-    out << "vimMotionsEnabled = " << (m_vimMotionsEnabled ? "true" : "false") << "\n\n";
-
-    out << "[projects]\n";
-    out << "recentProjects = [";
-    for (int i = 0; i < m_recentProjects.size(); ++i) {
-        out << "\"" << m_recentProjects[i] << "\"";
-        if (i < m_recentProjects.size() - 1)
-            out << ", ";
-    }
-    out << "]\n";
+void TomlSettingsStore::applySnapshot(
+    const TomlSettingsSnapshot &snapshot)
+{
+    m_theme = snapshot.theme;
+    m_customThemePath = snapshot.customThemePath;
+    m_locale = snapshot.locale;
+    m_uiFontFamily = snapshot.uiFontFamily;
+    m_uiFontSize = snapshot.uiFontSize;
+    m_editorFontFamily = snapshot.editorFontFamily;
+    m_editorFontSize = snapshot.editorFontSize;
+    m_renderingStrategy = snapshot.renderingStrategy;
+    m_uiScale = snapshot.uiScale;
+    m_vimMotionsEnabled = snapshot.vimMotionsEnabled;
+    m_wordWrap = snapshot.wordWrap;
+    m_searchTextExtensions = snapshot.searchTextExtensions;
+    m_searchExcludedDirs = snapshot.searchExcludedDirs;
+    m_sidebarWidth = snapshot.sidebarWidth;
+    m_sidebarVisible = snapshot.sidebarVisible;
+    m_outlineVisible = snapshot.outlineVisible;
+    m_treeMaxDepth = snapshot.treeMaxDepth;
+    m_onboardingDismissed = snapshot.onboardingDismissed;
+    m_lspEnabled = snapshot.lspEnabled;
+    m_useOnlineZithLsp = snapshot.useOnlineZithLsp;
+    m_cLspEnabled = snapshot.cLspEnabled;
+    m_cLspPath = snapshot.cLspPath;
+    m_mainWindowGeometryBase64 = snapshot.mainWindowGeometryBase64;
+    m_mainWindowStateBase64 = snapshot.mainWindowStateBase64;
+    m_recentProjects = snapshot.recentProjects;
 }
 
 void TomlSettingsStore::setUiFontFamily(const QString &family)
 {
-    if (m_uiFontFamily != family) { m_uiFontFamily = family; save(); }
+    if (m_uiFontFamily != family) {
+        m_uiFontFamily = family;
+        save();
+    }
 }
 
 void TomlSettingsStore::setUiFontSize(int size)
 {
-    if (size >= 6 && m_uiFontSize != size) { m_uiFontSize = size; save(); }
+    if (size >= 6 && m_uiFontSize != size) {
+        m_uiFontSize = size;
+        save();
+    }
 }
 
 void TomlSettingsStore::setEditorFontFamily(const QString &family)
 {
-    if (m_editorFontFamily != family) { m_editorFontFamily = family; save(); }
+    if (m_editorFontFamily != family) {
+        m_editorFontFamily = family;
+        save();
+    }
 }
 
 void TomlSettingsStore::setEditorFontSize(int size)
 {
-    if (size >= 6 && m_editorFontSize != size) { m_editorFontSize = size; save(); }
+    if (size >= 6 && m_editorFontSize != size) {
+        m_editorFontSize = size;
+        save();
+    }
 }
 
 void TomlSettingsStore::setRenderingStrategy(const QString &strategy)
 {
-    if ((strategy == "antialias" || strategy == "no-antialias" || strategy == "default") && m_renderingStrategy != strategy) { m_renderingStrategy = strategy; save(); }
+    const bool valid = strategy == "antialias" ||
+                       strategy == "no-antialias" ||
+                       strategy == "default";
+    if (valid && m_renderingStrategy != strategy) {
+        m_renderingStrategy = strategy;
+        save();
+    }
 }
 
 void TomlSettingsStore::setUiScale(int percent)
 {
-    if (percent >= 75 && percent <= 200 && m_uiScale != percent) { m_uiScale = percent; save(); }
+    if (percent >= 75 && percent <= 200 && m_uiScale != percent) {
+        m_uiScale = percent;
+        save();
+    }
 }
 
 void TomlSettingsStore::setVimMotionsEnabled(bool enabled)
 {
-    if (m_vimMotionsEnabled != enabled) { m_vimMotionsEnabled = enabled; save(); }
+    if (m_vimMotionsEnabled == enabled)
+        return;
+    m_vimMotionsEnabled = enabled;
+    save();
+    emit editorPreferencesChanged();
 }
 
-void TomlSettingsStore::setSearchTextExtensions(const QStringList &extensions)
+void TomlSettingsStore::setWordWrap(bool wrap)
 {
-    if (m_searchTextExtensions != extensions) {
-        m_searchTextExtensions = extensions;
-        save();
-    }
+    if (m_wordWrap == wrap)
+        return;
+    m_wordWrap = wrap;
+    save();
+    emit editorPreferencesChanged();
+}
+
+void TomlSettingsStore::setSearchTextExtensions(
+    const QStringList &extensions)
+{
+    if (m_searchTextExtensions == extensions)
+        return;
+    m_searchTextExtensions = extensions;
+    save();
 }
 
 void TomlSettingsStore::setSearchExcludedDirs(const QStringList &dirs)
 {
-    if (m_searchExcludedDirs != dirs) {
-        m_searchExcludedDirs = dirs;
-        save();
-    }
+    if (m_searchExcludedDirs == dirs)
+        return;
+    m_searchExcludedDirs = dirs;
+    save();
 }
 
 void TomlSettingsStore::addRecentProject(const QString &project)
 {
-    if (project.isEmpty()) return;
+    if (project.isEmpty())
+        return;
     m_recentProjects.removeAll(project);
     m_recentProjects.prepend(project);
-    while (m_recentProjects.size() > 10) {
+    while (m_recentProjects.size() > 10)
         m_recentProjects.removeLast();
-    }
     save();
 }

@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Helios visual language</title>
+  <style>
+    :root { color-scheme: dark; --canvas:#0e141b; --surface:#151e28; --raised:#1d2a37; --text:#e7eef5; --muted:#91a1b2; --accent:#57c7e6; --ok:#6dd69a; --warn:#e4b35c; --error:#ed7777; }
+    * { box-sizing:border-box; } body { margin:0; background:radial-gradient(circle at 80% 0%,#1b3a48 0,#0e141b 42%); color:var(--text); font:16px/1.5 ui-sans-serif,system-ui,sans-serif; }
+    main { max-width:980px; margin:auto; padding:56px 24px 80px; } h1,h2 { letter-spacing:-.04em; } h1 { font-size:clamp(2.5rem,7vw,5.5rem); line-height:.95; max-width:700px; } h2 { margin-top:48px; } p { color:var(--muted); max-width:700px; }
+    .swatches { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-top:32px; } .swatch { min-height:120px; padding:16px; border-radius:16px; display:flex; align-items:end; font-weight:700; } .canvas{background:var(--canvas)} .accent{background:var(--accent);color:#06202a}.ok{background:var(--ok);color:#092516}.warn{background:var(--warn);color:#281b05}.error{background:var(--error);color:#2d0909}
+    .type { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:24px; } .card { background:color-mix(in srgb,var(--surface) 88%,transparent); border:1px solid #2b3c4c; border-radius:18px; padding:24px; } .display { font-size:2rem; font-weight:800; letter-spacing:-.05em; } .mono { font:15px/1.6 ui-monospace,SFMono-Regular,monospace; color:#b7e9f5; }
+    @media (max-width:700px){.swatches,.type{grid-template-columns:1fr 1fr}.swatch{min-height:90px}.type{grid-template-columns:1fr}}
+  </style>
+</head>
+<body><main>
+  <p style="color:var(--accent);text-transform:uppercase;letter-spacing:.2em">Helios / visual language</p>
+  <h1>Quiet chrome. Clear state. Deep focus.</h1>
+  <p>The visual system keeps the editor dominant, uses semantic color for state, and treats panels as temporary instruments around the work surface.</p>
+  <h2>Color roles</h2>
+  <div class="swatches"><div class="swatch canvas">Canvas</div><div class="swatch accent">Accent</div><div class="swatch ok">Success</div><div class="swatch warn">Warning</div><div class="swatch error">Error</div></div>
+  <h2>Typography roles</h2>
+  <div class="type"><div class="card"><div class="display">Workspace heading</div><p>Expressive only for product and section hierarchy.</p></div><div class="card"><div class="mono">diagnostics: 2 errors<br>runtime: connected</div><p>Technical state stays compact and scannable.</p></div></div>
+</main></body></html>

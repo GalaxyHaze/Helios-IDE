@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Helios source control</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#0d151b;color:#e3edf1;font:14px/1.5 ui-sans-serif,system-ui,sans-serif}
+.page{max-width:780px;margin:44px auto;padding:0 20px}
+.eyebrow{color:#75d6e8;text-transform:uppercase;letter-spacing:.18em;font-size:11px}
+.header{display:flex;align-items:center;justify-content:space-between;gap:20px;margin:10px 0 20px}
+h1{margin:0;font-size:27px;letter-spacing:-.03em}
+button{border:1px solid #385366;border-radius:7px;background:#192a35;color:#bdeef3;padding:8px 12px}
+.branch{display:inline-flex;gap:9px;align-items:center;color:#98adba;font-size:12px}
+.dot{width:8px;height:8px;border-radius:50%;background:#74d69c;box-shadow:0 0 0 4px #214637}
+.commit{display:flex;gap:8px;margin-bottom:14px}
+input{flex:1;min-width:0;border:1px solid #314957;border-radius:7px;background:#121f27;color:#e3edf1;padding:10px 12px}
+.commit button{background:#4eaa8a;border-color:#65c49f;color:#092019;font-weight:700}
+.summary{display:flex;justify-content:space-between;gap:14px;padding:12px 14px;border:1px solid #263d49;border-bottom:0;border-radius:10px 10px 0 0;background:#14232c}
+.summary strong{color:#e6f5f6}.muted{color:#8fa5b1}
+.list{border:1px solid #263d49;border-radius:0 0 10px 10px;overflow:hidden}
+.row{display:grid;grid-template-columns:34px 1fr auto;align-items:center;gap:12px;padding:11px 14px;border-bottom:1px solid #213640;background:#101b22}
+.row:last-child{border-bottom:0}.row.selected{background:#1d3640;box-shadow:inset 3px 0 #6bd4e2}
+.badge{display:grid;place-items:center;width:22px;height:19px;border-radius:5px;font:700 10px ui-monospace,monospace}
+.modified{background:#5b4826;color:#ffd88a}.added{background:#24503b;color:#a7f1c2}.untracked{background:#254b62;color:#a8e6ff}
+.name{font-weight:650}.path{display:block;color:#8298a4;font-size:12px;margin-top:2px}
+.count{color:#8197a3;font-size:12px}
+.actions{display:flex;gap:8px;margin-top:14px}.actions button{color:#b9cbd1}.actions .primary{border-color:#5c9eaa;color:#c3f3f5}
+@media(max-width:600px){.header{align-items:flex-start;flex-direction:column}.row{grid-template-columns:30px 1fr}.count{display:none}.commit{flex-direction:column}}
+</style>
+</head>
+<body>
+<main class="page">
+  <div class="eyebrow">Helios / source control</div>
+  <div class="header">
+    <div><h1>Source Control</h1><div class="branch"><span class="dot"></span>main · workspace clean enough to act</div></div>
+    <button>Refresh</button>
+  </div>
+  <div class="commit"><input value="Refine editor ownership seams"><button>Commit</button></div>
+  <div class="summary"><strong>3 changed files</strong><span class="muted">Select files to stage</span></div>
+  <div class="list">
+    <div class="row selected"><span class="badge modified">M</span><div class="name">MainWindow.cpp<span class="path">editor/core</span></div><span class="count">selected</span></div>
+    <div class="row"><span class="badge added">A</span><div class="name">WorkspaceTaskOutputController.cpp<span class="path">editor/core</span></div><span class="count">unstaged</span></div>
+    <div class="row"><span class="badge untracked">??</span><div class="name">source-control.md<span class="path">docs/design</span></div><span class="count">new</span></div>
+  </div>
+  <div class="actions"><button class="primary">Stage selected</button><button>Unstage</button><button>Stage all</button></div>
+</main>
+</body>
+</html>

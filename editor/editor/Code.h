@@ -1,17 +1,24 @@
 #ifndef CODEEDITOR_H
 #define CODEEDITOR_H
 
-#include "LspClient.h"
+#include "EditorLanguageRequestContext.h"
+#include "EditorDocumentSyncController.h"
+#include "LspTypes.h"
 #include <QList>
 #include <QMap>
 #include <QPlainTextEdit>
-#include <QTimer>
 #include <QWidget>
 
 class LspCompleter;
 class SnippetManager;
 class LineNumberArea;
 class VimMotionController;
+class EditorLanguageFeatureController;
+class EditorContextMenuController;
+class EditorAppearanceController;
+class EditorDecorationController;
+struct EditorAppearance;
+class LspClient;
 
 class CodeEditor : public QPlainTextEdit {
   Q_OBJECT
@@ -25,17 +32,22 @@ public:
   QString filePath() const { return m_filePath; }
   QString fileUri() const { return m_fileUri; }
   LspClient *lspClient() const { return m_lspClient; }
-  int documentVersion() const { return m_documentVersion; }
+  int documentVersion() const { return m_documentSyncController.version(); }
   QList<LspDiagnostic> diagnostics() const { return m_diagnostics; }
   void flushPendingLspChanges() { flushDocumentChanges(); }
+  EditorLanguageRequestContext currentLanguageRequest();
+  bool prepareCompletion();
+  bool handleCompletionKey(QKeyEvent *event);
 
   void setLspClient(LspClient *client);
   void detachLspClient();
+  void markLspDocumentSynchronized();
   void setCompleter(LspCompleter *completer);
   void setSnippetManager(SnippetManager *manager);
 
   void setDiagnostics(const QList<LspDiagnostic> &diagnostics);
   void clearDiagnostics();
+  void setLspHighlightRanges(const QList<LspRange> &ranges);
 
   void updateDiagnosticDisplay();
 
@@ -80,7 +92,6 @@ protected:
 private slots:
   void updateLineNumberAreaWidth(int newBlockCount);
   void updateLineNumberArea(const QRect &, int);
-  void highlightCurrentLine();
   void onDocumentContentsChanged(int position, int charsRemoved,
                                  int charsAdded);
   void flushDocumentChanges();
@@ -89,21 +100,10 @@ private slots:
 private:
   void triggerCompletion();
   void triggerSignatureHelp();
-  void goToDefinitionAtCursor();
-  void goToImplementationAtCursor();
-  void goToDeclarationAtCursor();
-  void requestHoverAtCursor();
-  void replaceCurrentWord(const QString &insertText);
-  void updateDiagnosticHighlights();
-  void matchBrackets();
-  void onHoverTimeout();
   void autoIndent();
   bool handleAutoClose(QChar ch);
-  bool isAutoCloseChar(QChar ch) const;
   bool tryExpandSnippet();
-  LspPosition lspPositionForOffset(const QString &text, int offset) const;
-  LspPosition lspPositionForOffset(int offset) const;
-
+  const EditorAppearance &editorAppearance() const;
   LineNumberArea *lineNumberArea;
   LspClient *m_lspClient = nullptr;
   LspCompleter *m_completer = nullptr;
@@ -111,41 +111,15 @@ private:
 
   QString m_filePath;
   QString m_fileUri;
-  int m_documentVersion = 0;
   bool m_suppressDocumentSync = false;
-  QString m_documentText;
-  QList<LspTextChange> m_pendingDocumentChanges;
-  QTimer *m_documentSyncTimer = nullptr;
 
   QList<LspDiagnostic> m_diagnostics;
-  QList<QTextEdit::ExtraSelection> m_diagnosticSelections;
-  QList<QTextEdit::ExtraSelection> m_bracketSelections;
-  QList<QTextEdit::ExtraSelection> m_lspHighlightSelections;
-  QList<QTextEdit::ExtraSelection> m_findSelections;
-  QTimer *m_hoverTimer = nullptr;
-  QTimer *m_documentHighlightTimer = nullptr;
-  QMetaObject::Connection m_lspDiagnosticsConnection;
-  QMetaObject::Connection m_lspHighlightsConnection;
-  QMetaObject::Connection m_lspHoverConnection;
-  QMetaObject::Connection m_lspDefinitionConnection;
-  QMetaObject::Connection m_lspImplementationConnection;
-  QMetaObject::Connection m_lspDeclarationConnection;
-  QMetaObject::Connection m_lspSignatureConnection;
-  int m_hoverLine = -1;
-  int m_hoverChar = -1;
-  int m_hoverTimerId = 0;
-
-  QColor m_editorBg;
-  QColor m_editorFg;
-  QColor m_editorSelection;
-  QColor m_editorCurrentLine;
-  QColor m_editorLineNumber;
-  QColor m_gutterBg;
-  QColor m_gutterActive;
-  QColor m_border;
-  QColor m_bracketBg;
-  QColor m_bracketFg;
+  EditorAppearanceController *m_appearanceController = nullptr;
+  EditorDecorationController *m_decorationController = nullptr;
   VimMotionController *m_vimController = nullptr;
+  EditorLanguageFeatureController *m_languageFeatures = nullptr;
+  EditorContextMenuController *m_contextMenuController = nullptr;
+  EditorDocumentSyncController m_documentSyncController;
 };
 
 class LineNumberArea : public QWidget {

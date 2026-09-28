@@ -25,21 +25,6 @@ CompilerPanel::CompilerPanel(QWidget *parent)
 
 CompilerPanel::~CompilerPanel() = default;
 
-bool CompilerPanel::isRunning() const
-{
-    return !m_runningTaskId.isEmpty();
-}
-
-QString CompilerPanel::runningTaskId() const
-{
-    return m_runningTaskId;
-}
-
-QString CompilerPanel::activeProgressToken() const
-{
-    return m_activeProgressToken;
-}
-
 void CompilerPanel::applyTheme()
 {
     auto &tm = ThemeManager::instance();
@@ -60,11 +45,9 @@ void CompilerPanel::clearOutput()
     m_output->clear();
 }
 
-void CompilerPanel::startBuild(const QString &title, const QString &progressToken)
+void CompilerPanel::startBuild(const QString &title)
 {
     m_output->clear();
-    m_activeProgressToken = progressToken;
-    m_runningTaskId.clear();
     m_output->appendPlainText(title);
     m_output->appendPlainText(QString());
 
@@ -91,23 +74,6 @@ void CompilerPanel::appendRawOutput(const QByteArray &bytes)
     scroll->setValue(scroll->maximum());
 }
 
-void CompilerPanel::appendWorkDoneProgress(const QString &token,
-                                           const QString &kind,
-                                           const QString &message)
-{
-    if (token.isEmpty())
-        return;
-    if (!m_activeProgressToken.isEmpty() && token != m_activeProgressToken)
-        return;
-    if (kind == QLatin1String("begin"))
-        appendOutput(QStringLiteral("Compiling..."));
-    else if (kind == QLatin1String("report"))
-        appendOutput(message.isEmpty() ? QStringLiteral("Working...") : message);
-    else if (kind == QLatin1String("end"))
-        appendOutput(message.isEmpty() ? QStringLiteral("Finished")
-                                       : message);
-}
-
 void CompilerPanel::appendDiagnostics(const QList<LspDiagnostic> &diagnostics)
 {
     for (const LspDiagnostic &diagnostic : diagnostics) {
@@ -125,25 +91,9 @@ QString CompilerPanel::outputText() const
     return m_output->toPlainText();
 }
 
-void CompilerPanel::setActiveProgressToken(const QString &token)
-{
-    m_activeProgressToken = token;
-}
-
-void CompilerPanel::clearActiveProgress()
-{
-    m_activeProgressToken.clear();
-}
-
-void CompilerPanel::setRunningTask(const QString &taskId)
-{
-    m_runningTaskId = taskId;
-}
-
 void CompilerPanel::stopRunningTask()
 {
-    if (!m_runningTaskId.isEmpty())
-        emit stopRequested(m_runningTaskId);
+    emit stopRequested();
 }
 
 void CompilerPanel::showBuildResult(bool success, const QString &programUri)

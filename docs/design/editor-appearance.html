@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Helios editor appearance</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --canvas: #121a22;
+      --gutter: #0e151c;
+      --line: #1b2934;
+      --line-border: #314856;
+      --text: #dce8ef;
+      --muted: #718695;
+      --keyword: #d9a8ff;
+      --function: #8fe1ef;
+      --string: #b9db91;
+      --selection: #315878;
+      --bracket: #4a6e79;
+      --error: #6b343d;
+      --warning: #66522d;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #0a1015;
+      color: var(--text);
+      font: 14px/1.5 ui-sans-serif, system-ui, sans-serif;
+    }
+    .frame { max-width: 1040px; margin: 40px auto; padding: 0 20px; }
+    .label {
+      color: #80d8e8;
+      font-size: 12px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    .editor {
+      display: grid;
+      grid-template-columns: 58px 1fr;
+      margin-top: 18px;
+      min-height: 560px;
+      overflow: hidden;
+      background: var(--canvas);
+      border: 1px solid var(--line-border);
+      border-radius: 12px;
+      box-shadow: 0 24px 70px rgba(0,0,0,.28);
+    }
+    .gutter {
+      padding: 30px 12px 30px 0;
+      background: var(--gutter);
+      color: var(--muted);
+      text-align: right;
+      font: 13px/2 ui-monospace, SFMono-Regular, monospace;
+      border-right: 1px solid var(--line-border);
+    }
+    .gutter .active { color: #a9d9e2; font-weight: 700; }
+    .code {
+      padding: 30px 34px;
+      font: 15px/2 ui-monospace, SFMono-Regular, monospace;
+    }
+    .code .active-line { display: block; background: var(--line); }
+    .kw { color: var(--keyword); }
+    .fn { color: var(--function); }
+    .str { color: var(--string); }
+    .selected { background: var(--selection); border-radius: 3px; }
+    .match {
+      background: var(--bracket);
+      color: #f1fdff;
+      border-radius: 3px;
+      box-shadow: inset 0 -2px #9de5ed;
+    }
+    .diagnostic-error {
+      background: var(--error);
+      text-decoration: underline wavy #ed7777 1px;
+      text-underline-offset: 4px;
+    }
+    .diagnostic-warning {
+      background: var(--warning);
+      text-decoration: underline wavy #e8c36b 1px;
+      text-underline-offset: 4px;
+    }
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .legend span {
+      padding: 5px 9px;
+      border: 1px solid var(--line-border);
+      border-radius: 999px;
+    }
+    @media (max-width: 680px) {
+      .frame { margin: 22px auto; }
+      .editor { grid-template-columns: 44px 1fr; }
+      .code { padding: 24px 16px; font-size: 13px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="frame">
+    <div class="label">Helios / editor appearance</div>
+    <section class="editor" aria-label="Editor appearance preview">
+      <div class="gutter">
+        <div>1</div><div>2</div><div class="active">3</div><div>4</div>
+        <div>5</div><div>6</div><div>7</div><div>8</div>
+      </div>
+      <div class="code">
+        <div><span class="kw">fn</span> <span class="fn">parseModule</span>(source) {</div>
+        <div>  <span class="kw">let</span> tokens = <span class="fn">lex</span>(source);</div>
+        <div class="active-line">  <span class="kw">return</span> <span class="fn">parse</span><span class="match">(</span>tokens<span class="match">)</span>;</div>
+        <div>}</div>
+        <div>&nbsp;</div>
+        <div>  <span class="kw">const</span> result = <span class="selected">validate(tokens)</span>;</div>
+        <div>  <span class="kw">if</span> (result.<span class="diagnostic-error">invalid</span>) {</div>
+        <div>    <span class="kw">return</span> <span class="diagnostic-warning">"invalid module"</span>;</div>
+      </div>
+    </section>
+    <div class="legend">
+      <span>current line</span>
+      <span>selection</span>
+      <span>bracket match</span>
+      <span>error</span>
+      <span>warning</span>
+    </div>
+  </main>
+</body>
+</html>

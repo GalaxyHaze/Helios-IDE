@@ -2,33 +2,19 @@
 #define LSPCLIENT_H
 
 #include <QByteArray>
-#include <QHash>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QObject>
-#include <QProcess>
 #include <QString>
-#include <QTimer>
-#include <QUrl>
 #include <functional>
 
-struct LspPosition { int line = 0; int character = 0; };
-struct LspRange { LspPosition start; LspPosition end; };
-struct LspTextChange { LspRange range; QString text; };
-struct LspDiagnostic { LspRange range; int severity = 0; QString message; QString source; };
-
-struct LspCompletionItem {
-    QString label;
-    int kind = 0;
-    QString detail;
-    QString insertText;
-    int insertTextFormat = 1;
-    QJsonObject rawItem;
-};
-
-struct LspLocation { QString uri; LspRange range; };
-struct LspHoverInfo { QString contents; LspRange range; };
-struct LspSignatureHelp { QString activeSignature; int activeParameter = 0; QStringList parameters; };
+#include "LspProcessTransport.h"
+#include "LspDocumentProtocol.h"
+#include "LspFeatureRequestRouter.h"
+#include "LspRequestSender.h"
+#include "LspServerMessageDispatcher.h"
+#include "LspSessionLifecycle.h"
+#include "LspTypes.h"
 
 class TestHelios;
 
@@ -37,36 +23,44 @@ class LspClient : public QObject
     Q_OBJECT
 
 public:
+    enum class Capability
+    {
+        Completion,
+        Hover,
+        SignatureHelp,
+        Definition,
+        Implementation,
+        Declaration,
+        References,
+        DocumentHighlight,
+        Rename,
+        DocumentSymbol,
+        Formatting,
+        FoldingRange,
+        CodeAction,
+        SemanticTokens,
+        ExecuteCommand
+    };
+
     explicit LspClient(QObject *parent = nullptr);
     ~LspClient() override;
 
 #ifdef HELIOS_UNIT_TESTING
     void waitForFinishedForTesting(int timeoutMs);
+    void setReadyForTesting(bool ready);
 #endif
 
+    bool start(const LspStartOptions &options);
     bool start(const QString &serverPath, const QString &stdlibPath = {},
                const QString &workspaceRoot = {},
                const QString &initMode = {});
     void stop();
     bool isRunning() const;
     bool isReady() const;
-    int documentSyncKind() const;
+    int documentSyncKind() const { return m_capabilities.documentSyncKind; }
     int documentVersion(const QString &uri) const;
 
-    bool hasCompletionProvider() const { return m_hasCompletionProvider; }
-    bool hasHoverProvider() const { return m_hasHoverProvider; }
-    bool hasDefinitionProvider() const { return m_hasDefinitionProvider; }
-    bool hasImplementationProvider() const { return m_hasImplementationProvider; }
-    bool hasDeclarationProvider() const { return m_hasDeclarationProvider; }
-    bool hasReferencesProvider() const { return m_hasReferencesProvider; }
-    bool hasDocumentHighlightProvider() const { return m_hasDocumentHighlightProvider; }
-    bool hasRenameProvider() const { return m_hasRenameProvider; }
-    bool hasDocumentSymbolProvider() const { return m_hasDocumentSymbolProvider; }
-    bool hasFormattingProvider() const { return m_hasFormattingProvider; }
-    bool hasFoldingRangeProvider() const { return m_hasFoldingRangeProvider; }
-    bool hasCodeActionProvider() const { return m_hasCodeActionProvider; }
-    bool hasSemanticTokensProvider() const { return m_hasSemanticTokensProvider; }
-    bool hasExecuteCommandProvider() const { return m_hasExecuteCommandProvider; }
+    bool supports(Capability capability) const;
 
     void openDocument(const QString &uri, const QString &languageId, const QString &text, int version = 1);
     void changeDocument(const QString &uri, const QList<LspTextChange> &changes, int version);
@@ -125,74 +119,30 @@ signals:
     void metricsReceived(const QJsonObject &metrics);
 
 private slots:
-    void onReadyRead();
-    void onReadyReadError();
-    void onProcessStarted();
-    void onProcessError(QProcess::ProcessError error);
-    void onProcessFinished(int exitCode, QProcess::ExitStatus status);
+    void onProcessFinished(const LspProcessResult &result);
 
 private:
     friend class TestHelios;
-    static constexpr qsizetype MaxMessageSize = 64LL * 1024 * 1024;
-    struct DocumentState { int version = 1; bool open = false; };
-    struct PendingRequest {
-        qint64 id = 0;
-        QString method;
-        QString uri;
-        int version = -1;
-        bool cancellable = false;
-        std::function<void(const QJsonObject &)> callback;
-        QTimer *timeout = nullptr;
-    };
-
-    void launch();
-    void resetSessionState();
     bool sendMessage(const QJsonObject &msg);
-    void handleServerRequest(const QJsonObject &msg);
-    void handleNotification(const QJsonObject &msg);
-    void processBuffer();
-    void receiveFrame(const QByteArray &body);
-    void handleResponse(const QJsonObject &msg);
-    qint64 nextId();
+    void dispatchMessage(const QJsonObject &msg);
     qint64 sendRequest(const QString &method, const QJsonObject &params, const QString &uri, int version,
                        bool cancellable, std::function<void(const QJsonObject &)> callback);
     void cancelRequest(qint64 id);
     void cancelRequestsForUri(const QString &uri);
-    void failPendingRequests(const QString &reason);
-    void beginShutdown();
-    void finishShutdownEscalation();
     void recordStderr(const QByteArray &chunk);
     void parseServerCapabilities(const QJsonObject &caps);
-    QJsonObject positionParams(const QString &uri, const LspPosition &pos) const;
-    static LspRange rangeFromJson(const QJsonObject &range);
-    static LspLocation locationFromJson(const QJsonObject &value);
-    static QList<LspLocation> locationsFromJson(const QJsonValue &value);
+    QString unexpectedProcessExitMessage(const LspProcessResult &result) const;
 
-    QProcess *m_process = nullptr;
-    QByteArray m_buffer;
+    LspProcessTransport m_transport;
+    LspRequestSender m_requestSender;
+    LspDocumentProtocol m_documentProtocol;
+    LspFeatureRequestRouter m_featureRequestRouter;
+    LspServerMessageDispatcher m_serverMessageDispatcher;
+    LspSessionLifecycle m_sessionLifecycle;
     QByteArray m_stderrPartial;
     QStringList m_stderrLines;
-    qint64 m_nextId = 0;
-    bool m_initialized = false;
-    bool m_shutdownRequested = false;
-    bool m_exitSent = false;
-    bool m_stopping = false;
-    enum class InitMode { Zith, Clangd };
-    InitMode m_initMode = InitMode::Zith;
-    int m_syncKind = 1;
-    QTimer *m_shutdownTimer = nullptr;
-    QHash<QString, DocumentState> m_documents;
-    QHash<qint64, PendingRequest> m_pendingRequests;
-    QHash<QString, qint64> m_replaceableRequests;
-    QString m_serverPath, m_stdlibPath, m_workspaceRoot;
-    bool m_startPending = false;
 
-    bool m_hasCompletionProvider = false, m_hasHoverProvider = false, m_hasDefinitionProvider = false;
-    bool m_hasImplementationProvider = false, m_hasDeclarationProvider = false, m_hasReferencesProvider = false;
-    bool m_hasDocumentHighlightProvider = false, m_hasRenameProvider = false, m_hasDocumentSymbolProvider = false;
-    bool m_hasFormattingProvider = false, m_hasFoldingRangeProvider = false, m_hasCodeActionProvider = false;
-    bool m_hasSemanticTokensProvider = false;
-    bool m_hasExecuteCommandProvider = false;
+    LspServerCapabilities m_capabilities;
 };
 
 #endif

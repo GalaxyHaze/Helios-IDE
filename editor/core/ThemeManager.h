@@ -7,12 +7,8 @@
 #include <QMap>
 #include <QPalette>
 
-struct SyntaxStyle
-{
-    QColor color;
-    bool bold = false;
-    bool italic = false;
-};
+#include "ThemeDefinition.h"
+#include "ThemeDefinitionParser.h"
 
 class ThemeManager : public QObject
 {
@@ -78,7 +74,6 @@ private:
 
     void setFallbackTheme(bool dark);
     QString findThemeFile(const QString &themeName);
-    void setFallbackSyntaxStyles();
 };
 
 #endif

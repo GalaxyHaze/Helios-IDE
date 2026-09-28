@@ -1,6 +1,7 @@
 #include "SettingsPanel.h"
 #include "../core/ThemeManager.h"
 #include "../core/TranslationManager.h"
+#include "../core/ShortcutTreePresenter.h"
 #include <QCheckBox>
 #include <QFormLayout>
 #include <QHBoxLayout>
@@ -11,7 +12,6 @@
 #include <QSignalBlocker>
 #include <QTabWidget>
 #include <QTreeWidget>
-#include <QTreeWidgetItem>
 #include <QHeaderView>
 
 namespace {
@@ -87,7 +87,7 @@ SettingsPanel::SettingsPanel(QWidget *parent)
     shortcutsLayout->addWidget(m_shortcutsTree);
 
     m_tabWidget->addTab(shortcutsTab, "Shortcuts");
-    initializeShortcutTree();
+    ShortcutTreePresenter::populate(m_shortcutsTree);
 
     // ──────────────── TAB 2: LSP & RUNTIME ────────────────
     auto *lspTab = new QWidget(this);
@@ -214,31 +214,6 @@ SettingsPanel::SettingsPanel(QWidget *parent)
     applyTranslations();
 }
 
-void SettingsPanel::setFontFamily(const QString &family)
-{
-    Q_UNUSED(family);
-}
-
-void SettingsPanel::setFontSize(int pointSize)
-{
-    Q_UNUSED(pointSize);
-}
-
-void SettingsPanel::setWordWrapEnabled(bool enabled)
-{
-    Q_UNUSED(enabled);
-}
-
-void SettingsPanel::setTheme(const QString &themeName)
-{
-    Q_UNUSED(themeName);
-}
-
-void SettingsPanel::setLocale(const QString &locale)
-{
-    Q_UNUSED(locale);
-}
-
 void SettingsPanel::setLspEnabled(bool enabled)
 {
     QSignalBlocker blocker(m_lspEnabledCheck);
@@ -246,41 +221,22 @@ void SettingsPanel::setLspEnabled(bool enabled)
     m_refreshRuntimeButton->setEnabled(enabled);
 }
 
-void SettingsPanel::setRuntimeInfo(const QString &status,
-                                   const QString &tag,
-                                   const QString &lspPath,
-                                   const QString &stdlibPath,
-                                   const QString &cachePath)
+void SettingsPanel::setRuntimeInfo(const LspRuntimeInfo &info)
 {
-    m_runtimeStatusValue->setText(status.isEmpty() ? "Unavailable" : status);
-    m_runtimeTagValue->setText(tag.isEmpty() ? "Unavailable" : tag);
-    m_runtimeLspPathValue->setText(lspPath.isEmpty() ? "Unavailable" : lspPath);
-    m_runtimeStdlibPathValue->setText(stdlibPath.isEmpty() ? "Unavailable" : stdlibPath);
-    m_runtimeCachePathValue->setText(cachePath.isEmpty() ? "Unavailable" : cachePath);
+    m_lspPresentation.setRuntimeInfo(info);
+    applyLspPresentation();
 }
 
-void SettingsPanel::setLspDiagnostics(const QString &connection,
-                                      const QString &syncMode,
-                                      const QString &lastError)
+void SettingsPanel::setLspDiagnostics(const LspDiagnosticsInfo &info)
 {
-    if (m_lspConnectionValue)
-        m_lspConnectionValue->setText(connection.isEmpty() ? "Unknown" : connection);
-    if (m_lspSyncModeValue)
-        m_lspSyncModeValue->setText(syncMode.isEmpty() ? "Unknown" : syncMode);
-    if (m_lspLastErrorValue)
-        m_lspLastErrorValue->setText(lastError.isEmpty() ? "None" : lastError);
+    m_lspPresentation.setDiagnostics(info);
+    applyLspPresentation();
 }
 
-void SettingsPanel::setCLspInfo(const QString &status,
-                                const QString &path,
-                                const QString &message)
+void SettingsPanel::setCLspInfo(const ClangdInfo &info)
 {
-    if (m_cLspStatusValue)
-        m_cLspStatusValue->setText(status.isEmpty() ? "Unavailable" : status);
-    if (m_cLspPathValue)
-        m_cLspPathValue->setText(path.isEmpty() ? "Unavailable" : path);
-    if (m_cLspMessageValue)
-        m_cLspMessageValue->setText(message.isEmpty() ? QString() : message);
+    m_lspPresentation.setClangdInfo(info);
+    applyLspPresentation();
 }
 
 void SettingsPanel::appendLspLog(const QString &line)
@@ -295,88 +251,25 @@ void SettingsPanel::clearLspLog()
         m_lspLogView->clear();
 }
 
-void SettingsPanel::initializeShortcutTree()
+void SettingsPanel::applyLspPresentation()
 {
-    const auto addCategory = [this](const QString &categoryKey,
-                                    const QList<QPair<QString, QString>> &items) {
-        auto *categoryItem = new QTreeWidgetItem;
-        categoryItem->setData(0, Qt::UserRole, categoryKey);
-        categoryItem->setFont(0, QFont(QString(), -1, QFont::Bold));
-        m_shortcutsTree->addTopLevelItem(categoryItem);
+    const LspRuntimeInfo runtime = m_lspPresentation.displayRuntimeInfo();
+    m_runtimeStatusValue->setText(runtime.status);
+    m_runtimeTagValue->setText(runtime.tag);
+    m_runtimeLspPathValue->setText(runtime.lspPath);
+    m_runtimeStdlibPathValue->setText(runtime.stdlibPath);
+    m_runtimeCachePathValue->setText(runtime.cachePath);
 
-        for (const auto &item : items) {
-            auto *child = new QTreeWidgetItem(categoryItem);
-            child->setData(0, Qt::UserRole, item.first);
-            child->setData(1, Qt::UserRole, item.second);
-        }
+    const LspDiagnosticsInfo diagnostics =
+        m_lspPresentation.displayDiagnostics();
+    m_lspConnectionValue->setText(diagnostics.connection);
+    m_lspSyncModeValue->setText(diagnostics.syncMode);
+    m_lspLastErrorValue->setText(diagnostics.lastError);
 
-        categoryItem->setExpanded(true);
-    };
-
-    addCategory("shortcut.cat.file", {
-        { "shortcut.new_file", "Ctrl+N" },
-        { "shortcut.new_window", "Ctrl+Shift+N" },
-        { "shortcut.new_project", "Ctrl+Alt+N" },
-        { "shortcut.open", "Ctrl+O" },
-        { "shortcut.open_folder", "Ctrl+Alt+O" },
-        { "shortcut.save", "Ctrl+S" },
-        { "shortcut.exit", "Ctrl+Q" }
-    });
-
-    addCategory("shortcut.cat.edit_search", {
-        { "shortcut.find", "Ctrl+F" },
-        { "shortcut.replace", "Ctrl+H" },
-        { "shortcut.find_next", "F3 / Ctrl+G" },
-        { "shortcut.find_prev", "Shift+F3 / Ctrl+Shift+G" }
-    });
-
-    addCategory("shortcut.cat.navigation_view", {
-        { "shortcut.explorer", "Ctrl+Shift+E" },
-        { "shortcut.global_search", "Ctrl+Shift+F" },
-        { "shortcut.git_panel", "Ctrl+Shift+G" },
-        { "shortcut.settings", "Ctrl+," },
-        { "shortcut.hide_sidebar", "Ctrl+Shift+X" },
-        { "shortcut.go_back", "Alt+Left" },
-        { "shortcut.go_forward", "Alt+Right" }
-    });
-
-    addCategory("shortcut.cat.lsp_tools", {
-        { "shortcut.go_definition", "F12 / Ctrl+Click" },
-        { "shortcut.go_implementation", "Ctrl+F12" },
-        { "shortcut.format_doc", "Ctrl+Alt+L / Alt+Shift+F" },
-        { "shortcut.completion", "Ctrl+Space" },
-        { "shortcut.build", "Ctrl+B" },
-        { "shortcut.check", "Ctrl+Shift+C" },
-        { "shortcut.run", "Ctrl+Shift+R" },
-        { "shortcut.stop", "Ctrl+Shift+Q" },
-        { "shortcut.restart_lsp", "Ctrl+Shift+L" },
-        { "shortcut.getting_started", "F1" }
-    });
-}
-
-void SettingsPanel::updateShortcutTexts()
-{
-    auto &tr = TranslationManager::instance();
-
-    m_shortcutsTree->setHeaderLabels({tr.translate("shortcut.header_action"),
-                                      tr.translate("shortcut.header_key")});
-    for (int categoryIndex = 0;
-         categoryIndex < m_shortcutsTree->topLevelItemCount();
-         ++categoryIndex) {
-        QTreeWidgetItem *categoryItem =
-            m_shortcutsTree->topLevelItem(categoryIndex);
-        categoryItem->setText(0,
-                              tr.translate(categoryItem->data(0, Qt::UserRole)
-                                               .toString()));
-
-        for (int itemIndex = 0; itemIndex < categoryItem->childCount();
-             ++itemIndex) {
-            QTreeWidgetItem *item = categoryItem->child(itemIndex);
-            item->setText(0,
-                          tr.translate(item->data(0, Qt::UserRole).toString()));
-            item->setText(1, item->data(1, Qt::UserRole).toString());
-        }
-    }
+    const ClangdInfo clangd = m_lspPresentation.displayClangdInfo();
+    m_cLspStatusValue->setText(clangd.status);
+    m_cLspPathValue->setText(clangd.resolvedPath);
+    m_cLspMessageValue->setText(clangd.message);
 }
 
 void SettingsPanel::applyTranslations()
@@ -393,7 +286,8 @@ void SettingsPanel::applyTranslations()
         TranslationManager::instance().translate("lsp.c_title"));
     m_tabWidget->setTabText(0, tr.translate("settings.tab_shortcuts"));
     m_tabWidget->setTabText(1, tr.translate("settings.tab_lsp"));
-    updateShortcutTexts();
+    ShortcutTreePresenter::refreshTranslations(m_shortcutsTree);
+    applyLspPresentation();
 }
 
 void SettingsPanel::applyTheme()

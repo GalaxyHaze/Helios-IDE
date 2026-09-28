@@ -2,8 +2,12 @@
 #define ZITHTOOLCHAINMANAGER_H
 
 #include <QObject>
-#include <QList>
-#include <QUrl>
+
+#include "ZithRuntimeCatalog.h"
+#include "ZithRuntimeAssetDownloader.h"
+#include "ZithRuntimeInstaller.h"
+#include "ZithReleaseCatalog.h"
+#include "ZithRuntimeOverrideResolver.h"
 
 class QNetworkAccessManager;
 class QNetworkReply;
@@ -25,7 +29,7 @@ public:
     }
     void setCacheRootForTesting(const QString &path)
     {
-        m_cacheRootOverride = path;
+        m_runtimeCatalog.setCacheRoot(path);
     }
 
 signals:
@@ -36,29 +40,18 @@ signals:
 private slots:
     void onLatestReleaseFinished();
     void onAssetDownloadFinished();
+    void onAssetDownloadFailed(const QString &message);
 
 private:
-    enum class DownloadKind {
-        LspBinary,
-        StdlibArchive
-    };
-
 #ifdef HELIOS_UNIT_TESTING
     friend class TestHelios;
 #endif
 
-    struct ReleaseAsset {
-        QString name;
-        QUrl downloadUrl;
-    };
-
-    struct ReleaseInfo {
-        QString tag;
-        QList<ReleaseAsset> assets;
-    };
+    using ReleaseAsset = ZithReleaseCatalog::Asset;
+    using ReleaseInfo = ZithReleaseCatalog::Release;
 
     struct PendingDownload {
-        DownloadKind kind;
+        ZithRuntimeAssetKind kind;
         ReleaseAsset asset;
         QString temporaryPath;
     };
@@ -66,7 +59,7 @@ private:
     bool tryUseEnvironmentOverrides();
     void requestLatestRelease();
     void startNextDownload();
-    void queueDownload(DownloadKind kind, const ReleaseAsset &asset);
+    void queueDownload(ZithRuntimeAssetKind kind, const ReleaseAsset &asset);
     void fallbackToInstalledRuntime(const QString &reason);
     void finishWithResolvedRuntime(const QString &lspPath,
                                    const QString &stdlibPath,
@@ -78,40 +71,17 @@ private:
     bool resolveNewestInstalledRelease(QString *lspPath,
                                        QString *stdlibPath,
                                        QString *tag) const;
-    bool isReleaseDirectoryName(const QString &directoryName) const;
-    bool removeStaleLocalRuntimeCache(QString *errorMessage = nullptr);
-    bool installDownloadedAsset(const PendingDownload &download,
-                                const QString &tag,
-                                QString *errorMessage) const;
-    bool extractArchive(const QString &archivePath,
-                        const QString &destinationDir,
-                        QString *errorMessage) const;
-    bool runProcess(const QString &program,
-                    const QStringList &arguments,
-                    QString *errorMessage) const;
-    bool ensureDirectory(const QString &path) const;
 
-    QString cacheRootPath() const;
-    QString releaseRootPath(const QString &tag) const;
-    QString lspInstallPath(const QString &tag) const;
-    QString stdlibInstallPath(const QString &tag) const;
-    QString lspAssetNameForCurrentPlatform() const;
-    QString stdlibAssetSuffixForCurrentPlatform() const;
-
-    ReleaseAsset findLspAsset(const ReleaseInfo &release) const;
-    ReleaseAsset findStdlibAsset(const ReleaseInfo &release) const;
-
-    static bool isArm64Architecture();
-
+    ZithRuntimeCatalog m_runtimeCatalog;
+    ZithRuntimeInstaller m_runtimeInstaller;
+    ZithRuntimeAssetDownloader *m_assetDownloader = nullptr;
     QNetworkAccessManager *m_networkManager = nullptr;
     QNetworkReply *m_latestReleaseReply = nullptr;
-    QNetworkReply *m_assetReply = nullptr;
     QList<PendingDownload> m_pendingDownloads;
     QString m_pendingTag;
     bool m_preferCached = true;
     bool m_preferOnline = false;
     bool m_hasResolvedRuntime = false;
-    QString m_cacheRootOverride;
 };
 
 #endif
