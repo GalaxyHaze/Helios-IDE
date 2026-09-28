@@ -71,11 +71,11 @@ signals:
     void hoverResult(const QString &uri, int version,
                      const LspHoverInfo &info);
     void definitionResult(const QString &uri, int version,
-                          const LspLocation &location);
+                          const QList<LspLocation> &locations);
     void declarationResult(const QString &uri, int version,
-                           const LspLocation &location);
+                           const QList<LspLocation> &locations);
     void implementationResult(const QString &uri, int version,
-                              const LspLocation &location);
+                              const QList<LspLocation> &locations);
     void referencesResult(const QString &uri, int version,
                           const QList<LspLocation> &locations);
     void documentHighlightsResult(const QString &uri, int version,

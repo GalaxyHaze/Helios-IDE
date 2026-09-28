@@ -4,8 +4,11 @@
 #include "LspClient.h"
 
 #include <QCursor>
+#include <QFileInfo>
+#include <QMenu>
 #include <QRegularExpression>
 #include <QToolTip>
+#include <QUrl>
 
 EditorLanguageFeedbackPresenter::EditorLanguageFeedbackPresenter(
     CodeEditor *editor, QObject *parent)
@@ -46,32 +49,75 @@ void EditorLanguageFeedbackPresenter::attach(LspClient *client)
             QToolTip::showText(QCursor::pos(), text.trimmed(), m_editor);
         });
 
-    const auto navigateToLocation =
-        [this](const QString &uri, const LspLocation &location) {
-            if (uri == m_editor->fileUri() && !location.uri.isEmpty()) {
+    const auto navigateToLocations =
+        [this](const QString &uri, int version,
+               const QList<LspLocation> &locations) {
+            if (uri != m_editor->fileUri() ||
+                (version >= 0 && version != m_editor->documentVersion()) ||
+                locations.isEmpty()) {
+                return;
+            }
+
+            const auto navigate = [this](const LspLocation &location) {
+                if (location.uri.isEmpty())
+                    return;
+
                 emit m_editor->navigateToLocation(
                     location.uri, location.range.start.line,
                     location.range.start.character);
+            };
+
+            if (locations.size() == 1) {
+                navigate(locations.first());
+                return;
             }
+
+            auto *menu = new QMenu(m_editor);
+            menu->setAttribute(Qt::WA_DeleteOnClose);
+            for (const LspLocation &location : locations) {
+                if (location.uri.isEmpty())
+                    continue;
+
+                const QUrl locationUrl(location.uri);
+                const QString path = locationUrl.isLocalFile()
+                                         ? locationUrl.toLocalFile()
+                                         : location.uri;
+                const QString label =
+                    QStringLiteral("%1:%2:%3")
+                        .arg(QFileInfo(path).fileName().isEmpty()
+                                 ? path
+                                 : QFileInfo(path).fileName())
+                        .arg(location.range.start.line + 1)
+                        .arg(location.range.start.character + 1);
+                QAction *action = menu->addAction(label);
+                connect(action, &QAction::triggered, menu,
+                        [navigate, location]() { navigate(location); });
+            }
+
+            if (menu->actions().isEmpty()) {
+                menu->deleteLater();
+                return;
+            }
+            menu->popup(QCursor::pos());
         };
 
     m_definitionConnection = connect(
         m_client, &LspClient::definitionResult, this,
-        [navigateToLocation](const QString &uri, int,
-                             const LspLocation &location) {
-            navigateToLocation(uri, location);
+        [navigateToLocations](const QString &uri, int version,
+                              const QList<LspLocation> &locations) {
+            navigateToLocations(uri, version, locations);
         });
     m_implementationConnection = connect(
         m_client, &LspClient::implementationResult, this,
-        [navigateToLocation](const QString &uri, int,
-                             const LspLocation &location) {
-            navigateToLocation(uri, location);
+        [navigateToLocations](const QString &uri, int version,
+                              const QList<LspLocation> &locations) {
+            navigateToLocations(uri, version, locations);
         });
     m_declarationConnection = connect(
         m_client, &LspClient::declarationResult, this,
-        [navigateToLocation](const QString &uri, int,
-                             const LspLocation &location) {
-            navigateToLocation(uri, location);
+        [navigateToLocations](const QString &uri, int version,
+                              const QList<LspLocation> &locations) {
+            navigateToLocations(uri, version, locations);
         });
 
     m_signatureConnection = connect(

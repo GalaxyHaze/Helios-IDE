@@ -63,8 +63,10 @@ public:
     bool supports(Capability capability) const;
 
     void openDocument(const QString &uri, const QString &languageId, const QString &text, int version = 1);
-    void changeDocument(const QString &uri, const QList<LspTextChange> &changes, int version);
-    void changeDocumentFull(const QString &uri, const QString &fullText, int version);
+    bool changeDocument(const QString &uri,
+                        const QList<LspTextChange> &changes, int version);
+    bool changeDocumentFull(const QString &uri, const QString &fullText,
+                            int version);
     void closeDocument(const QString &uri);
     void saveDocument(const QString &uri);
 
@@ -95,9 +97,12 @@ signals:
     void completionResults(const QString &uri, int version, const QList<LspCompletionItem> &items);
     void completionResolved(const QString &uri, int version, const LspCompletionItem &item);
     void hoverResult(const QString &uri, int version, const LspHoverInfo &info);
-    void definitionResult(const QString &uri, int version, const LspLocation &location);
-    void declarationResult(const QString &uri, int version, const LspLocation &location);
-    void implementationResult(const QString &uri, int version, const LspLocation &location);
+    void definitionResult(const QString &uri, int version,
+                          const QList<LspLocation> &locations);
+    void declarationResult(const QString &uri, int version,
+                           const QList<LspLocation> &locations);
+    void implementationResult(const QString &uri, int version,
+                              const QList<LspLocation> &locations);
     void referencesResult(const QString &uri, int version, const QList<LspLocation> &locations);
     void documentHighlightsResult(const QString &uri, int version, const QList<LspRange> &ranges);
     void signatureHelpResult(const QString &uri, int version, const LspSignatureHelp &help);

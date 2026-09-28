@@ -32,6 +32,7 @@ public:
     void recordChange(const LspDocumentChangeInput &change);
 
     std::optional<LspDocumentSyncBatch> takeBatch(int syncKind);
+    void restoreBatch(const LspDocumentSyncBatch &batch);
     void discardPendingChanges();
 
     const QString &uri() const { return m_uri; }

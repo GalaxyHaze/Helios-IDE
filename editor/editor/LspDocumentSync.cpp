@@ -41,6 +41,18 @@ std::optional<LspDocumentSyncBatch> LspDocumentSync::takeBatch(int syncKind)
     return batch;
 }
 
+void LspDocumentSync::restoreBatch(const LspDocumentSyncBatch &batch)
+{
+    if (batch.changes.isEmpty())
+        return;
+
+    QList<LspTextChange> pending = batch.changes;
+    pending.append(m_pendingChanges);
+    m_pendingChanges = std::move(pending);
+    if (m_version == batch.version)
+        m_version = batch.version - 1;
+}
+
 void LspDocumentSync::discardPendingChanges()
 {
     m_pendingChanges.clear();

@@ -31,18 +31,18 @@ static const int MAX_FONT_SIZE = 48;
 CodeEditor::CodeEditor(QWidget *parent)
     : QPlainTextEdit(parent),
       m_documentSyncController(
-          {[this]() { return m_lspClient != nullptr; },
+          {[this]() { return m_lspClient && m_lspClient->isReady(); },
            [this]() {
              return m_lspClient ? m_lspClient->documentSyncKind() : 1;
            },
            [this](const QString &uri, const QList<LspTextChange> &changes,
                   int version) {
-             if (m_lspClient)
-               m_lspClient->changeDocument(uri, changes, version);
+             return m_lspClient &&
+                    m_lspClient->changeDocument(uri, changes, version);
            },
            [this](const QString &uri, const QString &text, int version) {
-           if (m_lspClient)
-               m_lspClient->changeDocumentFull(uri, text, version);
+           return m_lspClient &&
+                  m_lspClient->changeDocumentFull(uri, text, version);
            }}) {
   setFrameShape(QFrame::NoFrame);
   lineNumberArea = new LineNumberArea(this);

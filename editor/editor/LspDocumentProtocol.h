@@ -29,10 +29,10 @@ public:
 
     void openDocument(const QString &uri, const QString &languageId,
                       const QString &text, int version = 1);
-    void changeDocument(const QString &uri,
+    bool changeDocument(const QString &uri,
                         const QList<LspTextChange> &changes,
                         int version);
-    void changeDocumentFull(const QString &uri, const QString &fullText,
+    bool changeDocumentFull(const QString &uri, const QString &fullText,
                             int version);
     void closeDocument(const QString &uri);
     void saveDocument(const QString &uri);

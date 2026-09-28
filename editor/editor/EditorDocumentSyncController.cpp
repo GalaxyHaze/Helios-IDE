@@ -49,13 +49,17 @@ void EditorDocumentSyncController::flush()
     if (!batch.has_value())
         return;
 
+    bool delivered = false;
     if (!batch->fullSync) {
-        m_callbacks.sendChanges(m_documentSync.uri(), batch->changes,
-                                batch->version);
+        delivered = m_callbacks.sendChanges(m_documentSync.uri(),
+                                            batch->changes, batch->version);
     } else {
-        m_callbacks.sendFullText(m_documentSync.uri(), batch->fullText,
-                                 batch->version);
+        delivered = m_callbacks.sendFullText(m_documentSync.uri(),
+                                              batch->fullText, batch->version);
     }
+
+    if (!delivered)
+        m_documentSync.restoreBatch(*batch);
 }
 
 void EditorDocumentSyncController::markDocumentSynchronized()

@@ -13,9 +13,9 @@ struct EditorDocumentSyncCallbacks
 {
     std::function<bool()> canSend;
     std::function<int()> syncKind;
-    std::function<void(const QString &, const QList<LspTextChange> &, int)>
+    std::function<bool(const QString &, const QList<LspTextChange> &, int)>
         sendChanges;
-    std::function<void(const QString &, const QString &, int)> sendFullText;
+    std::function<bool(const QString &, const QString &, int)> sendFullText;
 };
 
 class EditorDocumentSyncController : public QObject

@@ -72,13 +72,12 @@ void LspDocumentProtocol::openDocument(const QString &uri,
                            {"text", text}}}}}});
 }
 
-void LspDocumentProtocol::changeDocument(
+bool LspDocumentProtocol::changeDocument(
     const QString &uri, const QList<LspTextChange> &changes, int version)
 {
     if (!isReady(m_callbacks) || changes.isEmpty())
-        return;
+        return false;
 
-    m_documentRegistry.update(uri, version);
     if (m_callbacks.cancelRequestsForUri)
         m_callbacks.cancelRequestsForUri(uri);
 
@@ -87,7 +86,7 @@ void LspDocumentProtocol::changeDocument(
         content.append(QJsonObject{{"range", rangeObject(change.range)},
                                    {"text", change.text}});
     }
-    sendMessage(
+    const bool sent = sendMessage(
         m_callbacks,
         {{"jsonrpc", "2.0"},
          {"method", "textDocument/didChange"},
@@ -96,20 +95,24 @@ void LspDocumentProtocol::changeDocument(
               {"textDocument",
                QJsonObject{{"uri", uri}, {"version", version}}},
               {"contentChanges", content}}}});
+    if (!sent)
+        return false;
+
+    m_documentRegistry.update(uri, version);
+    return true;
 }
 
-void LspDocumentProtocol::changeDocumentFull(const QString &uri,
+bool LspDocumentProtocol::changeDocumentFull(const QString &uri,
                                               const QString &fullText,
                                               int version)
 {
     if (!isReady(m_callbacks))
-        return;
+        return false;
 
-    m_documentRegistry.update(uri, version);
     if (m_callbacks.cancelRequestsForUri)
         m_callbacks.cancelRequestsForUri(uri);
 
-    sendMessage(
+    const bool sent = sendMessage(
         m_callbacks,
         {{"jsonrpc", "2.0"},
          {"method", "textDocument/didChange"},
@@ -118,6 +121,11 @@ void LspDocumentProtocol::changeDocumentFull(const QString &uri,
               {"textDocument",
                QJsonObject{{"uri", uri}, {"version", version}}},
               {"contentChanges", QJsonArray{QJsonObject{{"text", fullText}}}}}}});
+    if (!sent)
+        return false;
+
+    m_documentRegistry.update(uri, version);
+    return true;
 }
 
 void LspDocumentProtocol::closeDocument(const QString &uri)

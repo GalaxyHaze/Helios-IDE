@@ -261,15 +261,15 @@ void LspClient::openDocument(const QString &uri, const QString &languageId,
   m_documentProtocol.openDocument(uri, languageId, text, version);
 }
 
-void LspClient::changeDocument(const QString &uri,
+bool LspClient::changeDocument(const QString &uri,
                                const QList<LspTextChange> &changes,
                                int version) {
-  m_documentProtocol.changeDocument(uri, changes, version);
+  return m_documentProtocol.changeDocument(uri, changes, version);
 }
 
-void LspClient::changeDocumentFull(const QString &uri, const QString &fullText,
-                                   int version) {
-  m_documentProtocol.changeDocumentFull(uri, fullText, version);
+bool LspClient::changeDocumentFull(const QString &uri,
+                                   const QString &fullText, int version) {
+  return m_documentProtocol.changeDocumentFull(uri, fullText, version);
 }
 
 void LspClient::closeDocument(const QString &uri) {

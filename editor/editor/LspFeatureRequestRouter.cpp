@@ -83,21 +83,17 @@ void LspFeatureRequestRouter::requestPosition(
         }
         send(method, params, uri, version, true,
              [this, feature, uri, version](const QJsonObject &response) {
-                 const QJsonValue result = response.value("result");
-                 const QJsonArray locations = result.toArray();
-                 const LspLocation location = LspResultDecoder::location(
-                     result.isArray() && !locations.isEmpty()
-                         ? locations.first().toObject()
-                         : result.toObject());
+                 const QList<LspLocation> locations =
+                     LspResultDecoder::locations(response.value("result"));
                  switch (feature) {
                  case PositionFeature::Definition:
-                     emit definitionResult(uri, version, location);
+                     emit definitionResult(uri, version, locations);
                      break;
                  case PositionFeature::Declaration:
-                     emit declarationResult(uri, version, location);
+                     emit declarationResult(uri, version, locations);
                      break;
                  case PositionFeature::Implementation:
-                     emit implementationResult(uri, version, location);
+                     emit implementationResult(uri, version, locations);
                      break;
                  default:
                      break;

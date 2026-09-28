@@ -1104,21 +1104,28 @@ treeMaxDepth = 65
         int syncKind = 2;
         QList<LspDocumentSyncBatch> incrementalBatches;
         QList<LspDocumentSyncBatch> fullBatches;
+        bool callbackUriValid = true;
+        bool transportAvailable = true;
 
         EditorDocumentSyncController controller(
             {[&canSend]() { return canSend; },
              [&syncKind]() { return syncKind; },
-             [&incrementalBatches](const QString &uri,
-                                   const QList<LspTextChange> &changes,
-                                   int version) {
+             [&incrementalBatches, &callbackUriValid, &transportAvailable](
+                 const QString &uri, const QList<LspTextChange> &changes,
+                 int version) {
                  incrementalBatches.append(
                      {version, changes, QString(), false});
-                 QCOMPARE(uri, QStringLiteral("file:///main.zith"));
+                 callbackUriValid =
+                     callbackUriValid &&
+                     uri == QStringLiteral("file:///main.zith");
+                 return callbackUriValid && transportAvailable;
              },
-             [&fullBatches](const QString &uri, const QString &text,
-                            int version) {
+             [&fullBatches, &transportAvailable](
+                 const QString &uri, const QString &text, int version) {
+                 if (!transportAvailable)
+                     return false;
                  fullBatches.append({version, {}, text, true});
-                 QCOMPARE(uri, QStringLiteral("file:///main.zith"));
+                 return uri == QStringLiteral("file:///main.zith");
              }});
 
         controller.setDocument(QStringLiteral("file:///main.zith"),
@@ -1127,6 +1134,7 @@ treeMaxDepth = 65
                                  QStringLiteral("abcd")});
         controller.flush();
 
+        QVERIFY(callbackUriValid);
         QCOMPARE(controller.version(), 8);
         QCOMPARE(incrementalBatches.size(), 1);
         QCOMPARE(incrementalBatches.first().version, 8);
@@ -1157,12 +1165,26 @@ treeMaxDepth = 65
         QCOMPARE(fullBatches.last().version, 10);
         QCOMPARE(fullBatches.last().fullText, QStringLiteral("abcdef"));
 
+        transportAvailable = false;
+        controller.recordChange({7, 0, QStringLiteral("h"),
+                                 QStringLiteral("abcdefgh")});
+        controller.flush();
+        QCOMPARE(controller.version(), 10);
+        QCOMPARE(fullBatches.size(), 2);
+
+        transportAvailable = true;
+        controller.flush();
+        QCOMPARE(controller.version(), 11);
+        QCOMPARE(fullBatches.size(), 3);
+        QCOMPARE(fullBatches.last().version, 11);
+        QCOMPARE(fullBatches.last().fullText, QStringLiteral("abcdefgh"));
+
         controller.recordChange({6, 0, QStringLiteral("g"),
                                  QStringLiteral("abcdefg")});
         controller.markDocumentSynchronized();
         controller.flush();
-        QCOMPARE(controller.version(), 10);
-        QCOMPARE(fullBatches.size(), 2);
+        QCOMPARE(controller.version(), 11);
+        QCOMPARE(fullBatches.size(), 3);
     }
 
     void testEditorAppearanceControllerProjectsEditorTheme() {
@@ -2021,13 +2043,13 @@ treeMaxDepth = 65
             }});
 
         int definitionCount = 0;
-        LspLocation definition;
+        QList<LspLocation> definitions;
         QObject::connect(
             &router, &LspFeatureRequestRouter::definitionResult,
-            [&definitionCount, &definition](const QString &, int,
-                                             const LspLocation &location) {
+            [&definitionCount, &definitions](
+                const QString &, int, const QList<LspLocation> &locations) {
                 ++definitionCount;
-                definition = location;
+                definitions = locations;
             });
 
         const QString uri = QStringLiteral("file:///main.cpp");
@@ -2050,8 +2072,39 @@ treeMaxDepth = 65
                        {"start", QJsonObject{{"line", 8}, {"character", 1}}},
                        {"end", QJsonObject{{"line", 8}, {"character", 5}}}}}}}});
         QCOMPARE(definitionCount, 1);
-        QCOMPARE(definition.uri, QStringLiteral("file:///other.cpp"));
-        QCOMPARE(definition.range.start.line, 8);
+        QCOMPARE(definitions.size(), 1);
+        QCOMPARE(definitions.first().uri, QStringLiteral("file:///other.cpp"));
+        QCOMPARE(definitions.first().range.start.line, 8);
+
+        router.requestPosition(
+            LspFeatureRequestRouter::PositionFeature::Definition, uri, 7,
+            {2, 4});
+        const QJsonArray multipleDefinitions = {
+            QJsonObject{
+                {"uri", "file:///first.cpp"},
+                {"range",
+                 QJsonObject{
+                     {"start", QJsonObject{{"line", 1}, {"character", 2}}},
+                     {"end", QJsonObject{{"line", 1}, {"character", 8}}}}}},
+            QJsonObject{
+                {"uri", "file:///second.cpp"},
+                {"range",
+                 QJsonObject{
+                     {"start", QJsonObject{{"line", 9}, {"character", 3}}},
+                     {"end", QJsonObject{{"line", 9}, {"character", 7}}}}}}};
+        responses.last()(
+            QJsonObject{{"result", multipleDefinitions}});
+        QCOMPARE(definitionCount, 2);
+        QCOMPARE(definitions.size(), 2);
+        QCOMPARE(definitions.at(0).uri, QStringLiteral("file:///first.cpp"));
+        QCOMPARE(definitions.at(1).uri, QStringLiteral("file:///second.cpp"));
+
+        router.requestPosition(
+            LspFeatureRequestRouter::PositionFeature::Definition, uri, 7,
+            {2, 4});
+        responses.last()({{"result", QJsonValue()}});
+        QCOMPARE(definitionCount, 3);
+        QVERIFY(definitions.isEmpty());
 
         router.requestDocument(
             LspFeatureRequestRouter::DocumentFeature::Formatting, uri, 7);
@@ -4140,7 +4193,9 @@ treeMaxDepth = 65
         const LspLocation location{
             QStringLiteral("file:///tmp/other.zith"),
             LspRange{{4, 2}, {4, 6}}};
-        emit client.definitionResult(editor.fileUri(), 3, location);
+        emit client.definitionResult(editor.fileUri(), 2, {location});
+        QCOMPARE(navigationSpy.count(), 0);
+        emit client.definitionResult(editor.fileUri(), 3, {location});
         QCOMPARE(navigationSpy.count(), 1);
         QCOMPARE(navigationSpy.at(0).at(0).toString(), location.uri);
         QCOMPARE(navigationSpy.at(0).at(1).toInt(), 4);
@@ -4157,7 +4212,7 @@ treeMaxDepth = 65
 
         editor.detachLspClient();
         emit client.diagnosticsReceived(editor.fileUri(), 3, {});
-        emit client.definitionResult(editor.fileUri(), 3, location);
+        emit client.definitionResult(editor.fileUri(), 3, {location});
         emit client.documentHighlightsResult(editor.fileUri(), 3, highlights);
         QVERIFY(editor.diagnostics().isEmpty());
         QCOMPARE(editor.extraSelections().size(), 0);
